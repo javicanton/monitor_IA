@@ -12,8 +12,9 @@ RUN npm install --production
 # Copiar código fuente
 COPY . .
 
-# Build con menos memoria
-ENV NODE_OPTIONS="--max-old-space-size=1024"
+# Build con menos memoria y sin sourcemaps para reducir consumo
+ENV NODE_OPTIONS="--max-old-space-size=2048"
+ENV GENERATE_SOURCEMAP=false
 
 # Build de producción
 RUN npm run build
