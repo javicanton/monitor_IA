@@ -1,7 +1,8 @@
 import axios from 'axios';
+import config from '../config';
 
 // Configuración base de la API
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://13.60.219.71:5001';
+const API_BASE_URL = config.API_BASE_URL;
 
 // Crear instancia de axios con configuración base
 const api = axios.create({
