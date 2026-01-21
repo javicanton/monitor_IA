@@ -1,7 +1,13 @@
 // Configuración del frontend
+const defaultApiBaseUrl =
+  process.env.REACT_APP_API_URL ||
+  (typeof window !== 'undefined'
+    ? `${window.location.protocol}//${window.location.hostname}:5001`
+    : 'http://localhost:5001');
+
 const config = {
   // URL de la API del backend
-  API_BASE_URL: process.env.REACT_APP_API_URL || 'http://13.60.219.71:5001',
+  API_BASE_URL: defaultApiBaseUrl,
   
   // Configuración de AWS S3
   S3_BUCKET: process.env.REACT_APP_S3_BUCKET || 'monitoria-data',
