@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import Container from '@mui/material/Container';
@@ -20,6 +20,12 @@ const theme = createTheme({
 });
 
 function App() {
+  const [filters, setFilters] = useState({});
+
+  const handleFilterChange = (newFilters) => {
+    setFilters(newFilters);
+  };
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
@@ -35,9 +41,9 @@ function App() {
             Label messages as relevant or not relevant
           </Typography>
 
-          <FilterBar />
+          <FilterBar onFilterChange={handleFilterChange} />
           
-          <MessageList />
+          <MessageList filters={filters} />
         </Box>
       </Container>
     </ThemeProvider>

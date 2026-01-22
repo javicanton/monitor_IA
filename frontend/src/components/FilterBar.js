@@ -21,6 +21,16 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
     mediaType: '',
     sortBy: 'score'
   });
+  const [hasPendingChanges, setHasPendingChanges] = useState(false);
+  const [appliedFilters, setAppliedFilters] = useState({
+    dateStart: '',
+    dateEnd: '',
+    channel: '',
+    scoreMin: '',
+    scoreMax: '',
+    mediaType: '',
+    sortBy: 'score'
+  });
 
   useEffect(() => {
     // Cargar canales al montar el componente
@@ -64,6 +74,7 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
       [field]: event.target.value
     };
     setFilters(newFilters);
+    setHasPendingChanges(JSON.stringify(newFilters) !== JSON.stringify(appliedFilters));
   };
 
   const handleApplyFilters = () => {
@@ -80,6 +91,8 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
     }
 
     onFilterChange(filters);
+    setAppliedFilters(filters);
+    setHasPendingChanges(false);
   };
 
   const handleReset = () => {
@@ -94,6 +107,8 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
     };
     setFilters(resetFilters);
     onFilterChange(resetFilters);
+    setAppliedFilters(resetFilters);
+    setHasPendingChanges(false);
   };
 
   const handleRefreshChannels = () => {
@@ -231,7 +246,7 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
           <Box display="flex" gap={2} flexWrap="wrap">
             <Button
               variant="contained"
-              color="primary"
+              color={hasPendingChanges ? 'warning' : 'primary'}
               onClick={handleApplyFilters}
               startIcon={<FilterIcon />}
               size="large"
@@ -262,10 +277,10 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
       </Grid>
 
       {/* Información sobre filtros activos */}
-      {Object.values(filters).some(value => value !== '' && value !== 'score') && (
+      {(Object.values(filters).some(value => value !== '' && value !== 'score') || hasPendingChanges) && (
         <Box mt={2} p={2} bgcolor="grey.50" borderRadius={1}>
           <Typography variant="body2" color="textSecondary">
-            <strong>Filtros activos:</strong> 
+            <strong>Filtros activos:</strong>
             {filters.dateStart && ` Desde: ${filters.dateStart}`}
             {filters.dateEnd && ` Hasta: ${filters.dateEnd}`}
             {filters.channel && ` Canal: ${filters.channel}`}
@@ -274,6 +289,11 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
             {filters.mediaType && ` Tipo: ${filters.mediaType}`}
             {filters.sortBy !== 'score' && ` Orden: ${filters.sortBy}`}
           </Typography>
+          {hasPendingChanges && (
+            <Typography variant="body2" color="warning.main" sx={{ mt: 1 }}>
+              Filtros pendientes de aplicar
+            </Typography>
+          )}
         </Box>
       )}
     </Paper>
