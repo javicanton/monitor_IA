@@ -1,18 +1,25 @@
 # frontend/Dockerfile
-FROM node:18.18.0-alpine AS build
+FROM node:18.18.0-bullseye-slim AS build
 WORKDIR /app
 
 # Manifiestos primero (cache de deps)
 COPY package.json package-lock.json ./
 
-# Instalar dependencias de forma simple
-RUN npm install
+# Instalar dependencias de forma determinista
+RUN npm ci --omit=dev
 
 # Código (sin node_modules)
 COPY . .
 
-# Actualizar browserslist y build estático
-RUN npx update-browserslist-db@latest && npm run build
+# Build más predecible y rápido
+ENV NODE_OPTIONS="--max-old-space-size=2048"
+ENV GENERATE_SOURCEMAP=false
+ENV DISABLE_ESLINT_PLUGIN=true
+ENV BROWSERSLIST_IGNORE_OLD_DATA=true
+ENV CI=false
+
+# Build estático
+RUN npm run build
 
 # --- Runtime Nginx ---
 FROM nginx:alpine
