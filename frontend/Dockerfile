@@ -11,12 +11,9 @@ RUN npm install --omit=dev
 # Código (sin node_modules)
 COPY . .
 
-# Build más predecible y rápido
+# Build más ligero y estable
 ENV NODE_OPTIONS="--max-old-space-size=2048"
 ENV GENERATE_SOURCEMAP=false
-ENV DISABLE_ESLINT_PLUGIN=true
-ENV BROWSERSLIST_IGNORE_OLD_DATA=true
-ENV CI=false
 
 # Build estático
 RUN npm run build
