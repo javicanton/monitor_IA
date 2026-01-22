@@ -5,8 +5,8 @@ WORKDIR /app
 # Manifiestos primero (cache de deps)
 COPY package.json package-lock.json ./
 
-# Instalar dependencias de forma determinista
-RUN npm ci --omit=dev
+# Instalar dependencias (evita fallo por lock desincronizado)
+RUN npm install --omit=dev
 
 # Código (sin node_modules)
 COPY . .
