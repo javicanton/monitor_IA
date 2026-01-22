@@ -1,0 +1,22 @@
+# Builder (usado para generar /build en CI/local)
+FROM node:18.18.0-bullseye-slim AS build
+WORKDIR /app
+
+# Manifiestos primero (cache de deps)
+COPY package.json package-lock.json ./
+
+# Instalar dependencias (evita fallo por lock desincronizado)
+RUN npm install --omit=dev
+
+# Código (sin node_modules)
+COPY . .
+
+# Build estable en Docker
+ENV NODE_OPTIONS="--max-old-space-size=2048"
+ENV GENERATE_SOURCEMAP=false
+ENV DISABLE_ESLINT_PLUGIN=true
+ENV BROWSERSLIST_IGNORE_OLD_DATA=true
+ENV CI=false
+
+# Build estático
+RUN npm run build
