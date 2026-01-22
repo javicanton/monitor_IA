@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import Container from '@mui/material/Container';
@@ -21,10 +21,26 @@ const theme = createTheme({
 
 function App() {
   const [filters, setFilters] = useState({});
+  const [buildId, setBuildId] = useState('');
 
   const handleFilterChange = (newFilters) => {
     setFilters(newFilters);
   };
+
+  useEffect(() => {
+    let isMounted = true;
+    fetch('/build-id.txt', { cache: 'no-store' })
+      .then((response) => (response.ok ? response.text() : ''))
+      .then((text) => {
+        if (isMounted && text) {
+          setBuildId(text.trim());
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   return (
     <ThemeProvider theme={theme}>
@@ -34,6 +50,12 @@ function App() {
           <Typography variant="h3" component="h1" gutterBottom align="center">
             Overperforming Messages in Telegram
           </Typography>
+
+          {buildId && (
+            <Typography variant="caption" color="textSecondary" align="center" display="block">
+              Build: {buildId}
+            </Typography>
+          )}
           
           <ScoreExplanation />
           
