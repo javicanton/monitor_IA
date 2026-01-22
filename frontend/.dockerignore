@@ -1,6 +1,5 @@
 # frontend/.dockerignore
 node_modules
-build
 dist
 .git
 .gitignore
