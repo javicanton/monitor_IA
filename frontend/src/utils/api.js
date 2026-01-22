@@ -94,12 +94,9 @@ export const channelsAPI = {
   // Obtener lista de canales
   getChannels: async () => {
     try {
-      // Como no hay endpoint específico para canales, usamos el endpoint de filtros
-      // para obtener los canales disponibles
-      const response = await api.post('/filter_messages', { page: 1, per_page: 1 });
+      const response = await api.get('/channels');
       if (response.data.success) {
-        // Extraer canales del primer mensaje o usar datos de sesión
-        return [];
+        return response.data.channels || [];
       }
       return [];
     } catch (error) {
