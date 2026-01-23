@@ -6,6 +6,7 @@ import {
   Paper,
   Alert,
   Chip,
+  Grid,
   Stack
 } from '@mui/material';
 import { 
@@ -83,74 +84,78 @@ const Dashboard = () => {
         </Paper>
       </Box>
 
-      {/* Explicación del sistema de puntuación */}
-      <Box mb={4}>
-        <ScoreExplanation />
-      </Box>
-
-      {/* Información sobre la conexión S3 */}
-      <Alert 
-        severity="info" 
-        icon={<InfoIcon />}
-        sx={{ mb: 4 }}
-      >
-        <Typography variant="body1" gutterBottom>
-          <strong>Conectado a AWS S3:</strong> Los datos se cargan automáticamente desde el bucket 
-          <Chip 
-            label="monitoria-data" 
-            size="small" 
-            color="primary" 
-            sx={{ mx: 1 }} 
-          />
-          y se sincronizan en tiempo real.
-        </Typography>
-        <Typography variant="body2">
-          Los cambios en las etiquetas se guardan tanto localmente como en la nube para mayor seguridad.
-        </Typography>
-      </Alert>
-
-      {/* Barra de filtros */}
-      <Box mb={4}>
-        <FilterBar 
-          onFilterChange={handleFilterChange}
-          onChannelsLoad={handleChannelsLoad}
-        />
-      </Box>
-
-      {/* Información de canales disponibles */}
-      {channels.length > 0 && (
-        <Paper sx={{ p: 2, mb: 3, bgcolor: 'grey.50' }}>
-          <Typography variant="subtitle2" color="textSecondary" gutterBottom>
-            Canales disponibles ({channels.length}):
-          </Typography>
-          <Box display="flex" flexWrap="wrap" gap={1}>
-            {channels.slice(0, 10).map((channel) => (
-              <Chip 
-                key={channel} 
-                label={channel} 
-                size="small" 
-                variant="outlined"
-                onClick={() => setFilters(prev => ({ ...prev, channel }))}
-                sx={{ cursor: 'pointer' }}
-              />
-            ))}
-            {channels.length > 10 && (
-              <Chip 
-                label={`+${channels.length - 10} más`} 
-                size="small" 
-                variant="outlined"
-                color="primary"
-              />
-            )}
+      <Grid container spacing={4} alignItems="flex-start">
+        <Grid item xs={12} md={8} order={{ xs: 2, md: 1 }}>
+          {/* Explicación del sistema de puntuación */}
+          <Box mb={4}>
+            <ScoreExplanation />
           </Box>
-        </Paper>
-      )}
 
-      {/* Lista de mensajes */}
-      <MessageList 
-        filters={filters}
-        onStatsUpdate={handleStatsUpdate}
-      />
+          {/* Información sobre la conexión S3 */}
+          <Alert 
+            severity="info" 
+            icon={<InfoIcon />}
+            sx={{ mb: 4 }}
+          >
+            <Typography variant="body1" gutterBottom>
+              <strong>Conectado a AWS S3:</strong> Los datos se cargan automáticamente desde el bucket 
+              <Chip 
+                label="monitoria-data" 
+                size="small" 
+                color="primary" 
+                sx={{ mx: 1 }} 
+              />
+              y se sincronizan en tiempo real.
+            </Typography>
+            <Typography variant="body2">
+              Los cambios en las etiquetas se guardan tanto localmente como en la nube para mayor seguridad.
+            </Typography>
+          </Alert>
+
+          {/* Información de canales disponibles */}
+          {channels.length > 0 && (
+            <Paper sx={{ p: 2, mb: 3, bgcolor: 'grey.50' }}>
+              <Typography variant="subtitle2" color="textSecondary" gutterBottom>
+                Canales disponibles ({channels.length}):
+              </Typography>
+              <Box display="flex" flexWrap="wrap" gap={1}>
+                {channels.slice(0, 10).map((channel) => (
+                  <Chip 
+                    key={channel} 
+                    label={channel} 
+                    size="small" 
+                    variant="outlined"
+                    onClick={() => setFilters(prev => ({ ...prev, channel }))}
+                    sx={{ cursor: 'pointer' }}
+                  />
+                ))}
+                {channels.length > 10 && (
+                  <Chip 
+                    label={`+${channels.length - 10} más`} 
+                    size="small" 
+                    variant="outlined"
+                    color="primary"
+                  />
+                )}
+              </Box>
+            </Paper>
+          )}
+
+          {/* Lista de mensajes */}
+          <MessageList 
+            filters={filters}
+            onStatsUpdate={handleStatsUpdate}
+          />
+        </Grid>
+
+        <Grid item xs={12} md={4} order={{ xs: 1, md: 2 }}>
+          {/* Barra de filtros */}
+          <FilterBar 
+            onFilterChange={handleFilterChange}
+            onChannelsLoad={handleChannelsLoad}
+          />
+        </Grid>
+      </Grid>
 
       {/* Footer informativo */}
       <Box mt={6} textAlign="center">
