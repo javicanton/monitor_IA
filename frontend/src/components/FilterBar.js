@@ -104,7 +104,7 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
   };
 
   return (
-    <Paper sx={{ p: 3, mb: 3 }}>
+    <Paper sx={{ p: 2, mb: 3 }}>
       <Box display="flex" alignItems="center" mb={2}>
         <FilterIcon sx={{ mr: 1 }} />
         <Typography variant="h6" component="h2">
@@ -112,9 +112,9 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
         </Typography>
       </Box>
 
-      <Grid container spacing={3} alignItems="center">
+      <Grid container spacing={2} alignItems="center">
         {/* Filtros de fecha */}
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={12}>
           <TextField
             fullWidth
             type="date"
@@ -126,7 +126,7 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
           />
         </Grid>
         
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={12}>
           <TextField
             fullWidth
             type="date"
@@ -139,7 +139,7 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
         </Grid>
 
         {/* Filtro de canal (múltiple con buscador) */}
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={12}>
           <Autocomplete
             multiple
             options={channels}
@@ -194,7 +194,7 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
         </Grid>
 
         {/* Filtros de puntuación */}
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={12}>
           <TextField
             fullWidth
             type="number"
@@ -210,7 +210,7 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
           />
         </Grid>
 
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={12}>
           <TextField
             fullWidth
             type="number"
@@ -227,7 +227,7 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
         </Grid>
 
         {/* Filtro de tipo de media */}
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={12}>
           <TextField
             fullWidth
             select
@@ -248,7 +248,7 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
         </Grid>
 
         {/* Filtro de ordenamiento */}
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={12}>
           <TextField
             fullWidth
             select
@@ -272,7 +272,7 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
               color={hasPendingChanges ? 'warning' : 'primary'}
               onClick={handleApplyFilters}
               startIcon={<FilterIcon />}
-              size="large"
+              size="medium"
             >
               Aplicar Filtros
             </Button>
@@ -282,7 +282,7 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
               color="secondary"
               onClick={handleReset}
               startIcon={<ClearIcon />}
-              size="large"
+              size="medium"
             >
               Limpiar Filtros
             </Button>
@@ -291,7 +291,7 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
               variant="outlined"
               onClick={handleRefreshChannels}
               disabled={loading}
-              size="large"
+              size="medium"
             >
               {loading ? 'Cargando...' : 'Actualizar Canales'}
             </Button>

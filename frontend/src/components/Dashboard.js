@@ -1,13 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   Container, 
   Box, 
   Typography, 
-  Paper,
   Alert,
   Chip,
   Grid,
-  Stack
 } from '@mui/material';
 import { 
   TrendingUp as TrendingIcon,
@@ -16,15 +14,21 @@ import {
 import FilterBar from './FilterBar';
 import MessageList from './MessageList';
 import ScoreExplanation from './ScoreExplanation';
+import logo from '../assets/Logo_MonitorIA.png';
 
 const Dashboard = () => {
   const [filters, setFilters] = useState({});
   const [channels, setChannels] = useState([]);
-  const [stats, setStats] = useState({
-    totalMessages: 0,
-    relevantMessages: 0,
-    averageScore: 0
-  });
+  const [showFloatingLogo, setShowFloatingLogo] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowFloatingLogo(window.scrollY > 80);
+    };
+    handleScroll();
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   const handleFilterChange = (newFilters) => {
     setFilters(newFilters);
@@ -34,58 +38,56 @@ const Dashboard = () => {
     setChannels(loadedChannels);
   };
 
-  const handleStatsUpdate = (newStats) => {
-    setStats(newStats);
-  };
-
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
+      {showFloatingLogo && (
+        <Box
+          sx={{
+            position: 'fixed',
+            top: 16,
+            right: 16,
+            zIndex: 1200,
+            width: { xs: 44, sm: 56 },
+            height: 'auto',
+            opacity: 0.9,
+            pointerEvents: 'none'
+          }}
+        >
+          <Box
+            component="img"
+            src={logo}
+            alt="MonitorIA"
+            sx={{ width: '100%', height: 'auto' }}
+          />
+        </Box>
+      )}
+
       {/* Header principal */}
       <Box textAlign="center" mb={6}>
+        <Box
+          component="img"
+          src={logo}
+          alt="MonitorIA"
+          sx={{
+            width: { xs: 220, sm: 280, md: 360 },
+            height: 'auto',
+            mb: 2
+          }}
+        />
         <Typography variant="h3" component="h1" gutterBottom color="primary">
           <TrendingIcon sx={{ mr: 2, verticalAlign: 'middle' }} />
-          Mensajes de Alto Rendimiento en Telegram
-        </Typography>
-        
-        <Typography variant="h6" color="textSecondary" paragraph>
-          Analiza y etiqueta mensajes relevantes de canales de Telegram
+          Monitorización avanzada en Telegram
         </Typography>
 
-        {/* Estadísticas generales */}
-        <Paper sx={{ p: 3, mt: 3, display: 'inline-block' }}>
-          <Stack direction="row" spacing={3} alignItems="center">
-            <Box textAlign="center">
-              <Typography variant="h4" color="primary" fontWeight="bold">
-                {stats.totalMessages}
-              </Typography>
-              <Typography variant="body2" color="textSecondary">
-                Total Mensajes
-              </Typography>
-            </Box>
-            
-            <Box textAlign="center">
-              <Typography variant="h4" color="success.main" fontWeight="bold">
-                {stats.relevantMessages}
-              </Typography>
-              <Typography variant="body2" color="textSecondary">
-                Relevantes
-              </Typography>
-            </Box>
-            
-            <Box textAlign="center">
-              <Typography variant="h4" color="info.main" fontWeight="bold">
-                {stats.averageScore.toFixed(2)}
-              </Typography>
-              <Typography variant="body2" color="textSecondary">
-                Score Promedio
-              </Typography>
-            </Box>
-          </Stack>
-        </Paper>
       </Box>
 
       <Grid container spacing={4} alignItems="flex-start">
-        <Grid item xs={12} md={8} order={{ xs: 2, md: 1 }}>
+        <Grid
+          item
+          xs={12}
+          order={{ xs: 2, md: 1 }}
+          sx={{ flexBasis: { md: '80%' }, maxWidth: { md: '80%' } }}
+        >
           {/* Explicación del sistema de puntuación */}
           <Box mb={4}>
             <ScoreExplanation />
@@ -144,16 +146,22 @@ const Dashboard = () => {
           {/* Lista de mensajes */}
           <MessageList 
             filters={filters}
-            onStatsUpdate={handleStatsUpdate}
           />
         </Grid>
 
-        <Grid item xs={12} md={4} order={{ xs: 1, md: 2 }}>
+        <Grid
+          item
+          xs={12}
+          order={{ xs: 1, md: 2 }}
+          sx={{ flexBasis: { md: '20%' }, maxWidth: { md: '20%' } }}
+        >
           {/* Barra de filtros */}
-          <FilterBar 
-            onFilterChange={handleFilterChange}
-            onChannelsLoad={handleChannelsLoad}
-          />
+          <Box sx={{ position: { md: 'sticky' }, top: { md: 24 } }}>
+            <FilterBar 
+              onFilterChange={handleFilterChange}
+              onChannelsLoad={handleChannelsLoad}
+            />
+          </Box>
         </Grid>
       </Grid>
 
