@@ -1,12 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
-import Container from '@mui/material/Container';
 import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
-import MessageList from './components/MessageList';
-import FilterBar from './components/FilterBar';
-import ScoreExplanation from './components/ScoreExplanation';
+import Dashboard from './components/Dashboard';
 
 const theme = createTheme({
   palette: {
@@ -45,29 +42,14 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Container maxWidth="xl">
-        <Box sx={{ my: 4 }}>
-          <Typography variant="h3" component="h1" gutterBottom align="center">
-            Overperforming Messages in Telegram
+      {buildId && (
+        <Box sx={{ py: 1, textAlign: 'center' }}>
+          <Typography variant="caption" color="textSecondary" display="block">
+            Build: {buildId}
           </Typography>
-
-          {buildId && (
-            <Typography variant="caption" color="textSecondary" align="center" display="block">
-              Build: {buildId}
-            </Typography>
-          )}
-          
-          <ScoreExplanation />
-          
-          <Typography variant="h4" component="h2" gutterBottom align="center">
-            Label messages as relevant or not relevant
-          </Typography>
-
-          <FilterBar onFilterChange={handleFilterChange} />
-          
-          <MessageList filters={filters} />
         </Box>
-      </Container>
+      )}
+      <Dashboard />
     </ThemeProvider>
   );
 }
