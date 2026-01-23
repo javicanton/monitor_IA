@@ -104,7 +104,14 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
   };
 
   return (
-    <Paper sx={{ p: 2, mb: 3 }}>
+    <Paper
+      sx={{
+        p: 2,
+        mb: 3,
+        maxHeight: { md: 'calc(100vh - 48px)' },
+        overflowY: { md: 'auto' }
+      }}
+    >
       <Box display="flex" alignItems="center" mb={2}>
         <FilterIcon sx={{ mr: 1 }} />
         <Typography variant="h6" component="h2">
