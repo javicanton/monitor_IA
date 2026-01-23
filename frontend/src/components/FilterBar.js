@@ -6,8 +6,9 @@ import MenuItem from '@mui/material/MenuItem';
 import Button from '@mui/material/Button';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
+import Autocomplete from '@mui/material/Autocomplete';
 import { FilterList as FilterIcon, Clear as ClearIcon } from '@mui/icons-material';
-import { messagesAPI } from '../utils/api';
+import { messagesAPI, channelsAPI } from '../utils/api';
 
 function FilterBar({ onFilterChange, onChannelsLoad }) {
   const [channels, setChannels] = useState([]);
@@ -15,7 +16,17 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
   const [filters, setFilters] = useState({
     dateStart: '',
     dateEnd: '',
-    channel: '',
+    channel: [],
+    scoreMin: '',
+    scoreMax: '',
+    mediaType: '',
+    sortBy: 'score'
+  });
+  const [hasPendingChanges, setHasPendingChanges] = useState(false);
+  const [appliedFilters, setAppliedFilters] = useState({
+    dateStart: '',
+    dateEnd: '',
+    channel: [],
     scoreMin: '',
     scoreMax: '',
     mediaType: '',
@@ -31,23 +42,10 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
   const fetchChannels = async () => {
     try {
       setLoading(true);
-      // Usar una petición más pequeña para obtener canales
-      const response = await messagesAPI.getMessages({ page: 1, per_page: 50 });
-      
-      if (response.success && response.messages) {
-        // Extraer canales únicos de los mensajes
-        const uniqueChannels = [...new Set(
-          response.messages
-            .map(msg => msg.Title)
-            .filter(title => title && title !== 'Desconocido')
-        )].sort();
-        
-        setChannels(uniqueChannels);
-        
-        // Notificar al componente padre sobre los canales cargados
-        if (onChannelsLoad) {
-          onChannelsLoad(uniqueChannels);
-        }
+      const uniqueChannels = await channelsAPI.getChannels();
+      setChannels(uniqueChannels);
+      if (onChannelsLoad) {
+        onChannelsLoad(uniqueChannels);
       }
     } catch (error) {
       console.error('Error al cargar canales:', error);
@@ -64,6 +62,7 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
       [field]: event.target.value
     };
     setFilters(newFilters);
+    setHasPendingChanges(JSON.stringify(newFilters) !== JSON.stringify(appliedFilters));
   };
 
   const handleApplyFilters = () => {
@@ -80,13 +79,15 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
     }
 
     onFilterChange(filters);
+    setAppliedFilters(filters);
+    setHasPendingChanges(false);
   };
 
   const handleReset = () => {
     const resetFilters = {
       dateStart: '',
       dateEnd: '',
-      channel: '',
+      channel: [],
       scoreMin: '',
       scoreMax: '',
       mediaType: '',
@@ -94,6 +95,8 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
     };
     setFilters(resetFilters);
     onFilterChange(resetFilters);
+    setAppliedFilters(resetFilters);
+    setHasPendingChanges(false);
   };
 
   const handleRefreshChannels = () => {
@@ -135,24 +138,59 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
           />
         </Grid>
 
-        {/* Filtro de canal */}
+        {/* Filtro de canal (múltiple con buscador) */}
         <Grid item xs={12} sm={6} md={3}>
-          <TextField
-            fullWidth
-            select
-            label="Canal"
+          <Autocomplete
+            multiple
+            options={channels}
             value={filters.channel}
-            onChange={handleFilterChange('channel')}
-            size="small"
+            onChange={(_, value) => {
+              const newFilters = { ...filters, channel: value };
+              setFilters(newFilters);
+              setHasPendingChanges(JSON.stringify(newFilters) !== JSON.stringify(appliedFilters));
+            }}
+            filterSelectedOptions
             disabled={loading}
-          >
-            <MenuItem value="">Todos los canales</MenuItem>
-            {channels.map((channel) => (
-              <MenuItem key={channel} value={channel}>
-                {channel}
-              </MenuItem>
-            ))}
-          </TextField>
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Canal"
+                placeholder="Buscar canal..."
+                size="small"
+              />
+            )}
+          />
+          <Box display="flex" gap={1} mt={1} flexWrap="wrap">
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={() => {
+                const newFilters = { ...filters, channel: channels };
+                setFilters(newFilters);
+                setHasPendingChanges(JSON.stringify(newFilters) !== JSON.stringify(appliedFilters));
+              }}
+              disabled={loading || channels.length === 0}
+            >
+              Seleccionar todos
+            </Button>
+            <Button
+              variant="text"
+              size="small"
+              onClick={() => {
+                const newFilters = { ...filters, channel: [] };
+                setFilters(newFilters);
+                setHasPendingChanges(JSON.stringify(newFilters) !== JSON.stringify(appliedFilters));
+              }}
+              disabled={loading || filters.channel.length === 0}
+            >
+              Limpiar canales
+            </Button>
+          </Box>
+          <Typography variant="caption" color="textSecondary" display="block" mt={0.5}>
+            {filters.channel.length === 0
+              ? 'Ningún canal seleccionado'
+              : `${filters.channel.length} canales seleccionados`}
+          </Typography>
         </Grid>
 
         {/* Filtros de puntuación */}
@@ -231,7 +269,7 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
           <Box display="flex" gap={2} flexWrap="wrap">
             <Button
               variant="contained"
-              color="primary"
+              color={hasPendingChanges ? 'warning' : 'primary'}
               onClick={handleApplyFilters}
               startIcon={<FilterIcon />}
               size="large"
@@ -262,18 +300,23 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
       </Grid>
 
       {/* Información sobre filtros activos */}
-      {Object.values(filters).some(value => value !== '' && value !== 'score') && (
+      {(Object.values(filters).some(value => value !== '' && value !== 'score') || hasPendingChanges) && (
         <Box mt={2} p={2} bgcolor="grey.50" borderRadius={1}>
           <Typography variant="body2" color="textSecondary">
-            <strong>Filtros activos:</strong> 
+            <strong>Filtros activos:</strong>
             {filters.dateStart && ` Desde: ${filters.dateStart}`}
             {filters.dateEnd && ` Hasta: ${filters.dateEnd}`}
-            {filters.channel && ` Canal: ${filters.channel}`}
+            {filters.channel.length > 0 && ` Canales: ${filters.channel.join(', ')}`}
             {filters.scoreMin && ` Score ≥ ${filters.scoreMin}`}
             {filters.scoreMax && ` Score ≤ ${filters.scoreMax}`}
             {filters.mediaType && ` Tipo: ${filters.mediaType}`}
             {filters.sortBy !== 'score' && ` Orden: ${filters.sortBy}`}
           </Typography>
+          {hasPendingChanges && (
+            <Typography variant="body2" color="warning.main" sx={{ mt: 1 }}>
+              Filtros pendientes de aplicar
+            </Typography>
+          )}
         </Box>
       )}
     </Paper>

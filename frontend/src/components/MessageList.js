@@ -24,9 +24,8 @@ const MessageList = ({ filters = {} }) => {
   const MESSAGES_PER_PAGE = 24;
 
   useEffect(() => {
-    fetchMessages();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    fetchMessages(1, false);
+  }, [filters]);
 
   const fetchMessages = async (page = 1, append = false) => {
     try {

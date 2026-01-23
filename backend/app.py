@@ -253,9 +253,15 @@ def load_more(offset=0):
                 print(f"Error en filtro de fechas: {str(e)}")
                 return ('', 204)
 
-        # Filtro de Canal
+        # Filtro de Canal (uno o varios)
         if filters['channel'] and 'Title' in filtered_df.columns:
-            filtered_df = filtered_df[filtered_df['Title'] == filters['channel']]
+            channel_filter = filters['channel']
+            if isinstance(channel_filter, str) and ',' in channel_filter:
+                channel_filter = [c for c in channel_filter.split(',') if c]
+            if isinstance(channel_filter, list):
+                filtered_df = filtered_df[filtered_df['Title'].isin(channel_filter)]
+            else:
+                filtered_df = filtered_df[filtered_df['Title'] == channel_filter]
 
         # Filtro de Puntuación (Score) Mínima
         if filters['scoreMin'] and 'Score' in filtered_df.columns:
@@ -415,6 +421,19 @@ def export_relevants():
         print(f"Error inesperado en /export_relevants: {e}")
         return jsonify(success=False, error=f"Error inesperado en el servidor: {str(e)}"), 500
 
+@app.route('/channels', methods=['GET'])
+def get_channels():
+    """Devuelve la lista de canales disponibles."""
+    try:
+        df = load_data()
+        if df.empty or 'Title' not in df.columns:
+            return jsonify(success=True, channels=[])
+        channels = sorted(df['Title'].fillna('Desconocido').replace('', 'Desconocido').unique().tolist())
+        return jsonify(success=True, channels=channels)
+    except Exception as e:
+        print(f"Error en /channels: {e}")
+        return jsonify(success=False, error=str(e)), 500
+
 @app.route('/filter_messages', methods=['POST'])
 def filter_messages():
     """Filtra los mensajes según los criterios especificados."""
@@ -456,8 +475,12 @@ def filter_messages():
         channel = filters.get('channel')
         if channel and 'Title' in filtered_df.columns:
             try:
-                filtered_df = filtered_df[filtered_df['Title'] == channel]
-                print(f"Filtrado por canal: {channel}")
+                if isinstance(channel, list):
+                    filtered_df = filtered_df[filtered_df['Title'].isin(channel)]
+                    print(f"Filtrado por canales: {channel}")
+                else:
+                    filtered_df = filtered_df[filtered_df['Title'] == channel]
+                    print(f"Filtrado por canal: {channel}")
             except Exception as e:
                 print(f"Error en filtro de canal: {str(e)}")
                 return jsonify(success=False, error=f"Error en filtro de canal: {str(e)}"), 400

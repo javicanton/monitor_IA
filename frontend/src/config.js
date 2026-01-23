@@ -29,7 +29,7 @@ const config = {
   DEFAULT_FILTERS: {
     dateStart: '',
     dateEnd: '',
-    channel: '',
+    channel: [],
     scoreMin: '',
     scoreMax: '',
     mediaType: '',
