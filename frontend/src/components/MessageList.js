@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Box, 
   Grid, 
@@ -22,12 +22,8 @@ const MessageList = ({ filters = {} }) => {
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
 
   const MESSAGES_PER_PAGE = 24;
-
-  useEffect(() => {
-    fetchMessages(1, false);
-  }, [filters]);
-
-  const fetchMessages = async (page = 1, append = false) => {
+ 
+  const fetchMessages = useCallback(async (page = 1, append = false) => {
     try {
       setLoading(true);
       setError(null);
@@ -72,7 +68,11 @@ const MessageList = ({ filters = {} }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters, MESSAGES_PER_PAGE]);
+
+  useEffect(() => {
+    fetchMessages(1, false);
+  }, [fetchMessages]);
 
   const loadMore = async () => {
     if (!hasMore || loading) return;

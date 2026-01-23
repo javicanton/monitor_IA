@@ -8,7 +8,7 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Autocomplete from '@mui/material/Autocomplete';
 import { FilterList as FilterIcon, Clear as ClearIcon } from '@mui/icons-material';
-import { messagesAPI, channelsAPI } from '../utils/api';
+import { channelsAPI } from '../utils/api';
 
 function FilterBar({ onFilterChange, onChannelsLoad }) {
   const [channels, setChannels] = useState([]);
@@ -113,31 +113,6 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
       </Box>
 
       <Grid container spacing={2} alignItems="center">
-        {/* Filtros de fecha */}
-        <Grid item xs={12}>
-          <TextField
-            fullWidth
-            type="date"
-            label="Fecha desde"
-            value={filters.dateStart}
-            onChange={handleFilterChange('dateStart')}
-            InputLabelProps={{ shrink: true }}
-            size="small"
-          />
-        </Grid>
-        
-        <Grid item xs={12}>
-          <TextField
-            fullWidth
-            type="date"
-            label="Fecha hasta"
-            value={filters.dateEnd}
-            onChange={handleFilterChange('dateEnd')}
-            InputLabelProps={{ shrink: true }}
-            size="small"
-          />
-        </Grid>
-
         {/* Filtro de canal (múltiple con buscador) */}
         <Grid item xs={12}>
           <Autocomplete
@@ -193,37 +168,48 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
           </Typography>
         </Grid>
 
-        {/* Filtros de puntuación */}
+        {/* Filtro de ordenamiento */}
         <Grid item xs={12}>
           <TextField
             fullWidth
-            type="number"
-            label="Puntuación mínima"
-            value={filters.scoreMin}
-            onChange={handleFilterChange('scoreMin')}
-            inputProps={{ 
-              step: 0.1, 
-              min: 0,
-              placeholder: "0.0"
-            }}
+            select
+            label="Ordenar por"
+            value={filters.sortBy}
+            onChange={handleFilterChange('sortBy')}
             size="small"
-          />
+          >
+            <MenuItem value="score">Puntuación (Score)</MenuItem>
+            <MenuItem value="views">Número de vistas</MenuItem>
+            <MenuItem value="date">Fecha</MenuItem>
+            <MenuItem value="channel">Canal</MenuItem>
+          </TextField>
         </Grid>
 
+        {/* Filtros de fecha */}
         <Grid item xs={12}>
-          <TextField
-            fullWidth
-            type="number"
-            label="Puntuación máxima"
-            value={filters.scoreMax}
-            onChange={handleFilterChange('scoreMax')}
-            inputProps={{ 
-              step: 0.1, 
-              min: 0,
-              placeholder: "10.0"
-            }}
-            size="small"
-          />
+          <Typography variant="subtitle2" color="textSecondary" gutterBottom>
+            Fecha
+          </Typography>
+          <Box display="flex" gap={1}>
+            <TextField
+              fullWidth
+              type="date"
+              label="Inicio"
+              value={filters.dateStart}
+              onChange={handleFilterChange('dateStart')}
+              InputLabelProps={{ shrink: true }}
+              size="small"
+            />
+            <TextField
+              fullWidth
+              type="date"
+              label="Fin"
+              value={filters.dateEnd}
+              onChange={handleFilterChange('dateEnd')}
+              InputLabelProps={{ shrink: true }}
+              size="small"
+            />
+          </Box>
         </Grid>
 
         {/* Filtro de tipo de media */}
@@ -247,21 +233,39 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
           </TextField>
         </Grid>
 
-        {/* Filtro de ordenamiento */}
+        {/* Filtros de puntuación */}
         <Grid item xs={12}>
-          <TextField
-            fullWidth
-            select
-            label="Ordenar por"
-            value={filters.sortBy}
-            onChange={handleFilterChange('sortBy')}
-            size="small"
-          >
-            <MenuItem value="score">Puntuación (Score)</MenuItem>
-            <MenuItem value="views">Número de vistas</MenuItem>
-            <MenuItem value="date">Fecha</MenuItem>
-            <MenuItem value="channel">Canal</MenuItem>
-          </TextField>
+          <Typography variant="subtitle2" color="textSecondary" gutterBottom>
+            Puntuación
+          </Typography>
+          <Box display="flex" gap={1}>
+            <TextField
+              fullWidth
+              type="number"
+              label="Min"
+              value={filters.scoreMin}
+              onChange={handleFilterChange('scoreMin')}
+              inputProps={{ 
+                step: 0.1, 
+                min: 0,
+                placeholder: "0.0"
+              }}
+              size="small"
+            />
+            <TextField
+              fullWidth
+              type="number"
+              label="Max"
+              value={filters.scoreMax}
+              onChange={handleFilterChange('scoreMax')}
+              inputProps={{ 
+                step: 0.1, 
+                min: 0,
+                placeholder: "10.0"
+              }}
+              size="small"
+            />
+          </Box>
         </Grid>
 
         {/* Botones de acción */}
@@ -304,13 +308,11 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
         <Box mt={2} p={2} bgcolor="grey.50" borderRadius={1}>
           <Typography variant="body2" color="textSecondary">
             <strong>Filtros activos:</strong>
-            {filters.dateStart && ` Desde: ${filters.dateStart}`}
-            {filters.dateEnd && ` Hasta: ${filters.dateEnd}`}
             {filters.channel.length > 0 && ` Canales: ${filters.channel.join(', ')}`}
-            {filters.scoreMin && ` Score ≥ ${filters.scoreMin}`}
-            {filters.scoreMax && ` Score ≤ ${filters.scoreMax}`}
-            {filters.mediaType && ` Tipo: ${filters.mediaType}`}
             {filters.sortBy !== 'score' && ` Orden: ${filters.sortBy}`}
+            {(filters.dateStart || filters.dateEnd) && ` Fecha: ${filters.dateStart || '...'} - ${filters.dateEnd || '...'}`}
+            {filters.mediaType && ` Tipo: ${filters.mediaType}`}
+            {(filters.scoreMin || filters.scoreMax) && ` Puntuación: ${filters.scoreMin || '...'} - ${filters.scoreMax || '...'}`}
           </Typography>
           {hasPendingChanges && (
             <Typography variant="body2" color="warning.main" sx={{ mt: 1 }}>

@@ -40,15 +40,15 @@ const Dashboard = () => {
   };
 
   return (
-    <Container maxWidth="xl" sx={{ py: 4 }}>
+    <Container maxWidth="xl" sx={{ py: 4, overflow: 'visible' }}>
       {showFloatingLogo && (
         <Box
           sx={{
             position: 'fixed',
             top: 16,
-            right: 16,
+            left: 16,
             zIndex: 1200,
-            width: { xs: 44, sm: 56 },
+            width: { xs: 72, sm: 88, md: 104 },
             height: 'auto',
             opacity: 0.9,
             pointerEvents: 'none'
@@ -154,15 +154,20 @@ const Dashboard = () => {
           item
           xs={12}
           order={{ xs: 1, md: 2 }}
-          sx={{ flexBasis: { md: '20%' }, maxWidth: { md: '20%' } }}
+          sx={{
+            flexBasis: { md: '20%' },
+            maxWidth: { md: '20%' },
+            position: { md: 'sticky' },
+            top: { md: 24 },
+            alignSelf: { md: 'flex-start' },
+            height: 'fit-content'
+          }}
         >
           {/* Barra de filtros */}
-          <Box sx={{ position: { md: 'sticky' }, top: { md: 24 } }}>
-            <FilterBar 
-              onFilterChange={handleFilterChange}
-              onChannelsLoad={handleChannelsLoad}
-            />
-          </Box>
+          <FilterBar 
+            onFilterChange={handleFilterChange}
+            onChannelsLoad={handleChannelsLoad}
+          />
         </Grid>
       </Grid>
 

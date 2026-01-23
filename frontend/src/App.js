@@ -17,12 +17,7 @@ const theme = createTheme({
 });
 
 function App() {
-  const [filters, setFilters] = useState({});
   const [buildId, setBuildId] = useState('');
-
-  const handleFilterChange = (newFilters) => {
-    setFilters(newFilters);
-  };
 
   useEffect(() => {
     let isMounted = true;
