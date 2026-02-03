@@ -438,9 +438,7 @@ def get_channels():
 def filter_messages():
     """Filtra los mensajes según los criterios especificados."""
     try:
-        filters = request.json
-        if not filters:
-            return jsonify(success=False, error="No se proporcionaron filtros"), 400
+        filters = request.get_json(silent=True) or {}
 
         df = load_data()
         if df.empty:
@@ -538,31 +536,47 @@ def filter_messages():
 
         # Paginación
         try:
-            # Asegurarnos de que page y per_page sean números válidos
+            default_limit = 24
+            default_offset = 0
+
+            limit = filters.get('limit')
+            offset = filters.get('offset')
             page = filters.get('page')
             per_page = filters.get('per_page')
-            
-            # Convertir a enteros, usando valores por defecto si no son válidos
-            try:
-                page = int(page) if page is not None else 1
-            except (ValueError, TypeError):
-                page = 1
-                
-            try:
-                per_page = int(per_page) if per_page is not None else 24
-            except (ValueError, TypeError):
-                per_page = 24
-                
-            # Asegurarnos de que los valores sean positivos
-            page = max(1, page)
-            per_page = max(1, min(per_page, 100))  # Limitar a 100 mensajes por página
-            
-            start_idx = (page - 1) * per_page
-            end_idx = start_idx + per_page
+
+            def parse_int(value, default):
+                try:
+                    return int(value)
+                except (ValueError, TypeError):
+                    return default
+
+            limit = parse_int(limit, None)
+            offset = parse_int(offset, None)
+
+            if limit is None and offset is None:
+                page = parse_int(page, 1)
+                per_page = parse_int(per_page, default_limit)
+
+                page = max(1, page)
+                per_page = max(1, min(per_page, 100))
+
+                limit = per_page
+                offset = (page - 1) * per_page
+            else:
+                if limit is None:
+                    limit = default_limit
+                if offset is None:
+                    offset = default_offset
+
+                limit = max(1, min(limit, 100))
+                offset = max(0, offset)
+
+            start_idx = offset
+            end_idx = start_idx + limit
 
             # Seleccionar solo los mensajes de la página actual
             paginated_df = sorted_df.iloc[start_idx:end_idx]
-            print(f"Paginación: página {page}, {per_page} mensajes por página")
+            print(f"Paginación: offset {offset}, limit {limit}")
         except Exception as e:
             print(f"Error en paginación: {str(e)}")
             return jsonify(success=False, error=f"Error en paginación: {str(e)}"), 400
