@@ -30,7 +30,10 @@ app.config.from_object(Config)
 jwt = JWTManager(app)
 CORS(app, resources={
     r"/*": {
-        "origins": ["http://localhost:3000", "http://192.168.1.142:3000", "http://app.monitoria.org", "http://13.60.219.71", "http://13.60.219.71:80", "http://13.60.219.71:8080"],
+        "origins": [
+            "http://localhost:3000", 
+            "https://app.monitoria.org"
+            ],
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"],
         "supports_credentials": True
