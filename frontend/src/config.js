@@ -2,7 +2,7 @@
 const defaultApiBaseUrl =
   process.env.REACT_APP_API_URL ||
   (typeof window !== 'undefined'
-    ? `${window.location.protocol}//${window.location.hostname}:5001`
+    ? '/api'
     : 'http://localhost:5001');
 
 const config = {
