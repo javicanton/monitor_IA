@@ -219,16 +219,23 @@ def index():
 def load_more(offset=0):
     """Carga más mensajes a partir de un offset dado."""
     try:
-        # Obtener los filtros de la URL
-        filters = {
-            'dateStart': request.args.get('dateStart'),
-            'dateEnd': request.args.get('dateEnd'),
-            'channel': request.args.get('channel'),
-            'scoreMin': request.args.get('scoreMin'),
-            'scoreMax': request.args.get('scoreMax'),
-            'mediaType': request.args.get('mediaType'),
-            'sortBy': request.args.get('sortBy', 'score')
-        }
+        # Obtener los filtros del body
+        filters = request.get_json(silent=True) or {}
+        date_start_str = filters.get('dateStart')
+        date_end_str = filters.get('dateEnd')
+        if not filters:
+            # Fallback para compatibilidad con query params
+            filters = {
+                'dateStart': request.args.get('dateStart'),
+                'dateEnd': request.args.get('dateEnd'),
+                'channel': request.args.get('channel'),
+                'scoreMin': request.args.get('scoreMin'),
+                'scoreMax': request.args.get('scoreMax'),
+                'mediaType': request.args.get('mediaType'),
+                'sortBy': request.args.get('sortBy', 'score')
+            }
+            date_start_str = filters.get('dateStart')
+            date_end_str = filters.get('dateEnd')
 
         df = load_data()
         if df.empty:
@@ -238,59 +245,67 @@ def load_more(offset=0):
         filtered_df = df.copy()
 
         # Filtro de Fecha (Rango)
-        if 'Date Sent' in filtered_df.columns:
+        if 'Date Sent' in filtered_df.columns and (date_start_str or date_end_str):
             try:
-                filtered_df['Date Sent'] = pd.to_datetime(filtered_df['Date Sent']).dt.tz_localize(None)
+                filtered_df['Date Sent'] = pd.to_datetime(filtered_df['Date Sent'], errors='coerce').dt.tz_localize(None)
                 
-                if filters['dateStart']:
-                    date_start = pd.to_datetime(filters['dateStart']).normalize()
+                if date_start_str:
+                    date_start = pd.to_datetime(date_start_str).normalize()
                     filtered_df = filtered_df[filtered_df['Date Sent'].dt.normalize() >= date_start]
                 
-                if filters['dateEnd']:
-                    date_end = pd.to_datetime(filters['dateEnd']).normalize() + pd.Timedelta(days=1)
+                if date_end_str:
+                    date_end = pd.to_datetime(date_end_str).normalize() + pd.Timedelta(days=1)
                     filtered_df = filtered_df[filtered_df['Date Sent'].dt.normalize() < date_end]
             except Exception as e:
                 print(f"Error en filtro de fechas: {str(e)}")
-                return ('', 204)
+                pass
 
         # Filtro de Canal (uno o varios)
-        if filters['channel'] and 'Title' in filtered_df.columns:
-            channel_filter = filters['channel']
-            if isinstance(channel_filter, str) and ',' in channel_filter:
-                channel_filter = [c for c in channel_filter.split(',') if c]
-            if isinstance(channel_filter, list):
-                filtered_df = filtered_df[filtered_df['Title'].isin(channel_filter)]
-            else:
-                filtered_df = filtered_df[filtered_df['Title'] == channel_filter]
+        channel_filter = filters.get('channel')
+        if channel_filter and 'Title' in filtered_df.columns:
+            try:
+                if isinstance(channel_filter, str) and ',' in channel_filter:
+                    channel_filter = [c for c in channel_filter.split(',') if c]
+                if isinstance(channel_filter, list):
+                    filtered_df = filtered_df[filtered_df['Title'].isin(channel_filter)]
+                else:
+                    filtered_df = filtered_df[filtered_df['Title'] == channel_filter]
+            except Exception as e:
+                print(f"Error en filtro de canal: {str(e)}")
+                pass
 
         # Filtro de Puntuación (Score) Mínima
-        if filters['scoreMin'] and 'Score' in filtered_df.columns:
+        score_min_str = filters.get('scoreMin')
+        if score_min_str and 'Score' in filtered_df.columns:
             try:
-                score_min = float(filters['scoreMin'])
+                score_min = float(score_min_str)
                 filtered_df['Score'] = pd.to_numeric(filtered_df['Score'], errors='coerce')
                 filtered_df = filtered_df[filtered_df['Score'] >= score_min]
             except:
                 pass
 
         # Filtro de Puntuación (Score) Máxima
-        if filters['scoreMax'] and 'Score' in filtered_df.columns:
+        score_max_str = filters.get('scoreMax')
+        if score_max_str and 'Score' in filtered_df.columns:
             try:
-                score_max = float(filters['scoreMax'])
+                score_max = float(score_max_str)
                 filtered_df['Score'] = pd.to_numeric(filtered_df['Score'], errors='coerce')
                 filtered_df = filtered_df[filtered_df['Score'] <= score_max]
             except:
                 pass
 
         # Filtro de Tipo de Media
-        if filters['mediaType'] and 'Media Type' in filtered_df.columns:
+        media_type = filters.get('mediaType')
+        if media_type and 'Media Type' in filtered_df.columns:
             try:
                 filtered_df['Media Type'] = filtered_df['Media Type'].astype(str).str.lower()
-                filtered_df = filtered_df[filtered_df['Media Type'] == str(filters['mediaType']).lower()]
+                filtered_df = filtered_df[filtered_df['Media Type'] == str(media_type).lower()]
             except:
                 pass
 
         # Ordenar
-        if filters['sortBy'] == 'views' and 'Views' in filtered_df.columns:
+        sort_by = filters.get('sortBy', 'score')
+        if sort_by == 'views' and 'Views' in filtered_df.columns:
             filtered_df['Views'] = pd.to_numeric(filtered_df['Views'], errors='coerce')
             sorted_df = filtered_df.sort_values(by='Views', ascending=False)
         elif 'Score' in filtered_df.columns:
@@ -439,6 +454,8 @@ def filter_messages():
     """Filtra los mensajes según los criterios especificados."""
     try:
         filters = request.get_json(silent=True) or {}
+        date_start_str = filters.get('dateStart')
+        date_end_str = filters.get('dateEnd')
 
         df = load_data()
         if df.empty:
@@ -448,12 +465,10 @@ def filter_messages():
         filtered_df = df.copy()
 
         # Filtro de Fecha (Rango)
-        date_start_str = filters.get('dateStart')
-        date_end_str = filters.get('dateEnd')
-        if 'Date Sent' in filtered_df.columns:
+        if 'Date Sent' in filtered_df.columns and (date_start_str or date_end_str):
             try:
                 # Asegurarnos de que la columna Date Sent esté en el formato correcto
-                filtered_df['Date Sent'] = pd.to_datetime(filtered_df['Date Sent']).dt.tz_localize(None)
+                filtered_df['Date Sent'] = pd.to_datetime(filtered_df['Date Sent'], errors='coerce').dt.tz_localize(None)
                 
                 if date_start_str:
                     # Convertir la fecha de inicio a datetime sin zona horaria
@@ -467,7 +482,8 @@ def filter_messages():
                 
             except Exception as e:
                 print(f"Error en filtro de fechas: {str(e)}")
-                return jsonify(success=False, error=f"Error en filtro de fechas: {str(e)}"), 400
+                # Filtro opcional: no interrumpir la respuesta
+                pass
 
         # Filtro de Canal (usando Title)
         channel = filters.get('channel')
