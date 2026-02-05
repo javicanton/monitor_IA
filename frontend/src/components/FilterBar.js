@@ -8,15 +8,18 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Autocomplete from '@mui/material/Autocomplete';
 import { FilterList as FilterIcon, Clear as ClearIcon } from '@mui/icons-material';
-import { channelsAPI } from '../utils/api';
+import { channelsAPI, topicsAPI } from '../utils/api';
 
 function FilterBar({ onFilterChange, onChannelsLoad }) {
   const [channels, setChannels] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [topics, setTopics] = useState([]);
+  const [loadingTopics, setLoadingTopics] = useState(false);
   const [filters, setFilters] = useState({
     dateStart: '',
     dateEnd: '',
     channel: [],
+    topics: [],
     scoreMin: '',
     scoreMax: '',
     mediaType: '',
@@ -27,6 +30,7 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
     dateStart: '',
     dateEnd: '',
     channel: [],
+    topics: [],
     scoreMin: '',
     scoreMax: '',
     mediaType: '',
@@ -36,6 +40,7 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
   useEffect(() => {
     // Cargar canales al montar el componente
     fetchChannels();
+    fetchTopics();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -53,6 +58,19 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
       setChannels(['Canal 1', 'Canal 2', 'Canal 3']);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchTopics = async () => {
+    try {
+      setLoadingTopics(true);
+      const availableTopics = await topicsAPI.getTopics();
+      setTopics(availableTopics);
+    } catch (error) {
+      console.error('Error al cargar topics:', error);
+      setTopics([]);
+    } finally {
+      setLoadingTopics(false);
     }
   };
 
@@ -88,6 +106,7 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
       dateStart: '',
       dateEnd: '',
       channel: [],
+      topics: [],
       scoreMin: '',
       scoreMax: '',
       mediaType: '',
@@ -102,6 +121,16 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
   const handleRefreshChannels = () => {
     fetchChannels();
   };
+
+  const handleRefreshTopics = () => {
+    fetchTopics();
+  };
+
+  const selectedTopics = topics.filter((topic) => filters.topics.includes(topic.id));
+  const selectedTopicLabels =
+    selectedTopics.length > 0
+      ? selectedTopics.map((item) => item.label || item.id)
+      : filters.topics.map((item) => item);
 
   return (
     <Paper
@@ -172,6 +201,37 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
             {filters.channel.length === 0
               ? 'Ningún canal seleccionado'
               : `${filters.channel.length} canales seleccionados`}
+          </Typography>
+        </Grid>
+
+        {/* Filtro de topics (múltiple con buscador) */}
+        <Grid item xs={12}>
+          <Autocomplete
+            multiple
+            options={topics}
+            value={selectedTopics}
+            onChange={(_, value) => {
+              const newFilters = { ...filters, topics: value.map((item) => item.id) };
+              setFilters(newFilters);
+              setHasPendingChanges(JSON.stringify(newFilters) !== JSON.stringify(appliedFilters));
+            }}
+            getOptionLabel={(option) => option.label || `Topic ${option.id}`}
+            isOptionEqualToValue={(option, value) => option.id === value.id}
+            filterSelectedOptions
+            disabled={loadingTopics}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Temas"
+                placeholder="Buscar tema..."
+                size="small"
+              />
+            )}
+          />
+          <Typography variant="caption" color="textSecondary" display="block" mt={0.5}>
+            {filters.topics.length === 0
+              ? 'Ningún tema seleccionado'
+              : `${filters.topics.length} temas seleccionados`}
           </Typography>
         </Grid>
 
@@ -306,16 +366,25 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
             >
               {loading ? 'Cargando...' : 'Actualizar Canales'}
             </Button>
+            <Button
+              variant="outlined"
+              onClick={handleRefreshTopics}
+              disabled={loadingTopics}
+              size="medium"
+            >
+              {loadingTopics ? 'Cargando...' : 'Actualizar Temas'}
+            </Button>
           </Box>
         </Grid>
       </Grid>
 
       {/* Información sobre filtros activos */}
-      {(Object.values(filters).some(value => value !== '' && value !== 'score') || hasPendingChanges) && (
+          {(Object.values(filters).some(value => value !== '' && value !== 'score') || hasPendingChanges) && (
         <Box mt={2} p={2} bgcolor="grey.50" borderRadius={1}>
           <Typography variant="body2" color="textSecondary">
             <strong>Filtros activos:</strong>
             {filters.channel.length > 0 && ` Canales: ${filters.channel.join(', ')}`}
+            {filters.topics.length > 0 && ` Temas: ${selectedTopicLabels.join(', ')}`}
             {filters.sortBy !== 'score' && ` Orden: ${filters.sortBy}`}
             {(filters.dateStart || filters.dateEnd) && ` Fecha: ${filters.dateStart || '...'} - ${filters.dateEnd || '...'}`}
             {filters.mediaType && ` Tipo: ${filters.mediaType}`}

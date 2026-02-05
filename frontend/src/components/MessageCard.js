@@ -5,9 +5,10 @@ import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import Box from '@mui/material/Box';
 import Link from '@mui/material/Link';
+import Chip from '@mui/material/Chip';
 
 function MessageCard({ message, onLabelChange }) {
-  const { Score, Message_ID, URL, Label, Embed } = message;
+  const { Score, Message_ID, URL, Label, Embed, Topic_ID, Topic_Title } = message;
   const embedRef = useRef(null);
 
   useEffect(() => {
@@ -38,6 +39,16 @@ function MessageCard({ message, onLabelChange }) {
         <Typography variant="h6" component="div" align="center" gutterBottom>
           Overperforming Score: <span style={{ color: 'red' }}>{Score.toFixed(2)}x</span>
         </Typography>
+        {(Topic_Title || Topic_ID !== undefined) && (
+          <Box display="flex" justifyContent="center" mb={1}>
+            <Chip
+              label={Topic_Title || `Topic ${Topic_ID}`}
+              size="small"
+              color="secondary"
+              variant="outlined"
+            />
+          </Box>
+        )}
 
         <Box 
           ref={embedRef}

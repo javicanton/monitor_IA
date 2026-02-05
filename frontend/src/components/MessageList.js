@@ -209,7 +209,9 @@ const MessageList = ({ filters = {} }) => {
                 Message_ID: message['Message ID'],
                 URL: message['URL'],
                 Label: message['Label'],
-                Embed: message['Embed']
+                Embed: message['Embed'],
+                Topic_ID: message['topic_id'],
+                Topic_Title: message['topic_title']
               }}
               onLabelChange={handleLabel}
             />

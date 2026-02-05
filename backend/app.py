@@ -8,12 +8,14 @@ import os
 from datetime import datetime, timedelta
 import json
 from s3_client import get_s3_client
-from auth import auth_bp
+from auth import auth_bp, admin_required
 from models import db
 from config import Config
 import boto3
 from botocore.exceptions import ClientError
 import logging
+from threading import Thread
+from topic_processor import process_topics
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -168,6 +170,117 @@ def load_data_local():
         logger.error(f"Error crítico al cargar el archivo JSON: {e}")
         return pd.DataFrame()
 
+
+def load_topics_meta():
+    """Carga los metadatos de topics desde S3."""
+    try:
+        s3_client = get_s3_client()
+        data = s3_client.load_json_from_s3(Config.TOPICS_META_KEY)
+        topics = data.get('topics', data if isinstance(data, list) else [])
+    except Exception as e:
+        logger.warning(f"No se pudieron cargar topics: {e}")
+        return []
+
+    custom_titles = load_topic_titles()
+    normalized = []
+    for topic in topics:
+        topic_id = topic.get('Topic', topic.get('topic_id', topic.get('id')))
+        if topic_id is None:
+            continue
+        try:
+            topic_id = int(topic_id)
+        except Exception:
+            continue
+
+        label = topic.get('Name') or topic.get('name')
+        if not label:
+            terms = topic.get('terms')
+            if isinstance(terms, list) and terms:
+                label = ", ".join([str(term) for term in terms[:4]])
+        if not label:
+            label = f"Topic {topic_id}"
+        if topic_id == -1:
+            label = "Sin asignar"
+        custom_label = custom_titles.get(str(topic_id))
+        if custom_label:
+            label = custom_label
+
+        normalized.append({
+            "id": topic_id,
+            "label": label,
+            "count": topic.get('Count', topic.get('count'))
+        })
+
+    unique = {}
+    for item in normalized:
+        unique[item["id"]] = item
+    return list(unique.values())
+
+
+def load_topic_titles():
+    """Carga los titulos personalizados de topics desde S3."""
+    try:
+        s3_client = get_s3_client()
+        data = s3_client.load_json_from_s3(Config.TOPICS_TITLES_KEY)
+    except Exception as e:
+        logger.warning(f"No se pudieron cargar titulos de topics: {e}")
+        return {}
+
+    titles = {}
+    if isinstance(data, dict):
+        raw_titles = data.get('titles', data)
+        if isinstance(raw_titles, dict):
+            titles = raw_titles
+    elif isinstance(data, list):
+        for item in data:
+            topic_id = item.get('id')
+            title = item.get('title')
+            if topic_id is None or not title:
+                continue
+            titles[str(topic_id)] = title
+
+    return {str(k): v for k, v in titles.items() if v}
+
+
+def save_topic_titles(titles):
+    """Guarda los titulos personalizados en S3."""
+    payload = json.dumps({"titles": titles}, ensure_ascii=True)
+    s3_client = get_s3_client()
+    s3_client.s3_client.put_object(
+        Bucket=Config.S3_BUCKET,
+        Key=Config.TOPICS_TITLES_KEY,
+        Body=payload.encode("utf-8"),
+        ContentType="application/json",
+    )
+
+
+def load_topic_assignments():
+    """Carga asignaciones de topics desde S3."""
+    try:
+        s3_client = get_s3_client()
+        return s3_client.load_csv_from_s3(Config.TOPICS_ASSIGNMENTS_KEY)
+    except Exception as e:
+        logger.warning(f"No se pudieron cargar asignaciones de topics: {e}")
+        return pd.DataFrame()
+
+
+def attach_topic_assignments(df):
+    """Adjunta topic_id a los mensajes si existe el archivo de asignaciones."""
+    if df.empty or 'Message ID' not in df.columns:
+        return df
+
+    assignments = load_topic_assignments()
+    if assignments.empty or 'Message ID' not in assignments.columns:
+        return df
+
+    if 'topic_id' not in assignments.columns:
+        return df
+
+    merged = df.copy()
+    merged['Message ID'] = merged['Message ID'].astype(str)
+    assignments['Message ID'] = assignments['Message ID'].astype(str)
+    return merged.merge(assignments[['Message ID', 'topic_id']], on='Message ID', how='left')
+
 # Base de datos de usuarios (en producción usar una base de datos real)
 users_db = {}
 
@@ -232,6 +345,7 @@ def load_more(offset=0):
                 'dateStart': request.args.get('dateStart'),
                 'dateEnd': request.args.get('dateEnd'),
                 'channel': request.args.get('channel'),
+                'topics': request.args.get('topics'),
                 'scoreMin': request.args.get('scoreMin'),
                 'scoreMax': request.args.get('scoreMax'),
                 'mediaType': request.args.get('mediaType'),
@@ -275,6 +389,32 @@ def load_more(offset=0):
                     filtered_df = filtered_df[filtered_df['Title'] == channel_filter]
             except Exception as e:
                 print(f"Error en filtro de canal: {str(e)}")
+                pass
+
+        # Filtro de Topics (uno o varios)
+        topic_filter = filters.get('topics') or filters.get('topic')
+        if topic_filter:
+            try:
+                filtered_df = attach_topic_assignments(filtered_df)
+                topic_ids = []
+                if isinstance(topic_filter, str):
+                    topic_ids = [t for t in topic_filter.split(',') if t]
+                elif isinstance(topic_filter, list):
+                    topic_ids = topic_filter
+
+                normalized = []
+                for item in topic_ids:
+                    if isinstance(item, dict) and 'id' in item:
+                        item = item['id']
+                    try:
+                        normalized.append(int(item))
+                    except Exception:
+                        continue
+
+                if normalized and 'topic_id' in filtered_df.columns:
+                    filtered_df = filtered_df[filtered_df['topic_id'].isin(normalized)]
+            except Exception as e:
+                print(f"Error en filtro de topics: {str(e)}")
                 pass
 
         # Filtro de Puntuación (Score) Mínima
@@ -452,6 +592,67 @@ def get_channels():
         print(f"Error en /channels: {e}")
         return jsonify(success=False, error=str(e)), 500
 
+@app.route('/topics', methods=['GET'])
+def get_topics():
+    """Devuelve la lista de topics disponibles."""
+    try:
+        topics = load_topics_meta()
+        return jsonify(success=True, topics=topics)
+    except Exception as e:
+        print(f"Error en /topics: {e}")
+        return jsonify(success=False, error=str(e)), 500
+
+@app.route('/admin/topic_titles', methods=['GET'])
+@jwt_required()
+@admin_required
+def get_topic_titles():
+    """Devuelve los titulos personalizados de topics."""
+    try:
+        titles = load_topic_titles()
+        return jsonify(success=True, titles=titles)
+    except Exception as e:
+        print(f"Error en /admin/topic_titles: {e}")
+        return jsonify(success=False, error=str(e)), 500
+
+@app.route('/admin/topic_titles', methods=['POST'])
+@jwt_required()
+@admin_required
+def set_topic_titles():
+    """Actualiza los titulos personalizados de topics."""
+    try:
+        data = request.get_json(silent=True) or {}
+        titles = data.get('titles')
+
+        if not titles:
+            topic_id = data.get('topic_id')
+            title = data.get('title')
+            if topic_id is None or not title:
+                return jsonify(success=False, error="Faltan datos de titulo"), 400
+            titles = {str(topic_id): title}
+
+        existing = load_topic_titles()
+        for key, value in titles.items():
+            if value:
+                existing[str(key)] = value
+
+        save_topic_titles(existing)
+        return jsonify(success=True, titles=existing)
+    except Exception as e:
+        print(f"Error en /admin/topic_titles: {e}")
+        return jsonify(success=False, error=str(e)), 500
+
+@app.route('/admin/run_topics', methods=['POST'])
+@jwt_required()
+@admin_required
+def run_topics():
+    """Ejecuta el análisis de topics manualmente (solo admins)."""
+    try:
+        result = process_topics()
+        return jsonify(success=True, result=result)
+    except Exception as e:
+        print(f"Error en /admin/run_topics: {e}")
+        return jsonify(success=False, error=str(e)), 500
+
 @app.route('/filter_messages', methods=['POST'])
 def filter_messages():
     """Filtra los mensajes según los criterios especificados."""
@@ -501,6 +702,33 @@ def filter_messages():
             except Exception as e:
                 print(f"Error en filtro de canal: {str(e)}")
                 return jsonify(success=False, error=f"Error en filtro de canal: {str(e)}"), 400
+
+        # Filtro de Topics (uno o varios)
+        topic_filter = filters.get('topics') or filters.get('topic')
+        if topic_filter:
+            try:
+                filtered_df = attach_topic_assignments(filtered_df)
+                topic_ids = []
+                if isinstance(topic_filter, str):
+                    topic_ids = [t for t in topic_filter.split(',') if t]
+                elif isinstance(topic_filter, list):
+                    topic_ids = topic_filter
+
+                normalized = []
+                for item in topic_ids:
+                    if isinstance(item, dict) and 'id' in item:
+                        item = item['id']
+                    try:
+                        normalized.append(int(item))
+                    except Exception:
+                        continue
+
+                if normalized and 'topic_id' in filtered_df.columns:
+                    filtered_df = filtered_df[filtered_df['topic_id'].isin(normalized)]
+                    print(f"Filtrado por topics: {normalized}")
+            except Exception as e:
+                print(f"Error en filtro de topics: {str(e)}")
+                return jsonify(success=False, error=f"Error en filtro de topics: {str(e)}"), 400
 
         # Filtro de Puntuación (Score) Mínima
         score_min_str = filters.get('scoreMin')
@@ -600,9 +828,19 @@ def filter_messages():
             print(f"Error en paginación: {str(e)}")
             return jsonify(success=False, error=f"Error en paginación: {str(e)}"), 400
 
+        # Adjuntar topics para mostrar en tarjetas
+        try:
+            paginated_df = attach_topic_assignments(paginated_df)
+            if 'topic_id' in paginated_df.columns:
+                paginated_df['topic_id'] = pd.to_numeric(paginated_df['topic_id'], errors='coerce').astype('Int64')
+                topic_labels = {item['id']: item['label'] for item in load_topics_meta()}
+                paginated_df['topic_title'] = paginated_df['topic_id'].map(topic_labels)
+        except Exception as e:
+            print(f"Error al adjuntar topics: {e}")
+
         # Seleccionar columnas y convertir a dict
         try:
-            required_columns = ['Embed', 'Score', 'Message ID', 'URL', 'Label']
+            required_columns = ['Embed', 'Score', 'Message ID', 'URL', 'Label', 'topic_id', 'topic_title']
             messages = []
             for _, row in paginated_df.iterrows():
                 msg = {}
@@ -714,5 +952,17 @@ def get_messages():
 
 if __name__ == '__main__':
     print("Iniciando servidor Flask...")
+    if os.environ.get("TOPIC_WORKER_AUTOSTART", "").lower() in {"1", "true", "yes"}:
+        try:
+            from topic_worker import run_worker_loop
+            worker_thread = Thread(
+                target=run_worker_loop,
+                args=(Config.TOPIC_POLL_INTERVAL_MIN,),
+                daemon=True,
+            )
+            worker_thread.start()
+            print("Worker de topics iniciado en background")
+        except Exception as e:
+            print(f"No se pudo iniciar el worker de topics: {e}")
     # Considera usar debug=True solo para desarrollo, False para producción
     app.run(host='0.0.0.0', port=5001, debug=True)

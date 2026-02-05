@@ -15,6 +15,15 @@ services:
       - monitoria
     restart: unless-stopped
 
+  topic_worker:
+    build: ./backend
+    command: ["python", "topic_worker.py"]
+    environment:
+      - TOPIC_POLL_INTERVAL_MIN=${TOPIC_POLL_INTERVAL_MIN:-1440}
+    networks:
+      - monitoria
+    restart: unless-stopped
+
   frontend:
     build:
       context: ./frontend
