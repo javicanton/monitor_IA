@@ -7,6 +7,9 @@ import pandas as pd
 import os
 from datetime import datetime, timedelta
 import json
+import importlib.util
+import shutil
+import time
 from s3_client import get_s3_client
 from auth import auth_bp, admin_required
 from models import db
@@ -20,6 +23,25 @@ from topic_processor import process_topics
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+_DEBUG_LOG_PATH = "/Users/javiercanton/Documents/Cursor/monitor_IA/.cursor/debug.log"
+
+
+def _debug_log(hypothesis_id, location, message, data, run_id="run1"):
+    try:
+        payload = {
+            "sessionId": "debug-session",
+            "runId": run_id,
+            "hypothesisId": hypothesis_id,
+            "location": location,
+            "message": message,
+            "data": data,
+            "timestamp": int(time.time() * 1000),
+        }
+        with open(_DEBUG_LOG_PATH, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(payload, ensure_ascii=True) + "\n")
+    except Exception:
+        pass
 
 MESSAGES_LIMIT = 48
 S3_BUCKET = os.environ.get('S3_BUCKET', 'monitoria-data')
@@ -952,6 +974,18 @@ def get_messages():
 
 if __name__ == '__main__':
     print("Iniciando servidor Flask...")
+    # region agent log
+    _debug_log(
+        "H1",
+        "backend/app.py:__main__",
+        "app_entry",
+        {
+            "git_in_path": shutil.which("git") is not None,
+            "pytopicgram_installed": importlib.util.find_spec("pytopicgram") is not None,
+            "topic_worker_autostart": os.environ.get("TOPIC_WORKER_AUTOSTART", "").lower(),
+        },
+    )
+    # endregion agent log
     if os.environ.get("TOPIC_WORKER_AUTOSTART", "").lower() in {"1", "true", "yes"}:
         try:
             from topic_worker import run_worker_loop
@@ -962,7 +996,43 @@ if __name__ == '__main__':
             )
             worker_thread.start()
             print("Worker de topics iniciado en background")
+            # region agent log
+            _debug_log(
+                "H3",
+                "backend/app.py:__main__",
+                "topic_worker_autostart_enabled",
+                {
+                    "interval_min": Config.TOPIC_POLL_INTERVAL_MIN,
+                    "thread_started": True,
+                },
+            )
+            # endregion agent log
         except Exception as e:
             print(f"No se pudo iniciar el worker de topics: {e}")
+            # region agent log
+            _debug_log(
+                "H3",
+                "backend/app.py:__main__",
+                "topic_worker_autostart_failed",
+                {"error_type": type(e).__name__},
+            )
+            # endregion agent log
+    else:
+        # region agent log
+        _debug_log(
+            "H3",
+            "backend/app.py:__main__",
+            "topic_worker_autostart_disabled",
+            {"autostart": False},
+        )
+        # endregion agent log
     # Considera usar debug=True solo para desarrollo, False para producción
+    # region agent log
+    _debug_log(
+        "H2",
+        "backend/app.py:__main__",
+        "flask_start",
+        {"host": "0.0.0.0", "port": 5001},
+    )
+    # endregion agent log
     app.run(host='0.0.0.0', port=5001, debug=True)
