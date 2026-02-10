@@ -1,3 +1,4 @@
+import importlib.util
 import json
 import logging
 import os
@@ -215,6 +216,9 @@ def _upload_assignments(s3_client, assignments_df):
 
 
 def process_topics():
+    if importlib.util.find_spec("pytopicgram") is None:
+        logger.error("pytopicgram no disponible en este contenedor")
+        return {"status": "error", "error": "pytopicgram_not_installed"}
     s3_client = get_s3_client()
     df = _load_messages_df(s3_client)
     if df.empty:

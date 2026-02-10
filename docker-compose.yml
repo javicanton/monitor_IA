@@ -16,7 +16,9 @@ services:
     restart: unless-stopped
 
   topic_worker:
-    build: ./backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
     command: ["python", "topic_worker.py"]
     environment:
       - TOPIC_POLL_INTERVAL_MIN=${TOPIC_POLL_INTERVAL_MIN:-1440}
