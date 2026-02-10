@@ -8,6 +8,7 @@ RUN apt-get update \
 
 COPY requirements.txt requirements-topics.txt ./
 RUN pip install --no-cache-dir -r requirements-topics.txt
+RUN python -m spacy download es_core_news_sm
 
 COPY . .
 
