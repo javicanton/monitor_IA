@@ -46,6 +46,12 @@ class Config:
     TOPICS_MIN_NEW_MESSAGES = int(os.environ.get('TOPICS_MIN_NEW_MESSAGES', 10))
     TOPICS_OPENAI_KEY = os.environ.get('TOPICS_OPENAI_KEY')
     TOPICS_OPENAI_DOCS = int(os.environ.get('TOPICS_OPENAI_DOCS', 15))
+    TOPICS_NUM_TOPICS = int(os.environ.get('TOPICS_NUM_TOPICS', 100))
+    _TOPICS_SAMPLE_RATIO_RAW = os.environ.get('TOPICS_SAMPLE_RATIO')
+    try:
+        TOPICS_SAMPLE_RATIO = float(_TOPICS_SAMPLE_RATIO_RAW) if _TOPICS_SAMPLE_RATIO_RAW else None
+    except (TypeError, ValueError):
+        TOPICS_SAMPLE_RATIO = None
     
     # Configuración de CORS
     CORS_HEADERS = 'Content-Type'

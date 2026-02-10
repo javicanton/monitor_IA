@@ -152,9 +152,15 @@ def _train_model_with_pytopicgram(docs, model_path):
             model_path,
         ]
 
+        if Config.TOPICS_NUM_TOPICS and Config.TOPICS_NUM_TOPICS > 0:
+            cmd.extend(["--num_topics", str(Config.TOPICS_NUM_TOPICS)])
+
         if Config.TOPICS_OPENAI_KEY:
             cmd.extend(["--openai_key", Config.TOPICS_OPENAI_KEY])
             cmd.extend(["--n_docs_openai", str(Config.TOPICS_OPENAI_DOCS)])
+
+        if Config.TOPICS_SAMPLE_RATIO and 0 < Config.TOPICS_SAMPLE_RATIO < 1:
+            cmd.extend(["--sample_ratio", str(Config.TOPICS_SAMPLE_RATIO)])
 
         logger.info("Entrenando modelo con pytopicgram")
         subprocess.run(cmd, check=True)
