@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  topic_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
+    command: ["python", "topic_worker.py"]
+    environment:
+      - TOPIC_POLL_INTERVAL_MIN=${TOPIC_POLL_INTERVAL_MIN:-1440}
+      - TOPICS_NUM_TOPICS=${TOPICS_NUM_TOPICS:-50}
+      - TOPICS_SAMPLE_RATIO=${TOPICS_SAMPLE_RATIO:-0.3}
+    restart: unless-stopped
