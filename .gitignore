@@ -471,10 +471,7 @@ yarn-error.log*
 # Archivos de datos y credenciales
 *.session
 credentials.txt
-telegram_data.xlsx
-telegram_messages.csv
-telegram_channels.csv
-telegram_channels_full.csv
+telegram_channels_test.csv
 
 # Carpeta de datos
 /data/*
