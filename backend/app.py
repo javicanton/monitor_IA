@@ -297,7 +297,8 @@ def save_data(df):
         json_data = json.dumps({'messages': df.to_dict(orient='records')})
         
         # Subir a S3
-        s3_client.put_object(
+        s3_client = get_s3_client()
+        s3_client.s3_client.put_object(
             Bucket=S3_BUCKET,
             Key=S3_KEY,
             Body=json_data.encode('utf-8'),

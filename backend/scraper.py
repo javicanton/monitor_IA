@@ -172,19 +172,17 @@ def load_credentials(filename='credentials.txt', non_interactive=False, api_id=N
 def get_user_input(days_arg=None, messages_arg=None, non_interactive=False):
     """Obtiene la configuración del usuario"""
     try:
-        if days_arg is not None or messages_arg is not None:
-            days = days_arg if days_arg is not None else DEFAULT_DAYS
-            messages = messages_arg if messages_arg is not None else DEFAULT_MAX_MESSAGES
-            return days, messages
+        days_default = days_arg if days_arg is not None else DEFAULT_DAYS
+        messages_default = messages_arg if messages_arg is not None else DEFAULT_MAX_MESSAGES
 
         if non_interactive:
-            return DEFAULT_DAYS, DEFAULT_MAX_MESSAGES
+            return days_default, messages_default
 
-        days = input(f"Ingresa el número de días a scrapear (deja en blanco para usar {DEFAULT_DAYS} días): ")
-        days = int(days) if days.strip() else DEFAULT_DAYS
+        days = input(f"Ingresa el número de días a scrapear (deja en blanco para usar {days_default} días): ")
+        days = int(days) if days.strip() else days_default
 
-        messages = input(f"Ingresa el número máximo de mensajes por canal (deja en blanco para usar {DEFAULT_MAX_MESSAGES}): ")
-        messages = int(messages) if messages.strip() else DEFAULT_MAX_MESSAGES
+        messages = input(f"Ingresa el número máximo de mensajes por canal (deja en blanco para usar {messages_default}): ")
+        messages = int(messages) if messages.strip() else messages_default
 
         return days, messages
     except ValueError:
@@ -209,6 +207,13 @@ def _ensure_s3_bucket(bucket):
     if current and current != bucket:
         print(f"Advertencia: S3_BUCKET='{current}' no coincide con '{bucket}', se usará '{bucket}'.")
     os.environ["S3_BUCKET"] = bucket
+
+def _normalize_s3_key(value):
+    bucket, key = _parse_s3_uri(value)
+    if bucket:
+        _ensure_s3_bucket(bucket)
+        return key
+    return value
 
 def load_channels_from_s3(s3_key):
     try:
@@ -422,20 +427,36 @@ def extract_media_details(media):
         'Media Caption': getattr(media, 'caption', None)
     }
 
-def load_existing_data(filename):
+def load_existing_data(filename, s3_csv_key=None, s3_json_key=None):
     try:
-        return pd.read_csv(filename)
+        if os.path.exists(filename):
+            return pd.read_csv(filename)
     except (FileNotFoundError, pd.errors.EmptyDataError):
+        pass
+
+    s3_csv_key = _normalize_s3_key(s3_csv_key)
+    s3_json_key = _normalize_s3_key(s3_json_key)
+    if not s3_csv_key and not s3_json_key:
         return pd.DataFrame()
 
-def load_existing_message_ids(filename):
     try:
-        existing_data = pd.read_csv(filename)
-        # Create a set of tuples (Username, Message ID) for fast lookup
-        existing_ids = set(zip(existing_data['Username'], existing_data['Message ID']))
-        return existing_ids
-    except (FileNotFoundError, pd.errors.EmptyDataError):
+        from s3_client import get_s3_client
+        s3_client = get_s3_client()
+        if s3_csv_key:
+            content = s3_client.get_file_content(s3_csv_key)
+            return pd.read_csv(io.StringIO(content))
+        if s3_json_key:
+            data = s3_client.load_json_from_s3(s3_json_key)
+            messages = data.get('messages', data)
+            return pd.DataFrame(messages)
+    except Exception as e:
+        print(f"No se pudo cargar dataset previo desde S3: {e}")
+    return pd.DataFrame()
+
+def build_existing_message_ids(df):
+    if df.empty or 'Username' not in df.columns or 'Message ID' not in df.columns:
         return set()
+    return set(zip(df['Username'], df['Message ID']))
 
 def upload_dataset_to_s3(json_path, s3_key, csv_path=None, upload_csv=False, s3_csv_key=None):
     if not os.path.exists(json_path):
@@ -517,8 +538,12 @@ async def main(args):
     
     # Cargar datos existentes
     print("7. Cargando datos existentes...")
-    existing_messages = load_existing_data('telegram_messages.csv')
-    existing_ids = load_existing_message_ids('telegram_messages.csv')
+    existing_messages = load_existing_data(
+        'telegram_messages.csv',
+        s3_csv_key=args.s3_csv_key,
+        s3_json_key=args.s3_key
+    )
+    existing_ids = build_existing_message_ids(existing_messages)
     
     # Crear cliente
     print("8. Creando cliente...")
