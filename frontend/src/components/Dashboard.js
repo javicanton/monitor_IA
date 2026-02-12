@@ -15,14 +15,19 @@ import MessageList from './MessageList';
 import ScoreExplanation from './ScoreExplanation';
 import logo from '../assets/Logo_MonitorIA.png';
 
+const SCROLL_THRESHOLD = 180;
+const LOGO_SIZE = { xs: 180, sm: 220, md: 260 };
+const LOGO_SIZE_SMALL = 88;
+
 const Dashboard = () => {
   const [filters, setFilters] = useState({});
   const [channels, setChannels] = useState([]);
-  const [showFloatingLogo, setShowFloatingLogo] = useState(false);
+  const [scrollProgress, setScrollProgress] = useState(0);
 
   useEffect(() => {
     const handleScroll = () => {
-      setShowFloatingLogo(window.scrollY > 80);
+      const progress = Math.min(window.scrollY / SCROLL_THRESHOLD, 1);
+      setScrollProgress(progress);
     };
     handleScroll();
     window.addEventListener('scroll', handleScroll, { passive: true });
@@ -37,67 +42,81 @@ const Dashboard = () => {
     setChannels(loadedChannels);
   };
 
+  const titleOpacity = 1 - scrollProgress;
+
   return (
     <Container maxWidth="xl" sx={{ py: 4, overflow: 'visible' }}>
-      {showFloatingLogo && (
+      {/* Header sticky con transición */}
+      <Box
+        sx={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 1100,
+          bgcolor: 'background.paper',
+          transition: 'box-shadow 0.2s ease',
+          boxShadow: scrollProgress > 0 ? 2 : 0,
+          mb: 4,
+          px: 2
+        }}
+      >
         <Box
           sx={{
-            position: 'fixed',
-            top: 16,
-            left: 16,
-            zIndex: 1200,
-            width: { xs: 72, sm: 88, md: 104 },
-            height: 'auto',
-            opacity: 0.9,
-            pointerEvents: 'none'
+            display: 'flex',
+            flexDirection: { xs: 'column', md: 'row' },
+            alignItems: 'center',
+            justifyContent: { xs: 'center', md: 'flex-start' },
+            gap: { xs: 2, md: 3 },
+            py: scrollProgress > 0 ? 1.5 : 0,
+            transition: 'padding 0.2s ease',
+            minHeight: scrollProgress > 0 ? LOGO_SIZE_SMALL : undefined
           }}
         >
           <Box
             component="img"
             src={logo}
             alt="MonitorIA"
-            sx={{ width: '100%', height: 'auto' }}
-          />
-        </Box>
-      )}
-
-      {/* Header principal */}
-      <Box
-        sx={{
-          display: 'flex',
-          flexDirection: { xs: 'column', md: 'row' },
-          alignItems: 'center',
-          justifyContent: { xs: 'center', md: 'flex-start' },
-          gap: { xs: 2, md: 3 },
-          mb: 4
-        }}
-      >
-        <Box
-          component="img"
-          src={logo}
-          alt="MonitorIA"
-          sx={{
-            width: { xs: 180, sm: 220, md: 260 },
-            height: 'auto',
-            flexShrink: 0
-          }}
-        />
-        <Box sx={{ textAlign: { xs: 'center', md: 'left' } }}>
-          <Typography
-            variant="h3"
-            component="h1"
-            gutterBottom
-            color="primary"
             sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: { xs: 'center', md: 'flex-start' }
+              width: {
+                xs: scrollProgress > 0 ? LOGO_SIZE_SMALL : LOGO_SIZE.xs,
+                sm: scrollProgress > 0 ? LOGO_SIZE_SMALL : LOGO_SIZE.sm,
+                md: scrollProgress > 0 ? LOGO_SIZE_SMALL : LOGO_SIZE.md
+              },
+              height: 'auto',
+              flexShrink: 0,
+              transition: 'width 0.25s ease-out',
+              alignSelf: scrollProgress > 0 ? 'flex-start' : 'center'
+            }}
+          />
+          <Box
+            sx={{
+              ml: { xs: 0, md: 5 },
+              textAlign: { xs: 'center', md: 'left' },
+              opacity: titleOpacity,
+              transition: 'opacity 0.2s ease',
+              visibility: titleOpacity > 0.01 ? 'visible' : 'hidden'
             }}
           >
-            <TrendingIcon sx={{ mr: 2, verticalAlign: 'middle' }} />
-            Monitorización avanzada en Telegram
-          </Typography>
+            <Typography
+              variant="h3"
+              component="h1"
+              gutterBottom
+              color="primary"
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: { xs: 'center', md: 'flex-start' }
+              }}
+            >
+              <TrendingIcon sx={{ mr: 2, verticalAlign: 'middle' }} />
+              Monitorización avanzada en Telegram
+            </Typography>
+          </Box>
         </Box>
+      </Box>
+
+      {/* Nota explicativa - debajo del header, arriba del filtro */}
+      <Box mb={3}>
+        <ScoreExplanation />
       </Box>
 
       <Grid container spacing={4} alignItems="flex-start">
@@ -107,10 +126,6 @@ const Dashboard = () => {
           order={{ xs: 2, md: 1 }}
           sx={{ flexBasis: { md: '80%' }, maxWidth: { md: '80%' } }}
         >
-          {/* Explicación del sistema de puntuación */}
-          <Box mb={4}>
-            <ScoreExplanation />
-          </Box>
 
           {/* Información de canales disponibles */}
           {channels.length > 0 && (

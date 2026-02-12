@@ -15,7 +15,7 @@ function ScoreExplanation() {
       }}
     >
       <Typography variant="body2" color="text.secondary">
-        La métrica usada denominada "Overperforming Score" se calcula a partir de las vistas medias de cada canal, por lo que proporciona
+        NOTA: La métrica usada denominada "Overperforming Score" se calcula a partir de las vistas medias de cada canal, por lo que proporciona
         un indicador de cuánto mejor se desempeña un mensaje en comparación con el promedio de su canal. 
         Una puntuación de 1.0 significa que el mensaje tiene un rendimiento promedio, mayor de 1, por encima del promedio y, por debajo
         de 1, por debajo del promedio.
