@@ -74,6 +74,7 @@ load_dotenv()
 DEFAULT_DAYS = 7
 DEFAULT_MAX_MESSAGES = 500
 DEFAULT_CHANNELS_S3_KEY = os.environ.get('TELEGRAM_CHANNELS_S3_KEY', 's3://monitoria-data/telegram_channels.csv')
+DEFAULT_SESSION_PATH = os.environ.get('TELEGRAM_SESSION_PATH', '~/.telethon/monitorIA.session')
 
 def _read_credentials_file(filename):
     try:
@@ -521,7 +522,11 @@ async def main(args):
     
     # Crear cliente
     print("8. Creando cliente...")
-    client = TelegramClient('anon', creds['API_ID'], creds['API_HASH'])
+    session_path = os.path.expanduser(DEFAULT_SESSION_PATH)
+    session_dir = os.path.dirname(session_path)
+    if session_dir and not os.path.exists(session_dir):
+        os.makedirs(session_dir, exist_ok=True)
+    client = TelegramClient(session_path, creds['API_ID'], creds['API_HASH'])
     
     try:
         # Conectar
@@ -535,7 +540,10 @@ async def main(args):
             print("   - Abre Telegram en tu dispositivo")
             print("   - Busca un mensaje con un código de verificación")
             print("   - Ingresa el código cuando se te solicite")
-            client.start()
+            if args.non_interactive:
+                print("Error: No hay sesión autorizada y el modo es no interactivo.")
+                return
+            await client.start()
         
         print("12. Conexión exitosa!")
         
@@ -786,7 +794,7 @@ async def main(args):
         print("18. Cerrando conexión...")
         try:
             if client:
-                client.disconnect()  # Removed await since disconnect() likely returns None
+                await client.disconnect()
         except:
             pass
         print("19. Script completado!")
