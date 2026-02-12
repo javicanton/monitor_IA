@@ -5,6 +5,7 @@ import subprocess
 import sys
 import importlib.util
 import csv
+import io
 import os
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any, Union, cast
@@ -72,6 +73,7 @@ load_dotenv()
 
 DEFAULT_DAYS = 7
 DEFAULT_MAX_MESSAGES = 500
+DEFAULT_CHANNELS_S3_KEY = os.environ.get('TELEGRAM_CHANNELS_S3_KEY', 's3://monitoria-data/telegram_channels.csv')
 
 def _read_credentials_file(filename):
     try:
@@ -188,8 +190,68 @@ def get_user_input(days_arg=None, messages_arg=None, non_interactive=False):
         print(f"Valor inválido. Usando valores por defecto ({DEFAULT_DAYS} días, {DEFAULT_MAX_MESSAGES} mensajes)")
         return DEFAULT_DAYS, DEFAULT_MAX_MESSAGES
 
-def get_channels_from_user(channels_file=None, non_interactive=False):
+def _parse_s3_uri(value):
+    if not value or not isinstance(value, str):
+        return None, None
+    if not value.startswith("s3://"):
+        return None, None
+    without_scheme = value.replace("s3://", "", 1)
+    if "/" not in without_scheme:
+        return without_scheme, ""
+    bucket, key = without_scheme.split("/", 1)
+    return bucket, key
+
+def _ensure_s3_bucket(bucket):
+    if not bucket:
+        return
+    current = os.environ.get("S3_BUCKET")
+    if current and current != bucket:
+        print(f"Advertencia: S3_BUCKET='{current}' no coincide con '{bucket}', se usará '{bucket}'.")
+    os.environ["S3_BUCKET"] = bucket
+
+def load_channels_from_s3(s3_key):
+    try:
+        bucket, key = _parse_s3_uri(s3_key)
+        if bucket:
+            _ensure_s3_bucket(bucket)
+            s3_key = key
+        if not s3_key:
+            print("Error: Key S3 de canales vacía.")
+            return []
+
+        from s3_client import get_s3_client
+        s3_client = get_s3_client()
+        content = s3_client.get_file_content(s3_key)
+        reader = csv.reader(io.StringIO(content))
+        channels = []
+        for row in reader:
+            if row and row[0].strip():
+                channel = row[0].strip()
+                if not channel.startswith('#'):
+                    channels.append(channel)
+        if channels:
+            print(f"✓ Canales cargados desde S3: {s3_key} ({len(channels)})")
+        return channels
+    except Exception as e:
+        print(f"No se pudo cargar {s3_key} desde S3: {e}")
+        return []
+
+def get_channels_from_user(channels_file=None, channels_s3_key=None, non_interactive=False):
     """Solicita los canales al usuario y los guarda en un archivo CSV"""
+    if channels_file:
+        bucket, key = _parse_s3_uri(channels_file)
+        if key:
+            channels_s3_key = channels_file
+            channels_file = None
+
+    s3_key = channels_s3_key or DEFAULT_CHANNELS_S3_KEY
+    target_file = channels_file or 'telegram_channels.csv'
+
+    if s3_key:
+        channels = load_channels_from_s3(s3_key)
+        if channels:
+            return channels
+
     if channels_file:
         if not os.path.exists(channels_file):
             print(f"Error: No se encontró el archivo {channels_file}")
@@ -200,15 +262,15 @@ def get_channels_from_user(channels_file=None, non_interactive=False):
         return channels
 
     if non_interactive:
-        if os.path.exists('telegram_channels.csv'):
-            return load_channels_from_csv('telegram_channels.csv')
-        print("Error: No hay archivo telegram_channels.csv. Usa --channels-file.")
+        if os.path.exists(target_file):
+            return load_channels_from_csv(target_file)
+        print("Error: No hay archivo telegram_channels.csv y no se pudo leer desde S3.")
         return []
 
     # Preguntar si quiere usar el archivo existente solo si existe
-    if os.path.exists('telegram_channels.csv'):
-        if ask_use_existing_file('telegram_channels.csv', "la lista de canales"):
-            channels = load_channels_from_csv('telegram_channels.csv')
+    if os.path.exists(target_file):
+        if ask_use_existing_file(target_file, "la lista de canales"):
+            channels = load_channels_from_csv(target_file)
             if channels:
                 return channels
     
@@ -404,6 +466,7 @@ def upload_dataset_to_s3(json_path, s3_key, csv_path=None, upload_csv=False, s3_
 def parse_args():
     parser = argparse.ArgumentParser(description="Scraper de Telegram con subida opcional a S3")
     parser.add_argument("--channels-file", help="Ruta a CSV con la lista de canales")
+    parser.add_argument("--channels-s3-key", help="Key S3 para el CSV de canales (default: telegram_channels.csv)")
     parser.add_argument("--days", type=int, help="Días a scrapear")
     parser.add_argument("--max-messages", type=int, help="Máximo de mensajes por canal")
     parser.add_argument("--upload-s3", action="store_true", help="Subir telegram_messages.json a S3")
@@ -433,6 +496,7 @@ async def main(args):
     print("3. Cargando lista de canales...")
     channels = get_channels_from_user(
         channels_file=args.channels_file,
+        channels_s3_key=args.channels_s3_key,
         non_interactive=args.non_interactive
     )
     if not channels:
