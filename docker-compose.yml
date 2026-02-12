@@ -9,8 +9,6 @@ services:
       - FLASK_APP=app.py
       - FLASK_ENV=production
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-tu-clave-secreta-por-defecto}
-    volumes:
-      - ./telegram_messages.json:/app/telegram_messages.json
     networks:
       - monitoria
     restart: unless-stopped
