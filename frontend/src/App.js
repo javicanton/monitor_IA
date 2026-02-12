@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
 import Dashboard from './components/Dashboard';
+import config from './config';
 
 const theme = createTheme({
   palette: {
@@ -17,33 +18,14 @@ const theme = createTheme({
 });
 
 function App() {
-  const [buildId, setBuildId] = useState('');
-
-  useEffect(() => {
-    let isMounted = true;
-    fetch('/build-id.txt', { cache: 'no-store' })
-      .then((response) => (response.ok ? response.text() : ''))
-      .then((text) => {
-        if (isMounted && text) {
-          setBuildId(text.trim());
-        }
-      })
-      .catch(() => {});
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      {buildId && (
-        <Box sx={{ py: 1, textAlign: 'center' }}>
-          <Typography variant="caption" color="textSecondary" display="block">
-            Build: {buildId}
-          </Typography>
-        </Box>
-      )}
+      <Box sx={{ py: 1, textAlign: 'center' }}>
+        <Typography variant="caption" color="textSecondary" display="block">
+          v {config.APP_VERSION}
+        </Typography>
+      </Box>
       <Dashboard />
     </ThemeProvider>
   );

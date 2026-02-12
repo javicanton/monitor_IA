@@ -14,10 +14,11 @@ function ScoreExplanation() {
         borderRadius: 1
       }}
     >
-      <Typography variant="body1" color="text.secondary">
-        El "Overperforming Score" es una métrica que indica cuánto mejor se desempeña un mensaje en comparación con el promedio de su canal. 
-        Un score de 1.0 significa que el mensaje tiene un rendimiento promedio, mientras que un score mayor a 1.0 indica que el mensaje está 
-        superando las expectativas. Por ejemplo, un score de 2.0 significa que el mensaje está obteniendo el doble de interacciones de lo esperado.
+      <Typography variant="body2" color="text.secondary">
+        La métrica usada denominada "Overperforming Score" se calcula a partir de las vistas medias de cada canal, por lo que proporciona
+        un indicador de cuánto mejor se desempeña un mensaje en comparación con el promedio de su canal. 
+        Una puntuación de 1.0 significa que el mensaje tiene un rendimiento promedio, mayor de 1, por encima del promedio y, por debajo
+        de 1, por debajo del promedio.
       </Typography>
     </Paper>
   );

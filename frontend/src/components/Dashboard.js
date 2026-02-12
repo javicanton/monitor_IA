@@ -4,13 +4,11 @@ import {
   Box, 
   Typography, 
   Paper,
-  Alert,
   Chip,
   Grid,
 } from '@mui/material';
 import { 
-  TrendingUp as TrendingIcon,
-  Info as InfoIcon 
+  TrendingUp as TrendingIcon
 } from '@mui/icons-material';
 import FilterBar from './FilterBar';
 import MessageList from './MessageList';
@@ -64,22 +62,42 @@ const Dashboard = () => {
       )}
 
       {/* Header principal */}
-      <Box textAlign="center" mb={6}>
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: { xs: 'column', md: 'row' },
+          alignItems: 'center',
+          justifyContent: { xs: 'center', md: 'flex-start' },
+          gap: { xs: 2, md: 3 },
+          mb: 4
+        }}
+      >
         <Box
           component="img"
           src={logo}
           alt="MonitorIA"
           sx={{
-            width: { xs: 220, sm: 280, md: 360 },
+            width: { xs: 180, sm: 220, md: 260 },
             height: 'auto',
-            mb: 2
+            flexShrink: 0
           }}
         />
-        <Typography variant="h3" component="h1" gutterBottom color="primary">
-          <TrendingIcon sx={{ mr: 2, verticalAlign: 'middle' }} />
-          Monitorización avanzada en Telegram
-        </Typography>
-
+        <Box sx={{ textAlign: { xs: 'center', md: 'left' } }}>
+          <Typography
+            variant="h3"
+            component="h1"
+            gutterBottom
+            color="primary"
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: { xs: 'center', md: 'flex-start' }
+            }}
+          >
+            <TrendingIcon sx={{ mr: 2, verticalAlign: 'middle' }} />
+            Monitorización avanzada en Telegram
+          </Typography>
+        </Box>
       </Box>
 
       <Grid container spacing={4} alignItems="flex-start">
@@ -93,27 +111,6 @@ const Dashboard = () => {
           <Box mb={4}>
             <ScoreExplanation />
           </Box>
-
-          {/* Información sobre la conexión S3 */}
-          <Alert 
-            severity="info" 
-            icon={<InfoIcon />}
-            sx={{ mb: 4 }}
-          >
-            <Typography variant="body1" gutterBottom>
-              <strong>Conectado a AWS S3:</strong> Los datos se cargan automáticamente desde el bucket 
-              <Chip 
-                label="monitoria-data" 
-                size="small" 
-                color="primary" 
-                sx={{ mx: 1 }} 
-              />
-              y se sincronizan en tiempo real.
-            </Typography>
-            <Typography variant="body2">
-              Los cambios en las etiquetas se guardan tanto localmente como en la nube para mayor seguridad.
-            </Typography>
-          </Alert>
 
           {/* Información de canales disponibles */}
           {channels.length > 0 && (
@@ -171,13 +168,6 @@ const Dashboard = () => {
         </Grid>
       </Grid>
 
-      {/* Footer informativo */}
-      <Box mt={6} textAlign="center">
-        <Typography variant="body2" color="textSecondary">
-          Los datos se actualizan automáticamente desde AWS S3. 
-          Las etiquetas se sincronizan en tiempo real entre todos los usuarios.
-        </Typography>
-      </Box>
     </Container>
   );
 };
