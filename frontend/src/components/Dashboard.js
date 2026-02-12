@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { 
   Container, 
   Box, 
@@ -20,6 +20,12 @@ const Dashboard = () => {
   const [filters, setFilters] = useState({});
   const [channels, setChannels] = useState([]);
   const [scrollProgress, setScrollProgress] = useState(0);
+  const logoRef = useRef(null);
+  const [logoTransform, setLogoTransform] = useState({
+    shiftX: 0,
+    shiftY: 0,
+    scaleTarget: 1
+  });
 
   useEffect(() => {
     const handleScroll = () => {
@@ -29,6 +35,28 @@ const Dashboard = () => {
     handleScroll();
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  useLayoutEffect(() => {
+    const updateLogoTransform = () => {
+      if (!logoRef.current) {
+        return;
+      }
+      const rect = logoRef.current.getBoundingClientRect();
+      const targetX = 16;
+      const targetY = 16;
+      const scaleTarget = rect.width ? LOGO_SIZE_SMALL / rect.width : 1;
+
+      setLogoTransform({
+        shiftX: targetX - rect.left,
+        shiftY: targetY - rect.top,
+        scaleTarget: Math.min(scaleTarget, 1)
+      });
+    };
+
+    updateLogoTransform();
+    window.addEventListener('resize', updateLogoTransform);
+    return () => window.removeEventListener('resize', updateLogoTransform);
   }, []);
 
   const handleFilterChange = (newFilters) => {
@@ -41,7 +69,9 @@ const Dashboard = () => {
 
   const clampedProgress = Math.min(scrollProgress, 1);
   const largeLogoOpacity = 1 - clampedProgress;
-  const largeLogoScale = 1 - clampedProgress * 0.08;
+  const largeLogoScale = 1 - clampedProgress * (1 - logoTransform.scaleTarget);
+  const largeLogoTranslateX = logoTransform.shiftX * clampedProgress;
+  const largeLogoTranslateY = logoTransform.shiftY * clampedProgress;
   const floatingLogoOpacity = clampedProgress;
   const floatingLogoScale = 1.25 - clampedProgress * 0.25;
 
@@ -84,12 +114,13 @@ const Dashboard = () => {
           component="img"
           src={logo}
           alt="MonitorIA"
+          ref={logoRef}
           sx={{
             width: { xs: LOGO_SIZE.xs, sm: LOGO_SIZE.sm, md: LOGO_SIZE.md },
             height: 'auto',
             flexShrink: 0,
             opacity: largeLogoOpacity,
-            transform: `scale(${largeLogoScale})`,
+            transform: `translate(${largeLogoTranslateX}px, ${largeLogoTranslateY}px) scale(${largeLogoScale})`,
             transition: 'transform 0.2s ease, opacity 0.2s ease'
           }}
         />
