@@ -10,7 +10,7 @@ function ScoreExplanation() {
         bgcolor: '#f8f9fa',
         borderLeft: '4px solid #007bff',
         p: 2,
-        my: 2,
+        my: 1,
         borderRadius: 1
       }}
     >
