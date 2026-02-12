@@ -14,9 +14,12 @@ code {
 
 .monitoria-date-range {
   display: flex;
+  flex-wrap: nowrap;
   gap: 16px;
 }
 
 .monitoria-date-range .react-datepicker__month-container {
   float: none;
+  display: inline-block;
+  flex: 0 0 auto;
 }
