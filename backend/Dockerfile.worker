@@ -1,0 +1,22 @@
+FROM python:3.9-slim
+
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV NLTK_DATA=/usr/local/nltk_data
+RUN mkdir -p "$NLTK_DATA" \
+    && python - <<'PY'
+import nltk
+nltk.download("stopwords", download_dir="/usr/local/nltk_data")
+PY
+
+COPY requirements.txt requirements-topics.txt ./
+RUN pip install --no-cache-dir -r requirements-topics.txt
+RUN python -m spacy download es_core_news_sm
+
+COPY . .
+
+CMD ["python", "topic_worker.py"]

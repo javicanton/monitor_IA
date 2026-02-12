@@ -1,29 +1,63 @@
-import React, { useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { 
   Container, 
   Box, 
   Typography, 
   Paper,
-  Alert,
   Chip,
-  Stack
+  Grid,
 } from '@mui/material';
-import { 
-  TrendingUp as TrendingIcon,
-  Info as InfoIcon 
-} from '@mui/icons-material';
 import FilterBar from './FilterBar';
 import MessageList from './MessageList';
 import ScoreExplanation from './ScoreExplanation';
+import logo from '../assets/Logo_MonitorIA ajustado.png';
+
+const SCROLL_THRESHOLD = 180;
+const LOGO_SIZE = { xs: 210, sm: 270, md: 330 };
+const LOGO_SIZE_SMALL = 88;
 
 const Dashboard = () => {
   const [filters, setFilters] = useState({});
   const [channels, setChannels] = useState([]);
-  const [stats, setStats] = useState({
-    totalMessages: 0,
-    relevantMessages: 0,
-    averageScore: 0
+  const [scrollProgress, setScrollProgress] = useState(0);
+  const logoRef = useRef(null);
+  const [logoTransform, setLogoTransform] = useState({
+    shiftX: 0,
+    shiftY: 0,
+    scaleTarget: 1
   });
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const progress = Math.min(window.scrollY / SCROLL_THRESHOLD, 1);
+      setScrollProgress(progress);
+    };
+    handleScroll();
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  useLayoutEffect(() => {
+    const updateLogoTransform = () => {
+      if (!logoRef.current) {
+        return;
+      }
+      const rect = logoRef.current.getBoundingClientRect();
+      const targetX = 16;
+      const targetY = 16;
+      const scaleTarget = rect.width ? LOGO_SIZE_SMALL / rect.width : 1;
+
+      setLogoTransform({
+        shiftX: targetX - rect.left,
+        shiftY: targetY - rect.top,
+        scaleTarget: Math.min(scaleTarget, 1)
+      });
+    };
+
+    updateLogoTransform();
+    window.addEventListener('resize', updateLogoTransform);
+    return () => window.removeEventListener('resize', updateLogoTransform);
+  }, []);
 
   const handleFilterChange = (newFilters) => {
     setFilters(newFilters);
@@ -33,132 +67,134 @@ const Dashboard = () => {
     setChannels(loadedChannels);
   };
 
-  const handleStatsUpdate = (newStats) => {
-    setStats(newStats);
-  };
+  const clampedProgress = Math.min(scrollProgress, 1);
+  const largeLogoOpacity = 1 - clampedProgress;
+  const largeLogoScale = 1 - clampedProgress * (1 - logoTransform.scaleTarget);
+  const largeLogoTranslateX = logoTransform.shiftX * clampedProgress;
+  const largeLogoTranslateY = logoTransform.shiftY * clampedProgress;
+  const floatingLogoOpacity = clampedProgress;
+  const floatingLogoScale = 1.25 - clampedProgress * 0.25;
 
   return (
-    <Container maxWidth="xl" sx={{ py: 4 }}>
-      {/* Header principal */}
-      <Box textAlign="center" mb={6}>
-        <Typography variant="h3" component="h1" gutterBottom color="primary">
-          <TrendingIcon sx={{ mr: 2, verticalAlign: 'middle' }} />
-          Mensajes de Alto Rendimiento en Telegram
-        </Typography>
-        
-        <Typography variant="h6" color="textSecondary" paragraph>
-          Analiza y etiqueta mensajes relevantes de canales de Telegram
-        </Typography>
-
-        {/* Estadísticas generales */}
-        <Paper sx={{ p: 3, mt: 3, display: 'inline-block' }}>
-          <Stack direction="row" spacing={3} alignItems="center">
-            <Box textAlign="center">
-              <Typography variant="h4" color="primary" fontWeight="bold">
-                {stats.totalMessages}
-              </Typography>
-              <Typography variant="body2" color="textSecondary">
-                Total Mensajes
-              </Typography>
-            </Box>
-            
-            <Box textAlign="center">
-              <Typography variant="h4" color="success.main" fontWeight="bold">
-                {stats.relevantMessages}
-              </Typography>
-              <Typography variant="body2" color="textSecondary">
-                Relevantes
-              </Typography>
-            </Box>
-            
-            <Box textAlign="center">
-              <Typography variant="h4" color="info.main" fontWeight="bold">
-                {stats.averageScore.toFixed(2)}
-              </Typography>
-              <Typography variant="body2" color="textSecondary">
-                Score Promedio
-              </Typography>
-            </Box>
-          </Stack>
-        </Paper>
-      </Box>
-
-      {/* Explicación del sistema de puntuación */}
-      <Box mb={4}>
-        <ScoreExplanation />
-      </Box>
-
-      {/* Información sobre la conexión S3 */}
-      <Alert 
-        severity="info" 
-        icon={<InfoIcon />}
-        sx={{ mb: 4 }}
+    <Container maxWidth="xl" sx={{ py: 4, overflow: 'visible' }}>
+      <Box
+        sx={{
+          position: 'fixed',
+          top: 16,
+          left: 16,
+          zIndex: 1200,
+          width: { xs: 64, sm: 72, md: LOGO_SIZE_SMALL },
+          height: 'auto',
+          pointerEvents: 'none',
+          bgcolor: 'transparent',
+          opacity: floatingLogoOpacity,
+          transform: `scale(${floatingLogoScale})`,
+          transformOrigin: 'top left',
+          transition: 'transform 0.2s ease, opacity 0.2s ease'
+        }}
       >
-        <Typography variant="body1" gutterBottom>
-          <strong>Conectado a AWS S3:</strong> Los datos se cargan automáticamente desde el bucket 
-          <Chip 
-            label="monitoria-data" 
-            size="small" 
-            color="primary" 
-            sx={{ mx: 1 }} 
-          />
-          y se sincronizan en tiempo real.
-        </Typography>
-        <Typography variant="body2">
-          Los cambios en las etiquetas se guardan tanto localmente como en la nube para mayor seguridad.
-        </Typography>
-      </Alert>
-
-      {/* Barra de filtros */}
-      <Box mb={4}>
-        <FilterBar 
-          onFilterChange={handleFilterChange}
-          onChannelsLoad={handleChannelsLoad}
+        <Box
+          component="img"
+          src={logo}
+          alt="MonitorIA"
+          sx={{ width: '100%', height: 'auto' }}
         />
       </Box>
 
-      {/* Información de canales disponibles */}
-      {channels.length > 0 && (
-        <Paper sx={{ p: 2, mb: 3, bgcolor: 'grey.50' }}>
-          <Typography variant="subtitle2" color="textSecondary" gutterBottom>
-            Canales disponibles ({channels.length}):
-          </Typography>
-          <Box display="flex" flexWrap="wrap" gap={1}>
-            {channels.slice(0, 10).map((channel) => (
-              <Chip 
-                key={channel} 
-                label={channel} 
-                size="small" 
-                variant="outlined"
-                onClick={() => setFilters(prev => ({ ...prev, channel }))}
-                sx={{ cursor: 'pointer' }}
-              />
-            ))}
-            {channels.length > 10 && (
-              <Chip 
-                label={`+${channels.length - 10} más`} 
-                size="small" 
-                variant="outlined"
-                color="primary"
-              />
-            )}
-          </Box>
-        </Paper>
-      )}
-
-      {/* Lista de mensajes */}
-      <MessageList 
-        filters={filters}
-        onStatsUpdate={handleStatsUpdate}
-      />
-
-      {/* Footer informativo */}
-      <Box mt={6} textAlign="center">
-        <Typography variant="body2" color="textSecondary">
-          Los datos se actualizan automáticamente desde AWS S3. 
-          Las etiquetas se sincronizan en tiempo real entre todos los usuarios.
-        </Typography>
+      {/* Header principal con logo centrado */}
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          mb: 2
+        }}
+      >
+        <Box
+          component="img"
+          src={logo}
+          alt="MonitorIA"
+          ref={logoRef}
+          sx={{
+            width: { xs: LOGO_SIZE.xs, sm: LOGO_SIZE.sm, md: LOGO_SIZE.md },
+            height: 'auto',
+            flexShrink: 0,
+            opacity: largeLogoOpacity,
+            transform: `translate(${largeLogoTranslateX}px, ${largeLogoTranslateY}px) scale(${largeLogoScale})`,
+            transition: 'transform 0.2s ease, opacity 0.2s ease'
+          }}
+        />
       </Box>
+
+      {/* Nota explicativa - debajo del header, arriba del filtro */}
+      <Box mb={2}>
+        <ScoreExplanation />
+      </Box>
+
+      <Grid container spacing={4} alignItems="flex-start">
+        <Grid
+          item
+          xs={12}
+          order={{ xs: 2, md: 1 }}
+          sx={{ flexBasis: { md: '80%' }, maxWidth: { md: '80%' } }}
+        >
+
+          {/* Información de canales disponibles */}
+          {channels.length > 0 && (
+            <Paper sx={{ p: 2, mb: 3, bgcolor: 'grey.50' }}>
+              <Typography variant="subtitle2" color="textSecondary" gutterBottom>
+                Canales disponibles ({channels.length}):
+              </Typography>
+              <Box display="flex" flexWrap="wrap" gap={1}>
+                {channels.slice(0, 10).map((channel) => (
+                  <Chip 
+                    key={channel} 
+                    label={channel} 
+                    size="small" 
+                    variant="outlined"
+                    onClick={() => setFilters(prev => ({ ...prev, channel }))}
+                    sx={{ cursor: 'pointer' }}
+                  />
+                ))}
+                {channels.length > 10 && (
+                  <Chip 
+                    label={`+${channels.length - 10} más`} 
+                    size="small" 
+                    variant="outlined"
+                    color="primary"
+                  />
+                )}
+              </Box>
+            </Paper>
+          )}
+
+          {/* Lista de mensajes */}
+          <MessageList 
+            filters={filters}
+          />
+        </Grid>
+
+        <Grid
+          item
+          xs={12}
+          order={{ xs: 1, md: 2 }}
+          sx={{
+            flexBasis: { md: '20%' },
+            maxWidth: { md: '20%' },
+            position: { md: 'sticky' },
+            top: { md: 24 },
+            alignSelf: { md: 'flex-start' },
+            height: 'fit-content'
+          }}
+        >
+          {/* Barra de filtros */}
+          <FilterBar 
+            onFilterChange={handleFilterChange}
+            onChannelsLoad={handleChannelsLoad}
+          />
+        </Grid>
+      </Grid>
+
     </Container>
   );
 };

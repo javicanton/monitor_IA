@@ -1,5 +1,6 @@
 ## Telegram Scraper
 # Import libraries
+import argparse
 import subprocess
 import sys
 import importlib.util
@@ -28,7 +29,8 @@ def check_and_install_dependencies():
         'telethon',
         'openpyxl',
         'python-dotenv',
-        'asyncio'
+        'asyncio',
+        'boto3'
     ]
     
     # Primero actualizar pip
@@ -58,9 +60,37 @@ from telethon.tl.types import Message, Channel, User
 from telethon.tl.custom import Message as CustomMessage
 from telethon.tl.types.messages import Messages
 from telethon.tl.types.messages import ChannelMessages
+from dotenv import load_dotenv
 
 # Set the working directory to the script's directory
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
+# Cargar variables de entorno (.env en raíz del repo y en backend)
+_repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(os.path.join(_repo_root, ".env"))
+load_dotenv()
+
+DEFAULT_DAYS = 7
+DEFAULT_MAX_MESSAGES = 500
+
+def _read_credentials_file(filename):
+    try:
+        credentials = {}
+        with open(filename, 'r') as file:
+            for line in file:
+                key, value = line.strip().split('=')
+                if key == 'API_ID':
+                    try:
+                        credentials[key] = int(value)
+                    except ValueError:
+                        print(f"Error: API_ID debe ser un número entero válido en {filename}")
+                        return None
+                else:
+                    credentials[key] = value
+        return credentials
+    except Exception as e:
+        print(f"Error al leer {filename}: {str(e)}")
+        return None
 
 def get_credentials_from_user():
     """Solicita las credenciales al usuario y las guarda en un archivo"""
@@ -106,49 +136,75 @@ def ask_use_existing_file(filename, file_description):
                 return respuesta == 's'
             print("Por favor, responde 's' para sí o 'n' para no")
 
-def load_credentials(filename='credentials.txt'):
+def load_credentials(filename='credentials.txt', non_interactive=False, api_id=None, api_hash=None):
     """
     Carga las credenciales desde un archivo o variables de entorno.
     Si no existen o el usuario no quiere usarlas, solicita las credenciales al usuario.
     """
+    if api_id and api_hash:
+        return {'API_ID': int(api_id), 'API_HASH': api_hash}
+
+    env_api_id = os.environ.get('TELEGRAM_API_ID') or os.environ.get('API_ID')
+    env_api_hash = os.environ.get('TELEGRAM_API_HASH') or os.environ.get('API_HASH')
+    if env_api_id and env_api_hash:
+        try:
+            return {'API_ID': int(env_api_id), 'API_HASH': env_api_hash}
+        except ValueError:
+            print("Error: TELEGRAM_API_ID debe ser un número entero válido")
+
+    if non_interactive:
+        if os.path.exists(filename):
+            return _read_credentials_file(filename)
+        print("Error: Credenciales no disponibles para ejecución no interactiva.")
+        return None
+
     # Preguntar si quiere usar el archivo existente
     if ask_use_existing_file(filename, "las credenciales de Telegram"):
-        try:
-            credentials = {}
-            with open(filename, 'r') as file:
-                for line in file:
-                    key, value = line.strip().split('=')
-                    if key == 'API_ID':
-                        try:
-                            credentials[key] = int(value)
-                        except ValueError:
-                            print(f"Error: API_ID debe ser un número entero válido en {filename}")
-                            return get_credentials_from_user()
-                    else:
-                        credentials[key] = value
+        credentials = _read_credentials_file(filename)
+        if credentials:
             return credentials
-        except Exception as e:
-            print(f"Error al leer {filename}: {str(e)}")
-            return get_credentials_from_user()
-    else:
         return get_credentials_from_user()
+    return get_credentials_from_user()
 
-def get_user_input():
+def get_user_input(days_arg=None, messages_arg=None, non_interactive=False):
     """Obtiene la configuración del usuario"""
     try:
-        days = input("Ingresa el número de días a scrapear (deja en blanco para usar 7 días): ")
-        days = int(days) if days.strip() else 7
-        
-        messages = input("Ingresa el número máximo de mensajes por canal (deja en blanco para usar 500): ")
-        messages = int(messages) if messages.strip() else 500
-        
+        if days_arg is not None or messages_arg is not None:
+            days = days_arg if days_arg is not None else DEFAULT_DAYS
+            messages = messages_arg if messages_arg is not None else DEFAULT_MAX_MESSAGES
+            return days, messages
+
+        if non_interactive:
+            return DEFAULT_DAYS, DEFAULT_MAX_MESSAGES
+
+        days = input(f"Ingresa el número de días a scrapear (deja en blanco para usar {DEFAULT_DAYS} días): ")
+        days = int(days) if days.strip() else DEFAULT_DAYS
+
+        messages = input(f"Ingresa el número máximo de mensajes por canal (deja en blanco para usar {DEFAULT_MAX_MESSAGES}): ")
+        messages = int(messages) if messages.strip() else DEFAULT_MAX_MESSAGES
+
         return days, messages
     except ValueError:
-        print("Valor inválido. Usando valores por defecto (7 días, 500 mensajes)")
-        return 7, 500
+        print(f"Valor inválido. Usando valores por defecto ({DEFAULT_DAYS} días, {DEFAULT_MAX_MESSAGES} mensajes)")
+        return DEFAULT_DAYS, DEFAULT_MAX_MESSAGES
 
-def get_channels_from_user():
+def get_channels_from_user(channels_file=None, non_interactive=False):
     """Solicita los canales al usuario y los guarda en un archivo CSV"""
+    if channels_file:
+        if not os.path.exists(channels_file):
+            print(f"Error: No se encontró el archivo {channels_file}")
+            return []
+        channels = load_channels_from_csv(channels_file)
+        if not channels:
+            print(f"Error: El archivo {channels_file} no contiene canales válidos")
+        return channels
+
+    if non_interactive:
+        if os.path.exists('telegram_channels.csv'):
+            return load_channels_from_csv('telegram_channels.csv')
+        print("Error: No hay archivo telegram_channels.csv. Usa --channels-file.")
+        return []
+
     # Preguntar si quiere usar el archivo existente solo si existe
     if os.path.exists('telegram_channels.csv'):
         if ask_use_existing_file('telegram_channels.csv', "la lista de canales"):
@@ -318,19 +374,67 @@ def load_existing_message_ids(filename):
     except (FileNotFoundError, pd.errors.EmptyDataError):
         return set()
 
-async def main():
+def upload_dataset_to_s3(json_path, s3_key, csv_path=None, upload_csv=False, s3_csv_key=None):
+    if not os.path.exists(json_path):
+        print(f"Error: No se encontró el archivo {json_path} para subir a S3")
+        return False
+    try:
+        from s3_client import get_s3_client
+    except Exception as e:
+        print(f"Error al importar cliente S3: {e}")
+        return False
+
+    try:
+        s3_client = get_s3_client()
+        s3_client.upload_file(json_path, s3_key)
+        print(f"✓ Dataset subido a S3: {s3_key}")
+
+        if upload_csv and csv_path:
+            if not os.path.exists(csv_path):
+                print(f"Advertencia: No se encontró {csv_path} para subir a S3")
+            else:
+                key = s3_csv_key or os.path.basename(csv_path)
+                s3_client.upload_file(csv_path, key)
+                print(f"✓ CSV subido a S3: {key}")
+        return True
+    except Exception as e:
+        print(f"Error al subir a S3: {e}")
+        return False
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Scraper de Telegram con subida opcional a S3")
+    parser.add_argument("--channels-file", help="Ruta a CSV con la lista de canales")
+    parser.add_argument("--days", type=int, help="Días a scrapear")
+    parser.add_argument("--max-messages", type=int, help="Máximo de mensajes por canal")
+    parser.add_argument("--upload-s3", action="store_true", help="Subir telegram_messages.json a S3")
+    parser.add_argument("--upload-csv", action="store_true", help="Subir telegram_messages.csv a S3")
+    parser.add_argument("--s3-key", default="telegram_messages.json", help="Key S3 para el JSON")
+    parser.add_argument("--s3-csv-key", default="telegram_messages.csv", help="Key S3 para el CSV")
+    parser.add_argument("--non-interactive", action="store_true", help="Modo no interactivo (SSH)")
+    parser.add_argument("--api-id", type=int, help="API_ID de Telegram (opcional)")
+    parser.add_argument("--api-hash", help="API_HASH de Telegram (opcional)")
+    return parser.parse_args()
+
+async def main(args):
     print("1. Iniciando script...")
     
     # Cargar credenciales
     print("2. Cargando credenciales...")
-    creds = load_credentials()
+    creds = load_credentials(
+        non_interactive=args.non_interactive,
+        api_id=args.api_id,
+        api_hash=args.api_hash
+    )
     if not creds:
         print("Error: No se pudieron cargar las credenciales")
         return
     
     # Cargar canales
     print("3. Cargando lista de canales...")
-    channels = get_channels_from_user()
+    channels = get_channels_from_user(
+        channels_file=args.channels_file,
+        non_interactive=args.non_interactive
+    )
     if not channels:
         print("Error: No se pudieron cargar los canales")
         return
@@ -338,7 +442,11 @@ async def main():
     
     # Obtener configuración del usuario
     print("5. Configuración...")
-    days_to_scrape, max_messages = get_user_input()
+    days_to_scrape, max_messages = get_user_input(
+        days_arg=args.days,
+        messages_arg=args.max_messages,
+        non_interactive=args.non_interactive
+    )
     time_days_ago = datetime.now(timezone.utc) - timedelta(days=days_to_scrape)
     print(f"6. Configuración: {days_to_scrape} días, {max_messages} mensajes por canal")
     
@@ -599,6 +707,16 @@ async def main():
             with pd.ExcelWriter('telegram_data.xlsx', engine='openpyxl') as writer:
                 df.to_excel(writer, sheet_name='Messages', index=False)
             print("17. Datos guardados en telegram_data.xlsx")
+            
+            if args.upload_s3:
+                print("18. Subiendo dataset a S3...")
+                upload_dataset_to_s3(
+                    json_path='telegram_messages.json',
+                    s3_key=args.s3_key,
+                    csv_path='telegram_messages.csv',
+                    upload_csv=args.upload_csv,
+                    s3_csv_key=args.s3_csv_key
+                )
         else:
             print("13. No hay datos para guardar")
         print("18. Cerrando conexión...")
@@ -613,4 +731,5 @@ async def main():
 
 if __name__ == '__main__':
     print("Iniciando ejecución...")
-    asyncio.run(main())
+    args = parse_args()
+    asyncio.run(main(args))

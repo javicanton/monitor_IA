@@ -8,18 +8,55 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Autocomplete from '@mui/material/Autocomplete';
 import { FilterList as FilterIcon, Clear as ClearIcon } from '@mui/icons-material';
-import { messagesAPI, channelsAPI } from '../utils/api';
+import DatePicker from 'react-datepicker';
+import { es } from 'date-fns/locale';
+import 'react-datepicker/dist/react-datepicker.css';
+import { channelsAPI, topicsAPI } from '../utils/api';
+import config from '../config';
+
+const DateRangeInput = React.forwardRef(function DateRangeInput(
+  { value, onClick },
+  ref
+) {
+  return (
+    <TextField
+      fullWidth
+      size="small"
+      placeholder="Seleccionar rango de fechas"
+      value={value || ''}
+      onClick={onClick}
+      onChange={() => {}}
+      inputRef={ref}
+      InputProps={{ readOnly: true }}
+    />
+  );
+});
+
+function toYYYYMMDD(date) {
+  if (!date) return '';
+  const d = new Date(date);
+  return d.toISOString().slice(0, 10);
+}
+
+function fromYYYYMMDD(str) {
+  if (!str) return null;
+  const d = new Date(str + 'T12:00:00');
+  return isNaN(d.getTime()) ? null : d;
+}
 
 function FilterBar({ onFilterChange, onChannelsLoad }) {
   const [channels, setChannels] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [topics, setTopics] = useState([]);
+  const [loadingTopics, setLoadingTopics] = useState(false);
   const [filters, setFilters] = useState({
     dateStart: '',
     dateEnd: '',
     channel: [],
+    topics: [],
     scoreMin: '',
     scoreMax: '',
-    mediaType: '',
+    mediaType: [],
     sortBy: 'score'
   });
   const [hasPendingChanges, setHasPendingChanges] = useState(false);
@@ -27,15 +64,17 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
     dateStart: '',
     dateEnd: '',
     channel: [],
+    topics: [],
     scoreMin: '',
     scoreMax: '',
-    mediaType: '',
+    mediaType: [],
     sortBy: 'score'
   });
 
   useEffect(() => {
     // Cargar canales al montar el componente
     fetchChannels();
+    fetchTopics();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -56,6 +95,19 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
     }
   };
 
+  const fetchTopics = async () => {
+    try {
+      setLoadingTopics(true);
+      const availableTopics = await topicsAPI.getTopics();
+      setTopics(availableTopics);
+    } catch (error) {
+      console.error('Error al cargar topics:', error);
+      setTopics([]);
+    } finally {
+      setLoadingTopics(false);
+    }
+  };
+
   const handleFilterChange = (field) => (event) => {
     const newFilters = {
       ...filters,
@@ -64,6 +116,22 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
     setFilters(newFilters);
     setHasPendingChanges(JSON.stringify(newFilters) !== JSON.stringify(appliedFilters));
   };
+
+  const handleDateRangeChange = (dates) => {
+    const [start, end] = dates;
+    const newFilters = {
+      ...filters,
+      dateStart: toYYYYMMDD(start),
+      dateEnd: toYYYYMMDD(end)
+    };
+    setFilters(newFilters);
+    setHasPendingChanges(JSON.stringify(newFilters) !== JSON.stringify(appliedFilters));
+  };
+
+  const dateRangeValue = [
+    fromYYYYMMDD(filters.dateStart),
+    fromYYYYMMDD(filters.dateEnd)
+  ];
 
   const handleApplyFilters = () => {
     // Validar fechas
@@ -88,9 +156,10 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
       dateStart: '',
       dateEnd: '',
       channel: [],
+      topics: [],
       scoreMin: '',
       scoreMax: '',
-      mediaType: '',
+      mediaType: [],
       sortBy: 'score'
     };
     setFilters(resetFilters);
@@ -103,8 +172,25 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
     fetchChannels();
   };
 
+  const handleRefreshTopics = () => {
+    fetchTopics();
+  };
+
+  const selectedTopics = topics.filter((topic) => filters.topics.includes(topic.id));
+  const selectedTopicLabels =
+    selectedTopics.length > 0
+      ? selectedTopics.map((item) => item.label || item.id)
+      : filters.topics.map((item) => item);
+
   return (
-    <Paper sx={{ p: 3, mb: 3 }}>
+    <Paper
+      sx={{
+        p: 2,
+        mb: 3,
+        maxHeight: { md: 'calc(100vh - 48px)' },
+        overflowY: { md: 'auto' }
+      }}
+    >
       <Box display="flex" alignItems="center" mb={2}>
         <FilterIcon sx={{ mr: 1 }} />
         <Typography variant="h6" component="h2">
@@ -112,34 +198,9 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
         </Typography>
       </Box>
 
-      <Grid container spacing={3} alignItems="center">
-        {/* Filtros de fecha */}
-        <Grid item xs={12} sm={6} md={3}>
-          <TextField
-            fullWidth
-            type="date"
-            label="Fecha desde"
-            value={filters.dateStart}
-            onChange={handleFilterChange('dateStart')}
-            InputLabelProps={{ shrink: true }}
-            size="small"
-          />
-        </Grid>
-        
-        <Grid item xs={12} sm={6} md={3}>
-          <TextField
-            fullWidth
-            type="date"
-            label="Fecha hasta"
-            value={filters.dateEnd}
-            onChange={handleFilterChange('dateEnd')}
-            InputLabelProps={{ shrink: true }}
-            size="small"
-          />
-        </Grid>
-
+      <Grid container spacing={2} alignItems="center">
         {/* Filtro de canal (múltiple con buscador) */}
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={12}>
           <Autocomplete
             multiple
             options={channels}
@@ -193,62 +254,39 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
           </Typography>
         </Grid>
 
-        {/* Filtros de puntuación */}
-        <Grid item xs={12} sm={6} md={3}>
-          <TextField
-            fullWidth
-            type="number"
-            label="Puntuación mínima"
-            value={filters.scoreMin}
-            onChange={handleFilterChange('scoreMin')}
-            inputProps={{ 
-              step: 0.1, 
-              min: 0,
-              placeholder: "0.0"
+        {/* Filtro de topics (múltiple con buscador) */}
+        <Grid item xs={12}>
+          <Autocomplete
+            multiple
+            options={topics}
+            value={selectedTopics}
+            onChange={(_, value) => {
+              const newFilters = { ...filters, topics: value.map((item) => item.id) };
+              setFilters(newFilters);
+              setHasPendingChanges(JSON.stringify(newFilters) !== JSON.stringify(appliedFilters));
             }}
-            size="small"
+            getOptionLabel={(option) => option.label || `Topic ${option.id}`}
+            isOptionEqualToValue={(option, value) => option.id === value.id}
+            filterSelectedOptions
+            disabled={loadingTopics}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Temas"
+                placeholder="Buscar tema..."
+                size="small"
+              />
+            )}
           />
-        </Grid>
-
-        <Grid item xs={12} sm={6} md={3}>
-          <TextField
-            fullWidth
-            type="number"
-            label="Puntuación máxima"
-            value={filters.scoreMax}
-            onChange={handleFilterChange('scoreMax')}
-            inputProps={{ 
-              step: 0.1, 
-              min: 0,
-              placeholder: "10.0"
-            }}
-            size="small"
-          />
-        </Grid>
-
-        {/* Filtro de tipo de media */}
-        <Grid item xs={12} sm={6} md={3}>
-          <TextField
-            fullWidth
-            select
-            label="Tipo de contenido"
-            value={filters.mediaType}
-            onChange={handleFilterChange('mediaType')}
-            size="small"
-          >
-            <MenuItem value="">Todos los tipos</MenuItem>
-            <MenuItem value="text">Texto</MenuItem>
-            <MenuItem value="photo">Foto</MenuItem>
-            <MenuItem value="video">Video</MenuItem>
-            <MenuItem value="link">Enlace</MenuItem>
-            <MenuItem value="document">Documento</MenuItem>
-            <MenuItem value="audio">Audio</MenuItem>
-            <MenuItem value="sticker">Sticker</MenuItem>
-          </TextField>
+          <Typography variant="caption" color="textSecondary" display="block" mt={0.5}>
+            {filters.topics.length === 0
+              ? 'Ningún tema seleccionado'
+              : `${filters.topics.length} temas seleccionados`}
+          </Typography>
         </Grid>
 
         {/* Filtro de ordenamiento */}
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={12}>
           <TextField
             fullWidth
             select
@@ -257,11 +295,112 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
             onChange={handleFilterChange('sortBy')}
             size="small"
           >
-            <MenuItem value="score">Puntuación (Score)</MenuItem>
-            <MenuItem value="views">Número de vistas</MenuItem>
+            <MenuItem value="score">Overperforming Score</MenuItem>
+            <MenuItem value="views">Nº visualizaciones</MenuItem>
             <MenuItem value="date">Fecha</MenuItem>
             <MenuItem value="channel">Canal</MenuItem>
           </TextField>
+        </Grid>
+
+        {/* Filtros de fecha - calendario unificado con rango */}
+        <Grid item xs={12}>
+          <Typography variant="subtitle2" color="textSecondary" gutterBottom>
+            Fecha
+          </Typography>
+          <DatePicker
+            selectsRange
+            startDate={dateRangeValue[0]}
+            endDate={dateRangeValue[1]}
+            onChange={handleDateRangeChange}
+            monthsShown={2}
+            locale={es}
+            dateFormat="d MMM yyyy"
+            isClearable
+            placeholderText="Seleccionar rango de fechas"
+            calendarClassName="monitoria-date-range"
+            customInput={<DateRangeInput />}
+          />
+        </Grid>
+
+        {/* Filtro de tipo de contenido (selección múltiple) */}
+        <Grid item xs={12}>
+          <Autocomplete
+            multiple
+            options={config.MEDIA_TYPES}
+            value={config.MEDIA_TYPES.filter((item) => filters.mediaType.includes(item.value))}
+            onChange={(_, newValue) => {
+              const newFilters = {
+                ...filters,
+                mediaType: newValue.map((item) => item.value)
+              };
+              setFilters(newFilters);
+              setHasPendingChanges(JSON.stringify(newFilters) !== JSON.stringify(appliedFilters));
+            }}
+            getOptionLabel={(option) => option.label}
+            isOptionEqualToValue={(option, value) => option.value === value.value}
+            filterSelectedOptions
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Tipo de contenido"
+                placeholder="Buscar tipo..."
+                size="small"
+              />
+            )}
+          />
+          <Box display="flex" gap={1} mt={1} flexWrap="wrap">
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={() => {
+                const newFilters = { ...filters, mediaType: [] };
+                setFilters(newFilters);
+                setHasPendingChanges(JSON.stringify(newFilters) !== JSON.stringify(appliedFilters));
+              }}
+            >
+              Todos los tipos
+            </Button>
+          </Box>
+          <Typography variant="caption" color="textSecondary" display="block" mt={0.5}>
+            {filters.mediaType.length === 0
+              ? 'Todos los tipos'
+              : `${filters.mediaType.length} tipos seleccionados`}
+          </Typography>
+        </Grid>
+
+        {/* Filtros de puntuación */}
+        <Grid item xs={12}>
+          <Typography variant="subtitle2" color="textSecondary" gutterBottom>
+            Puntuación
+          </Typography>
+          <Box display="flex" gap={1}>
+            <TextField
+              fullWidth
+              type="number"
+              label="Min"
+              value={filters.scoreMin}
+              onChange={handleFilterChange('scoreMin')}
+              inputProps={{ 
+                step: 0.1, 
+                min: 0,
+                placeholder: "0.0"
+              }}
+              size="small"
+            />
+            <TextField
+              fullWidth
+              type="number"
+              label="Max"
+              value={filters.scoreMax}
+              onChange={handleFilterChange('scoreMax')}
+              inputProps={{ 
+                step: 0.1, 
+                min: 0,
+                placeholder: "10.0"
+              }}
+              size="small"
+            />
+          </Box>
         </Grid>
 
         {/* Botones de acción */}
@@ -272,7 +411,7 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
               color={hasPendingChanges ? 'warning' : 'primary'}
               onClick={handleApplyFilters}
               startIcon={<FilterIcon />}
-              size="large"
+              size="medium"
             >
               Aplicar Filtros
             </Button>
@@ -282,7 +421,7 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
               color="secondary"
               onClick={handleReset}
               startIcon={<ClearIcon />}
-              size="large"
+              size="medium"
             >
               Limpiar Filtros
             </Button>
@@ -291,26 +430,36 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
               variant="outlined"
               onClick={handleRefreshChannels}
               disabled={loading}
-              size="large"
+              size="medium"
             >
               {loading ? 'Cargando...' : 'Actualizar Canales'}
+            </Button>
+            <Button
+              variant="outlined"
+              onClick={handleRefreshTopics}
+              disabled={loadingTopics}
+              size="medium"
+            >
+              {loadingTopics ? 'Cargando...' : 'Actualizar Temas'}
             </Button>
           </Box>
         </Grid>
       </Grid>
 
       {/* Información sobre filtros activos */}
-      {(Object.values(filters).some(value => value !== '' && value !== 'score') || hasPendingChanges) && (
+          {(Object.values(filters).some(value => value !== '' && value !== 'score') || hasPendingChanges) && (
         <Box mt={2} p={2} bgcolor="grey.50" borderRadius={1}>
           <Typography variant="body2" color="textSecondary">
             <strong>Filtros activos:</strong>
-            {filters.dateStart && ` Desde: ${filters.dateStart}`}
-            {filters.dateEnd && ` Hasta: ${filters.dateEnd}`}
             {filters.channel.length > 0 && ` Canales: ${filters.channel.join(', ')}`}
-            {filters.scoreMin && ` Score ≥ ${filters.scoreMin}`}
-            {filters.scoreMax && ` Score ≤ ${filters.scoreMax}`}
-            {filters.mediaType && ` Tipo: ${filters.mediaType}`}
+            {filters.topics.length > 0 && ` Temas: ${selectedTopicLabels.join(', ')}`}
             {filters.sortBy !== 'score' && ` Orden: ${filters.sortBy}`}
+            {(filters.dateStart || filters.dateEnd) && ` Fecha: ${filters.dateStart || '...'} - ${filters.dateEnd || '...'}`}
+            {filters.mediaType.length > 0 &&
+              ` Tipo: ${filters.mediaType
+                .map((v) => config.MEDIA_TYPES.find((o) => o.value === v)?.label ?? v)
+                .join(', ')}`}
+            {(filters.scoreMin || filters.scoreMax) && ` Puntuación: ${filters.scoreMin || '...'} - ${filters.scoreMax || '...'}`}
           </Typography>
           {hasPendingChanges && (
             <Typography variant="body2" color="warning.main" sx={{ mt: 1 }}>

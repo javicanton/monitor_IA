@@ -11,3 +11,15 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+.monitoria-date-range {
+  display: inline-block;
+  white-space: nowrap;
+  width: max-content;
+}
+
+.monitoria-date-range .react-datepicker__month-container {
+  float: none;
+  display: inline-block;
+  vertical-align: top;
+}

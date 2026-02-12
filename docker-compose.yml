@@ -3,8 +3,8 @@ version: '3.8'
 services:
   backend:
     build: ./backend
-    ports:
-      - "5001:5001"
+    expose:
+      - "5001"
     environment:
       - FLASK_APP=app.py
       - FLASK_ENV=production
@@ -13,11 +13,19 @@ services:
       - ./telegram_messages.json:/app/telegram_messages.json
     networks:
       - monitoria
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5001/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+    restart: unless-stopped
+
+  topic_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
+    command: ["python", "topic_worker.py"]
+    environment:
+      - TOPIC_POLL_INTERVAL_MIN=${TOPIC_POLL_INTERVAL_MIN:-1440}
+      - TOPICS_NUM_TOPICS=${TOPICS_NUM_TOPICS:-50}
+      - TOPICS_SAMPLE_RATIO=${TOPICS_SAMPLE_RATIO:-0.3}
+    networks:
+      - monitoria
     restart: unless-stopped
 
   frontend:
@@ -27,9 +35,8 @@ services:
     container_name: monitoria-frontend
     ports:
       - "80:80"
-      - "8080:80"
     environment:
-      - REACT_APP_API_URL=http://13.60.219.71:5001
+      - REACT_APP_API_URL=/api
     depends_on:
       - backend
     networks:

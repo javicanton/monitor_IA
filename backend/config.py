@@ -32,6 +32,26 @@ class Config:
     # Credenciales de AWS S3
     AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID')
     AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
+
+    # Configuración de topics
+    TOPIC_POLL_INTERVAL_MIN = int(os.environ.get('TOPIC_POLL_INTERVAL_MIN', 1440))
+    TOPICS_S3_PREFIX = os.environ.get('TOPICS_S3_PREFIX', 'topics/')
+    TOPICS_MODEL_KEY = os.environ.get('TOPICS_MODEL_KEY', 'topics/model.pkl')
+    TOPICS_STATE_KEY = os.environ.get('TOPICS_STATE_KEY', 'topics/state.json')
+    TOPICS_META_KEY = os.environ.get('TOPICS_META_KEY', 'topics/topics.json')
+    TOPICS_ASSIGNMENTS_KEY = os.environ.get('TOPICS_ASSIGNMENTS_KEY', 'topics/message_topics.csv')
+    TOPICS_SOURCE_KEY = os.environ.get('TOPICS_SOURCE_KEY', 'telegram_messages.json')
+    TOPICS_TITLES_KEY = os.environ.get('TOPICS_TITLES_KEY', 'topics/topic_titles.json')
+    TOPICS_RETRAIN_THRESHOLD = float(os.environ.get('TOPICS_RETRAIN_THRESHOLD', 0.3))
+    TOPICS_MIN_NEW_MESSAGES = int(os.environ.get('TOPICS_MIN_NEW_MESSAGES', 10))
+    TOPICS_OPENAI_KEY = os.environ.get('TOPICS_OPENAI_KEY')
+    TOPICS_OPENAI_DOCS = int(os.environ.get('TOPICS_OPENAI_DOCS', 15))
+    TOPICS_NUM_TOPICS = int(os.environ.get('TOPICS_NUM_TOPICS', 100))
+    _TOPICS_SAMPLE_RATIO_RAW = os.environ.get('TOPICS_SAMPLE_RATIO')
+    try:
+        TOPICS_SAMPLE_RATIO = float(_TOPICS_SAMPLE_RATIO_RAW) if _TOPICS_SAMPLE_RATIO_RAW else None
+    except (TypeError, ValueError):
+        TOPICS_SAMPLE_RATIO = None
     
     # Configuración de CORS
     CORS_HEADERS = 'Content-Type'

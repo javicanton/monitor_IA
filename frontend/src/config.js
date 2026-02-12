@@ -2,7 +2,7 @@
 const defaultApiBaseUrl =
   process.env.REACT_APP_API_URL ||
   (typeof window !== 'undefined'
-    ? `${window.location.protocol}//${window.location.hostname}:5001`
+    ? '/api'
     : 'http://localhost:5001');
 
 const config = {
@@ -15,7 +15,7 @@ const config = {
   
   // Configuración de la aplicación
   APP_NAME: 'Telegram Analytics App',
-  APP_VERSION: '1.0.0',
+  APP_VERSION: '0.1 (en desarrollo)',
   
   // Configuración de paginación
   MESSAGES_PER_PAGE: 24,
@@ -32,15 +32,15 @@ const config = {
     channel: [],
     scoreMin: '',
     scoreMax: '',
-    mediaType: '',
+    mediaType: [],
     sortBy: 'score'
   },
   
   // Tipos de contenido soportados
   MEDIA_TYPES: [
     { value: 'text', label: 'Texto' },
-    { value: 'photo', label: 'Foto' },
-    { value: 'video', label: 'Video' },
+    { value: 'photo', label: 'Imagen' },
+    { value: 'video', label: 'Vídeo' },
     { value: 'link', label: 'Enlace' },
     { value: 'document', label: 'Documento' },
     { value: 'audio', label: 'Audio' },
@@ -50,7 +50,7 @@ const config = {
   // Opciones de ordenamiento
   SORT_OPTIONS: [
     { value: 'score', label: 'Puntuación (Score)' },
-    { value: 'views', label: 'Número de vistas' },
+    { value: 'views', label: 'Nº de visualizaciones' },
     { value: 'date', label: 'Fecha' },
     { value: 'channel', label: 'Canal' }
   ],

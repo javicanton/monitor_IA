@@ -106,6 +106,23 @@ export const channelsAPI = {
   },
 };
 
+// Funciones de API para topics
+export const topicsAPI = {
+  // Obtener lista de topics
+  getTopics: async () => {
+    try {
+      const response = await api.get('/topics');
+      if (response.data.success) {
+        return response.data.topics || [];
+      }
+      return [];
+    } catch (error) {
+      console.error('Error al obtener topics:', error);
+      return [];
+    }
+  },
+};
+
 // Funciones de API para autenticación
 export const authAPI = {
   // Login
