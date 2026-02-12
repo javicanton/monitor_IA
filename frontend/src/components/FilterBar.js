@@ -19,6 +19,24 @@ const MEDIA_TYPE_OPTIONS = [
   ...config.MEDIA_TYPES
 ];
 
+const DateRangeInput = React.forwardRef(function DateRangeInput(
+  { value, onClick },
+  ref
+) {
+  return (
+    <TextField
+      fullWidth
+      size="small"
+      placeholder="Seleccionar rango de fechas"
+      value={value || ''}
+      onClick={onClick}
+      onChange={() => {}}
+      inputRef={ref}
+      InputProps={{ readOnly: true }}
+    />
+  );
+});
+
 function toYYYYMMDD(date) {
   if (!date) return '';
   const d = new Date(date);
@@ -304,15 +322,7 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
             dateFormat="d MMM yyyy"
             isClearable
             placeholderText="Seleccionar rango de fechas"
-            customInput={(props) => (
-              <TextField
-                {...props}
-                fullWidth
-                size="small"
-                placeholder="Seleccionar rango de fechas"
-                InputProps={{ readOnly: true }}
-              />
-            )}
+            customInput={<DateRangeInput />}
           />
         </Grid>
 
