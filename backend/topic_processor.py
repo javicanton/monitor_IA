@@ -167,8 +167,8 @@ def _train_model_with_pytopicgram(docs, model_path):
 
 
 def _load_topic_model(model_path):
-    with open(model_path, "rb") as f:
-        return pd.read_pickle(f)
+    from bertopic import BERTopic
+    return BERTopic.load(model_path)
 
 
 def _get_topic_info(model):

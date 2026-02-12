@@ -14,11 +14,6 @@ import 'react-datepicker/dist/react-datepicker.css';
 import { channelsAPI, topicsAPI } from '../utils/api';
 import config from '../config';
 
-const MEDIA_TYPE_OPTIONS = [
-  { value: '__all__', label: 'Todos los tipos' },
-  ...config.MEDIA_TYPES
-];
-
 const DateRangeInput = React.forwardRef(function DateRangeInput(
   { value, onClick },
   ref
@@ -300,8 +295,8 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
             onChange={handleFilterChange('sortBy')}
             size="small"
           >
-            <MenuItem value="score">Puntuación (Score)</MenuItem>
-            <MenuItem value="views">Número de vistas</MenuItem>
+            <MenuItem value="score">Overperforming Score</MenuItem>
+            <MenuItem value="views">Nº visualizaciones</MenuItem>
             <MenuItem value="date">Fecha</MenuItem>
             <MenuItem value="channel">Canal</MenuItem>
           </TextField>
@@ -322,6 +317,7 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
             dateFormat="d MMM yyyy"
             isClearable
             placeholderText="Seleccionar rango de fechas"
+            calendarClassName="monitoria-date-range"
             customInput={<DateRangeInput />}
           />
         </Grid>
@@ -330,19 +326,13 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
         <Grid item xs={12}>
           <Autocomplete
             multiple
-            options={MEDIA_TYPE_OPTIONS}
-            value={
-              filters.mediaType.length === 0
-                ? [MEDIA_TYPE_OPTIONS[0]]
-                : filters.mediaType.map((v) => MEDIA_TYPE_OPTIONS.find((o) => o.value === v)).filter(Boolean)
-            }
+            options={config.MEDIA_TYPES}
+            value={config.MEDIA_TYPES.filter((item) => filters.mediaType.includes(item.value))}
             onChange={(_, newValue) => {
-              const hasAll = newValue.some((o) => o.value === '__all__');
-              const newMediaType =
-                hasAll || newValue.length === 0
-                  ? []
-                  : newValue.filter((o) => o.value !== '__all__').map((o) => o.value);
-              const newFilters = { ...filters, mediaType: newMediaType };
+              const newFilters = {
+                ...filters,
+                mediaType: newValue.map((item) => item.value)
+              };
               setFilters(newFilters);
               setHasPendingChanges(JSON.stringify(newFilters) !== JSON.stringify(appliedFilters));
             }}
@@ -353,11 +343,29 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
               <TextField
                 {...params}
                 label="Tipo de contenido"
-                placeholder="Todos los tipos o elegir..."
+                placeholder="Buscar tipo..."
                 size="small"
               />
             )}
           />
+          <Box display="flex" gap={1} mt={1} flexWrap="wrap">
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={() => {
+                const newFilters = { ...filters, mediaType: [] };
+                setFilters(newFilters);
+                setHasPendingChanges(JSON.stringify(newFilters) !== JSON.stringify(appliedFilters));
+              }}
+            >
+              Todos los tipos
+            </Button>
+          </Box>
+          <Typography variant="caption" color="textSecondary" display="block" mt={0.5}>
+            {filters.mediaType.length === 0
+              ? 'Todos los tipos'
+              : `${filters.mediaType.length} tipos seleccionados`}
+          </Typography>
         </Grid>
 
         {/* Filtros de puntuación */}
@@ -449,7 +457,7 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
             {(filters.dateStart || filters.dateEnd) && ` Fecha: ${filters.dateStart || '...'} - ${filters.dateEnd || '...'}`}
             {filters.mediaType.length > 0 &&
               ` Tipo: ${filters.mediaType
-                .map((v) => MEDIA_TYPE_OPTIONS.find((o) => o.value === v)?.label ?? v)
+                .map((v) => config.MEDIA_TYPES.find((o) => o.value === v)?.label ?? v)
                 .join(', ')}`}
             {(filters.scoreMin || filters.scoreMax) && ` Puntuación: ${filters.scoreMin || '...'} - ${filters.scoreMax || '...'}`}
           </Typography>
