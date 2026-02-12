@@ -8,7 +8,28 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Autocomplete from '@mui/material/Autocomplete';
 import { FilterList as FilterIcon, Clear as ClearIcon } from '@mui/icons-material';
+import DatePicker from 'react-datepicker';
+import { es } from 'date-fns/locale';
+import 'react-datepicker/dist/react-datepicker.css';
 import { channelsAPI, topicsAPI } from '../utils/api';
+import config from '../config';
+
+const MEDIA_TYPE_OPTIONS = [
+  { value: '__all__', label: 'Todos los tipos' },
+  ...config.MEDIA_TYPES
+];
+
+function toYYYYMMDD(date) {
+  if (!date) return '';
+  const d = new Date(date);
+  return d.toISOString().slice(0, 10);
+}
+
+function fromYYYYMMDD(str) {
+  if (!str) return null;
+  const d = new Date(str + 'T12:00:00');
+  return isNaN(d.getTime()) ? null : d;
+}
 
 function FilterBar({ onFilterChange, onChannelsLoad }) {
   const [channels, setChannels] = useState([]);
@@ -22,7 +43,7 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
     topics: [],
     scoreMin: '',
     scoreMax: '',
-    mediaType: '',
+    mediaType: [],
     sortBy: 'score'
   });
   const [hasPendingChanges, setHasPendingChanges] = useState(false);
@@ -33,7 +54,7 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
     topics: [],
     scoreMin: '',
     scoreMax: '',
-    mediaType: '',
+    mediaType: [],
     sortBy: 'score'
   });
 
@@ -83,6 +104,22 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
     setHasPendingChanges(JSON.stringify(newFilters) !== JSON.stringify(appliedFilters));
   };
 
+  const handleDateRangeChange = (dates) => {
+    const [start, end] = dates;
+    const newFilters = {
+      ...filters,
+      dateStart: toYYYYMMDD(start),
+      dateEnd: toYYYYMMDD(end)
+    };
+    setFilters(newFilters);
+    setHasPendingChanges(JSON.stringify(newFilters) !== JSON.stringify(appliedFilters));
+  };
+
+  const dateRangeValue = [
+    fromYYYYMMDD(filters.dateStart),
+    fromYYYYMMDD(filters.dateEnd)
+  ];
+
   const handleApplyFilters = () => {
     // Validar fechas
     if (filters.dateStart && filters.dateEnd && filters.dateStart > filters.dateEnd) {
@@ -109,7 +146,7 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
       topics: [],
       scoreMin: '',
       scoreMax: '',
-      mediaType: '',
+      mediaType: [],
       sortBy: 'score'
     };
     setFilters(resetFilters);
@@ -252,52 +289,65 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
           </TextField>
         </Grid>
 
-        {/* Filtros de fecha */}
+        {/* Filtros de fecha - calendario unificado con rango */}
         <Grid item xs={12}>
           <Typography variant="subtitle2" color="textSecondary" gutterBottom>
             Fecha
           </Typography>
-          <Box display="flex" gap={1}>
-            <TextField
-              fullWidth
-              type="date"
-              label="Inicio"
-              value={filters.dateStart}
-              onChange={handleFilterChange('dateStart')}
-              InputLabelProps={{ shrink: true }}
-              size="small"
-            />
-            <TextField
-              fullWidth
-              type="date"
-              label="Fin"
-              value={filters.dateEnd}
-              onChange={handleFilterChange('dateEnd')}
-              InputLabelProps={{ shrink: true }}
-              size="small"
-            />
-          </Box>
+          <DatePicker
+            selectsRange
+            startDate={dateRangeValue[0]}
+            endDate={dateRangeValue[1]}
+            onChange={handleDateRangeChange}
+            monthsShown={2}
+            locale={es}
+            dateFormat="d MMM yyyy"
+            isClearable
+            placeholderText="Seleccionar rango de fechas"
+            customInput={(props) => (
+              <TextField
+                {...props}
+                fullWidth
+                size="small"
+                placeholder="Seleccionar rango de fechas"
+                InputProps={{ readOnly: true }}
+              />
+            )}
+          />
         </Grid>
 
-        {/* Filtro de tipo de media */}
+        {/* Filtro de tipo de contenido (selección múltiple) */}
         <Grid item xs={12}>
-          <TextField
-            fullWidth
-            select
-            label="Tipo de contenido"
-            value={filters.mediaType}
-            onChange={handleFilterChange('mediaType')}
-            size="small"
-          >
-            <MenuItem value="">Todos los tipos</MenuItem>
-            <MenuItem value="text">Texto</MenuItem>
-            <MenuItem value="photo">Foto</MenuItem>
-            <MenuItem value="video">Video</MenuItem>
-            <MenuItem value="link">Enlace</MenuItem>
-            <MenuItem value="document">Documento</MenuItem>
-            <MenuItem value="audio">Audio</MenuItem>
-            <MenuItem value="sticker">Sticker</MenuItem>
-          </TextField>
+          <Autocomplete
+            multiple
+            options={MEDIA_TYPE_OPTIONS}
+            value={
+              filters.mediaType.length === 0
+                ? [MEDIA_TYPE_OPTIONS[0]]
+                : filters.mediaType.map((v) => MEDIA_TYPE_OPTIONS.find((o) => o.value === v)).filter(Boolean)
+            }
+            onChange={(_, newValue) => {
+              const hasAll = newValue.some((o) => o.value === '__all__');
+              const newMediaType =
+                hasAll || newValue.length === 0
+                  ? []
+                  : newValue.filter((o) => o.value !== '__all__').map((o) => o.value);
+              const newFilters = { ...filters, mediaType: newMediaType };
+              setFilters(newFilters);
+              setHasPendingChanges(JSON.stringify(newFilters) !== JSON.stringify(appliedFilters));
+            }}
+            getOptionLabel={(option) => option.label}
+            isOptionEqualToValue={(option, value) => option.value === value.value}
+            filterSelectedOptions
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Tipo de contenido"
+                placeholder="Todos los tipos o elegir..."
+                size="small"
+              />
+            )}
+          />
         </Grid>
 
         {/* Filtros de puntuación */}
@@ -387,7 +437,10 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
             {filters.topics.length > 0 && ` Temas: ${selectedTopicLabels.join(', ')}`}
             {filters.sortBy !== 'score' && ` Orden: ${filters.sortBy}`}
             {(filters.dateStart || filters.dateEnd) && ` Fecha: ${filters.dateStart || '...'} - ${filters.dateEnd || '...'}`}
-            {filters.mediaType && ` Tipo: ${filters.mediaType}`}
+            {filters.mediaType.length > 0 &&
+              ` Tipo: ${filters.mediaType
+                .map((v) => MEDIA_TYPE_OPTIONS.find((o) => o.value === v)?.label ?? v)
+                .join(', ')}`}
             {(filters.scoreMin || filters.scoreMax) && ` Puntuación: ${filters.scoreMin || '...'} - ${filters.scoreMax || '...'}`}
           </Typography>
           {hasPendingChanges && (

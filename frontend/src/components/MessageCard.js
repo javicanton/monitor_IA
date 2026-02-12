@@ -42,7 +42,7 @@ function MessageCard({ message, onLabelChange }) {
         {(Topic_Title || Topic_ID !== undefined) && (
           <Box display="flex" justifyContent="center" mb={1}>
             <Chip
-              label={Topic_Title || `Topic ${Topic_ID}`}
+              label={Topic_Title ?? (Topic_ID != null ? `Topic ${Topic_ID}` : 'Sin narrativa')}
               size="small"
               color="secondary"
               variant="outlined"

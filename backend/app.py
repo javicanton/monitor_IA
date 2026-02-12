@@ -437,12 +437,15 @@ def load_more(offset=0):
             except:
                 pass
 
-        # Filtro de Tipo de Media
+        # Filtro de Tipo de Media (uno o varios)
         media_type = filters.get('mediaType')
         if media_type and 'Media Type' in filtered_df.columns:
             try:
-                filtered_df['Media Type'] = filtered_df['Media Type'].astype(str).str.lower()
-                filtered_df = filtered_df[filtered_df['Media Type'] == str(media_type).lower()]
+                types = [media_type] if isinstance(media_type, str) else media_type
+                if types:
+                    filtered_df['Media Type'] = filtered_df['Media Type'].astype(str).str.lower()
+                    types_lower = [str(t).lower() for t in types]
+                    filtered_df = filtered_df[filtered_df['Media Type'].isin(types_lower)]
             except:
                 pass
 
@@ -754,13 +757,16 @@ def filter_messages():
                 print(f"Error en filtro de score máximo: {str(e)}")
                 return jsonify(success=False, error=f"Error en filtro de score máximo: {str(e)}"), 400
 
-        # Filtro de Tipo de Media
+        # Filtro de Tipo de Media (uno o varios)
         media_type = filters.get('mediaType')
         if media_type and 'Media Type' in filtered_df.columns:
             try:
-                filtered_df['Media Type'] = filtered_df['Media Type'].astype(str).str.lower()
-                filtered_df = filtered_df[filtered_df['Media Type'] == str(media_type).lower()]
-                print(f"Filtrado por tipo de media: {media_type}")
+                types = [media_type] if isinstance(media_type, str) else media_type
+                if types:
+                    filtered_df['Media Type'] = filtered_df['Media Type'].astype(str).str.lower()
+                    types_lower = [str(t).lower() for t in types]
+                    filtered_df = filtered_df[filtered_df['Media Type'].isin(types_lower)]
+                    print(f"Filtrado por tipo de media: {types}")
             except Exception as e:
                 print(f"Error en filtro de tipo de media: {str(e)}")
                 return jsonify(success=False, error=f"Error en filtro de tipo de media: {str(e)}"), 400
