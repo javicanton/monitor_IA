@@ -13,7 +13,7 @@ import ScoreExplanation from './ScoreExplanation';
 import logo from '../assets/Logo_MonitorIA ajustado.png';
 
 const SCROLL_THRESHOLD = 180;
-const LOGO_SIZE = { xs: 180, sm: 220, md: 260 };
+const LOGO_SIZE = { xs: 210, sm: 270, md: 330 };
 const LOGO_SIZE_SMALL = 88;
 
 const Dashboard = () => {
@@ -39,31 +39,37 @@ const Dashboard = () => {
     setChannels(loadedChannels);
   };
 
-  const showFloatingLogo = scrollProgress > 0;
+  const clampedProgress = Math.min(scrollProgress, 1);
+  const largeLogoOpacity = 1 - clampedProgress;
+  const largeLogoScale = 1 - clampedProgress * 0.08;
+  const floatingLogoOpacity = clampedProgress;
+  const floatingLogoScale = 1.25 - clampedProgress * 0.25;
 
   return (
     <Container maxWidth="xl" sx={{ py: 4, overflow: 'visible' }}>
-      {showFloatingLogo && (
+      <Box
+        sx={{
+          position: 'fixed',
+          top: 16,
+          left: 16,
+          zIndex: 1200,
+          width: { xs: 64, sm: 72, md: LOGO_SIZE_SMALL },
+          height: 'auto',
+          pointerEvents: 'none',
+          bgcolor: 'transparent',
+          opacity: floatingLogoOpacity,
+          transform: `scale(${floatingLogoScale})`,
+          transformOrigin: 'top left',
+          transition: 'transform 0.2s ease, opacity 0.2s ease'
+        }}
+      >
         <Box
-          sx={{
-            position: 'fixed',
-            top: 16,
-            left: 16,
-            zIndex: 1200,
-            width: { xs: 64, sm: 72, md: LOGO_SIZE_SMALL },
-            height: 'auto',
-            pointerEvents: 'none',
-            bgcolor: 'transparent'
-          }}
-        >
-          <Box
-            component="img"
-            src={logo}
-            alt="MonitorIA"
-            sx={{ width: '100%', height: 'auto' }}
-          />
-        </Box>
-      )}
+          component="img"
+          src={logo}
+          alt="MonitorIA"
+          sx={{ width: '100%', height: 'auto' }}
+        />
+      </Box>
 
       {/* Header principal con logo centrado */}
       <Box
@@ -81,7 +87,10 @@ const Dashboard = () => {
           sx={{
             width: { xs: LOGO_SIZE.xs, sm: LOGO_SIZE.sm, md: LOGO_SIZE.md },
             height: 'auto',
-            flexShrink: 0
+            flexShrink: 0,
+            opacity: largeLogoOpacity,
+            transform: `scale(${largeLogoScale})`,
+            transition: 'transform 0.2s ease, opacity 0.2s ease'
           }}
         />
       </Box>
