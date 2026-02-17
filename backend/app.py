@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, jsonify, send_file
 from flask_cors import CORS
+from io import BytesIO
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_sqlalchemy import SQLAlchemy
@@ -710,163 +711,141 @@ def run_topics():
         print(f"Error en /admin/run_topics: {e}")
         return jsonify(success=False, error=str(e)), 500
 
+def _apply_message_filters(df, filters):
+    """Aplica los mismos filtros que filter_messages. Devuelve (sorted_df, None) o (None, (response, status))."""
+    date_start_str = filters.get('dateStart')
+    date_end_str = filters.get('dateEnd')
+    filtered_df = df.copy()
+
+    # Búsqueda en texto
+    search_query = (filters.get('search') or filters.get('q') or '').strip()
+    if search_query and 'Message Text' in df.columns:
+        search_applied = False
+        try:
+            ensure_index_synced(df)
+            ids = search_message_ids(search_query)
+            if ids is not None:
+                filtered_df = df[df['Message ID'].isin(ids)].copy()
+                search_applied = True
+        except Exception as e:
+            logger.warning("FTS no disponible (%s); usando búsqueda por texto en pandas", e)
+        if not search_applied:
+            try:
+                q_lower = search_query.lower()
+                text_series = filtered_df['Message Text'].astype(str).fillna('')
+                mask = text_series.str.lower().str.contains(q_lower, na=False, regex=False)
+                if 'Title' in filtered_df.columns:
+                    title_series = filtered_df['Title'].astype(str).fillna('')
+                    mask = mask | title_series.str.lower().str.contains(q_lower, na=False, regex=False)
+                filtered_df = filtered_df[mask].copy()
+            except Exception as e:
+                logger.warning("Error en búsqueda por texto: %s", e)
+
+    # Filtro de Fecha
+    if 'Date Sent' in filtered_df.columns and (date_start_str or date_end_str):
+        try:
+            filtered_df['Date Sent'] = pd.to_datetime(filtered_df['Date Sent'], errors='coerce').dt.tz_localize(None)
+            if date_start_str:
+                date_start = pd.to_datetime(date_start_str).normalize()
+                filtered_df = filtered_df[filtered_df['Date Sent'].dt.normalize() >= date_start]
+            if date_end_str:
+                date_end = pd.to_datetime(date_end_str).normalize() + pd.Timedelta(days=1)
+                filtered_df = filtered_df[filtered_df['Date Sent'].dt.normalize() < date_end]
+        except Exception as e:
+            print(f"Error en filtro de fechas: {str(e)}")
+            pass
+
+    # Filtro de Canal
+    channel = filters.get('channel')
+    if channel and 'Title' in filtered_df.columns:
+        try:
+            if isinstance(channel, list):
+                filtered_df = filtered_df[filtered_df['Title'].isin(channel)]
+            else:
+                filtered_df = filtered_df[filtered_df['Title'] == channel]
+        except Exception as e:
+            return (None, (jsonify(success=False, error=f"Error en filtro de canal: {str(e)}"), 400))
+
+    # Filtro de Topics
+    topic_filter = filters.get('topics') or filters.get('topic')
+    if topic_filter:
+        try:
+            filtered_df = attach_topic_assignments(filtered_df)
+            topic_ids = []
+            if isinstance(topic_filter, str):
+                topic_ids = [t for t in topic_filter.split(',') if t]
+            elif isinstance(topic_filter, list):
+                topic_ids = topic_filter
+            normalized = []
+            for item in topic_ids:
+                if isinstance(item, dict) and 'id' in item:
+                    item = item['id']
+                try:
+                    normalized.append(int(item))
+                except Exception:
+                    continue
+            if normalized and 'topic_id' in filtered_df.columns:
+                filtered_df = filtered_df[filtered_df['topic_id'].isin(normalized)]
+        except Exception as e:
+            return (None, (jsonify(success=False, error=f"Error en filtro de topics: {str(e)}"), 400))
+
+    # Score mín/máx
+    score_min_str = filters.get('scoreMin')
+    if score_min_str and 'Score' in filtered_df.columns:
+        try:
+            score_min = float(score_min_str)
+            filtered_df['Score'] = pd.to_numeric(filtered_df['Score'], errors='coerce')
+            filtered_df = filtered_df[filtered_df['Score'] >= score_min]
+        except Exception as e:
+            return (None, (jsonify(success=False, error=f"Error en filtro de score mínimo: {str(e)}"), 400))
+    score_max_str = filters.get('scoreMax')
+    if score_max_str and 'Score' in filtered_df.columns:
+        try:
+            score_max = float(score_max_str)
+            filtered_df['Score'] = pd.to_numeric(filtered_df['Score'], errors='coerce')
+            filtered_df = filtered_df[filtered_df['Score'] <= score_max]
+        except Exception as e:
+            return (None, (jsonify(success=False, error=f"Error en filtro de score máximo: {str(e)}"), 400))
+
+    # Tipo de media
+    media_type = filters.get('mediaType')
+    if media_type and 'Media Type' in filtered_df.columns:
+        try:
+            types = [media_type] if isinstance(media_type, str) else media_type
+            if types:
+                filtered_df['Media Type'] = filtered_df['Media Type'].astype(str).str.lower()
+                types_lower = [str(t).lower() for t in types]
+                filtered_df = filtered_df[filtered_df['Media Type'].isin(types_lower)]
+        except Exception as e:
+            return (None, (jsonify(success=False, error=f"Error en filtro de tipo de media: {str(e)}"), 400))
+
+    # Ordenar
+    sort_by = filters.get('sortBy', 'score')
+    try:
+        if sort_by == 'views' and 'Views' in filtered_df.columns:
+            filtered_df['Views'] = pd.to_numeric(filtered_df['Views'], errors='coerce')
+            sorted_df = filtered_df.sort_values(by='Views', ascending=False)
+        elif 'Score' in filtered_df.columns:
+            filtered_df['Score'] = pd.to_numeric(filtered_df['Score'], errors='coerce')
+            sorted_df = filtered_df.sort_values(by='Score', ascending=False)
+        else:
+            sorted_df = filtered_df
+    except Exception as e:
+        sorted_df = filtered_df
+    return (sorted_df, None)
+
+
 @app.route('/filter_messages', methods=['POST'])
 def filter_messages():
     """Filtra los mensajes según los criterios especificados."""
     try:
         filters = request.get_json(silent=True) or {}
-        date_start_str = filters.get('dateStart')
-        date_end_str = filters.get('dateEnd')
-
         df = load_data()
         if df.empty:
             return jsonify(success=True, messages=[], total_messages=0)
-
-        # --- Aplicar filtros ---
-        filtered_df = df.copy()
-
-        # Búsqueda en texto: FTS5 si está disponible; si no, fallback a pandas
-        search_query = (filters.get('search') or filters.get('q') or '').strip()
-        if search_query and 'Message Text' in df.columns:
-            search_applied = False
-            try:
-                ensure_index_synced(df)
-                ids = search_message_ids(search_query)
-                if ids is not None:
-                    filtered_df = df[df['Message ID'].isin(ids)].copy()
-                    search_applied = True
-                    logger.info("Filtrado por búsqueda FTS: '%s' -> %d resultados", search_query[:50], len(filtered_df))
-            except Exception as e:
-                logger.warning("FTS no disponible (%s); usando búsqueda por texto en pandas", e)
-            if not search_applied:
-                # Fallback: filtro por subcadena en Message Text y Title (funciona sin índice)
-                try:
-                    q_lower = search_query.lower()
-                    text_series = filtered_df['Message Text'].astype(str).fillna('')
-                    mask = text_series.str.lower().str.contains(q_lower, na=False, regex=False)
-                    if 'Title' in filtered_df.columns:
-                        title_series = filtered_df['Title'].astype(str).fillna('')
-                        mask = mask | title_series.str.lower().str.contains(q_lower, na=False, regex=False)
-                    filtered_df = filtered_df[mask].copy()
-                    logger.info("Filtrado por búsqueda (pandas): '%s' -> %d resultados", search_query[:50], len(filtered_df))
-                except Exception as e:
-                    logger.warning("Error en búsqueda por texto: %s", e)
-
-        # Filtro de Fecha (Rango)
-        if 'Date Sent' in filtered_df.columns and (date_start_str or date_end_str):
-            try:
-                # Asegurarnos de que la columna Date Sent esté en el formato correcto
-                filtered_df['Date Sent'] = pd.to_datetime(filtered_df['Date Sent'], errors='coerce').dt.tz_localize(None)
-                
-                if date_start_str:
-                    # Convertir la fecha de inicio a datetime sin zona horaria
-                    date_start = pd.to_datetime(date_start_str).normalize()
-                    filtered_df = filtered_df[filtered_df['Date Sent'].dt.normalize() >= date_start]
-                
-                if date_end_str:
-                    # Convertir la fecha de fin a datetime sin zona horaria y añadir un día
-                    date_end = pd.to_datetime(date_end_str).normalize() + pd.Timedelta(days=1)
-                    filtered_df = filtered_df[filtered_df['Date Sent'].dt.normalize() < date_end]
-                
-            except Exception as e:
-                print(f"Error en filtro de fechas: {str(e)}")
-                # Filtro opcional: no interrumpir la respuesta
-                pass
-
-        # Filtro de Canal (usando Title)
-        channel = filters.get('channel')
-        if channel and 'Title' in filtered_df.columns:
-            try:
-                if isinstance(channel, list):
-                    filtered_df = filtered_df[filtered_df['Title'].isin(channel)]
-                    print(f"Filtrado por canales: {channel}")
-                else:
-                    filtered_df = filtered_df[filtered_df['Title'] == channel]
-                    print(f"Filtrado por canal: {channel}")
-            except Exception as e:
-                print(f"Error en filtro de canal: {str(e)}")
-                return jsonify(success=False, error=f"Error en filtro de canal: {str(e)}"), 400
-
-        # Filtro de Topics (uno o varios)
-        topic_filter = filters.get('topics') or filters.get('topic')
-        if topic_filter:
-            try:
-                filtered_df = attach_topic_assignments(filtered_df)
-                topic_ids = []
-                if isinstance(topic_filter, str):
-                    topic_ids = [t for t in topic_filter.split(',') if t]
-                elif isinstance(topic_filter, list):
-                    topic_ids = topic_filter
-
-                normalized = []
-                for item in topic_ids:
-                    if isinstance(item, dict) and 'id' in item:
-                        item = item['id']
-                    try:
-                        normalized.append(int(item))
-                    except Exception:
-                        continue
-
-                if normalized and 'topic_id' in filtered_df.columns:
-                    filtered_df = filtered_df[filtered_df['topic_id'].isin(normalized)]
-                    print(f"Filtrado por topics: {normalized}")
-            except Exception as e:
-                print(f"Error en filtro de topics: {str(e)}")
-                return jsonify(success=False, error=f"Error en filtro de topics: {str(e)}"), 400
-
-        # Filtro de Puntuación (Score) Mínima
-        score_min_str = filters.get('scoreMin')
-        if score_min_str and 'Score' in filtered_df.columns:
-            try:
-                score_min = float(score_min_str)
-                filtered_df['Score'] = pd.to_numeric(filtered_df['Score'], errors='coerce')
-                filtered_df = filtered_df[filtered_df['Score'] >= score_min]
-                print(f"Filtrado por score mínimo: {score_min}")
-            except Exception as e:
-                print(f"Error en filtro de score mínimo: {str(e)}")
-                return jsonify(success=False, error=f"Error en filtro de score mínimo: {str(e)}"), 400
-
-        # Filtro de Puntuación (Score) Máxima
-        score_max_str = filters.get('scoreMax')
-        if score_max_str and 'Score' in filtered_df.columns:
-            try:
-                score_max = float(score_max_str)
-                filtered_df['Score'] = pd.to_numeric(filtered_df['Score'], errors='coerce')
-                filtered_df = filtered_df[filtered_df['Score'] <= score_max]
-                print(f"Filtrado por score máximo: {score_max}")
-            except Exception as e:
-                print(f"Error en filtro de score máximo: {str(e)}")
-                return jsonify(success=False, error=f"Error en filtro de score máximo: {str(e)}"), 400
-
-        # Filtro de Tipo de Media (uno o varios)
-        media_type = filters.get('mediaType')
-        if media_type and 'Media Type' in filtered_df.columns:
-            try:
-                types = [media_type] if isinstance(media_type, str) else media_type
-                if types:
-                    filtered_df['Media Type'] = filtered_df['Media Type'].astype(str).str.lower()
-                    types_lower = [str(t).lower() for t in types]
-                    filtered_df = filtered_df[filtered_df['Media Type'].isin(types_lower)]
-                    print(f"Filtrado por tipo de media: {types}")
-            except Exception as e:
-                print(f"Error en filtro de tipo de media: {str(e)}")
-                return jsonify(success=False, error=f"Error en filtro de tipo de media: {str(e)}"), 400
-
-        # Ordenar y preparar resultados
-        sort_by = filters.get('sortBy', 'score')
-        try:
-            if sort_by == 'views' and 'Views' in filtered_df.columns:
-                filtered_df['Views'] = pd.to_numeric(filtered_df['Views'], errors='coerce')
-                sorted_df = filtered_df.sort_values(by='Views', ascending=False)
-            elif 'Score' in filtered_df.columns:
-                filtered_df['Score'] = pd.to_numeric(filtered_df['Score'], errors='coerce')
-                sorted_df = filtered_df.sort_values(by='Score', ascending=False)
-            else:
-                sorted_df = filtered_df
-            print(f"Ordenado por: {sort_by}")
-        except Exception as e:
-            print(f"Error al ordenar los datos: {e}")
-            sorted_df = filtered_df
+        sorted_df, err = _apply_message_filters(df, filters)
+        if err is not None:
+            return err
 
         # Paginación
         try:
@@ -947,6 +926,42 @@ def filter_messages():
     except Exception as e:
         print(f"Error crítico en /filter_messages: {e}")
         return jsonify(success=False, error=f"Error al procesar los filtros: {str(e)}"), 500
+
+
+@app.route('/download_filtered_messages', methods=['POST'])
+def download_filtered_messages():
+    """Devuelve los mensajes filtrados (mismos criterios que filter_messages) como CSV."""
+    try:
+        filters = request.get_json(silent=True) or {}
+        df = load_data()
+        if df.empty:
+            return jsonify(success=False, error="No hay datos"), 404
+        sorted_df, err = _apply_message_filters(df, filters)
+        if err is not None:
+            return err
+        try:
+            sorted_df = attach_topic_assignments(sorted_df)
+            if 'topic_id' in sorted_df.columns:
+                sorted_df['topic_id'] = pd.to_numeric(sorted_df['topic_id'], errors='coerce').astype('Int64')
+                topic_labels = {item['id']: item['label'] for item in load_topics_meta()}
+                sorted_df['topic_title'] = sorted_df['topic_id'].map(topic_labels)
+        except Exception as e:
+            logger.warning("Error al adjuntar topics para CSV: %s", e)
+        export_columns = [
+            'Message ID', 'Message Text', 'Title', 'Date Sent', 'Views', 'Score', 'Label', 'URL',
+            'Media Type', 'topic_id', 'topic_title'
+        ]
+        cols = [c for c in export_columns if c in sorted_df.columns]
+        export_df = sorted_df[cols] if cols else sorted_df
+        buf = BytesIO()
+        export_df.to_csv(buf, index=False, encoding='utf-8-sig')
+        buf.seek(0)
+        filename = f'mensajes_filtrados_{datetime.now().strftime("%Y%m%d_%H%M")}.csv'
+        return send_file(buf, mimetype='text/csv', as_attachment=True, download_name=filename)
+    except Exception as e:
+        logger.exception("Error en download_filtered_messages")
+        return jsonify(success=False, error=str(e)), 500
+
 
 # Nueva ruta para renderizar el parcial HTML
 @app.route('/render_partial', methods=['POST'])

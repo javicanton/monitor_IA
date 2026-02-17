@@ -9,18 +9,28 @@ import {
   ResponsiveContainer,
   Brush,
 } from 'recharts';
-import { Box, Paper, Typography, CircularProgress, Alert } from '@mui/material';
+import { Box, Paper, Typography, CircularProgress, Alert, TextField, Button } from '@mui/material';
 import { messagesAPI } from '../utils/api';
+
+function formatDateLabel(ymd) {
+  if (!ymd) return '';
+  const d = new Date(ymd + 'T12:00:00');
+  return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' });
+}
 
 /**
  * Gráfico de evolución del número de mensajes por día.
- * Permite seleccionar un rango de fechas (arrastrando en el gráfico o con el brush)
- * para usarlo como filtro de fechas (onDateRangeChange).
+ * Permite seleccionar un rango (brush) o una fecha concreta (campo "Ver solo esta fecha").
  */
-const MessagesOverTimeChart = ({ onDateRangeChange }) => {
+const MessagesOverTimeChart = ({ onDateRangeChange, selectedDateStart, selectedDateEnd }) => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [singleDateInput, setSingleDateInput] = useState('');
+  useEffect(() => {
+    if (!selectedDateStart && !selectedDateEnd) setSingleDateInput('');
+    else if (selectedDateStart && selectedDateStart === selectedDateEnd) setSingleDateInput(selectedDateStart);
+  }, [selectedDateStart, selectedDateEnd]);
 
   useEffect(() => {
     let cancelled = false;
@@ -103,11 +113,49 @@ const MessagesOverTimeChart = ({ onDateRangeChange }) => {
     );
   }
 
+  const start = selectedDateStart || '';
+  const end = selectedDateEnd || '';
+  const hasRange = start && end;
+  let countInRange = 0;
+  if (hasRange && data.length) {
+    const inRange = data.filter((d) => d.date >= start && d.date <= end);
+    countInRange = inRange.reduce((acc, d) => acc + (d.count || 0), 0);
+  }
+  const titleText = hasRange
+    ? `${countInRange.toLocaleString('es-ES')} mensajes disponibles publicados entre ${formatDateLabel(start)} y ${formatDateLabel(end)}`
+    : 'Evolución de mensajes — selecciona un rango en el gráfico o elige una fecha concreta';
+
+  const handleSingleDateChange = (e) => {
+    const v = e.target.value;
+    setSingleDateInput(v);
+    if (v) onDateRangeChange(v, v);
+  };
+  const handleClearSingleDate = () => {
+    setSingleDateInput('');
+    onDateRangeChange('', '');
+  };
+
   return (
     <Paper sx={{ p: 2, mb: 3 }} elevation={0} variant="outlined">
       <Typography variant="subtitle1" color="textSecondary" gutterBottom>
-        Evolución de mensajes — selecciona un rango para filtrar por fechas
+        {titleText}
       </Typography>
+      <Box display="flex" flexWrap="wrap" alignItems="center" gap={2} sx={{ mb: 2 }}>
+        <TextField
+          size="small"
+          label="Ver solo esta fecha"
+          type="date"
+          value={singleDateInput}
+          onChange={handleSingleDateChange}
+          InputLabelProps={{ shrink: true }}
+          sx={{ width: 200 }}
+        />
+        {(singleDateInput || hasRange) && (
+          <Button size="small" onClick={handleClearSingleDate}>
+            Limpiar filtro de fecha
+          </Button>
+        )}
+      </Box>
       <Box sx={{ width: '100%', minWidth: 0, height: 280, minHeight: 280 }}>
         <ResponsiveContainer width="100%" height={280} minWidth={0} minHeight={280}>
           <AreaChart

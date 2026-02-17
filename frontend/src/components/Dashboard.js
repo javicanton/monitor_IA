@@ -152,7 +152,11 @@ const Dashboard = () => {
 
           {/* Gráfico de evolución de mensajes (filtro de fechas por rango) */}
           <ChartErrorBoundary>
-            <MessagesOverTimeChart onDateRangeChange={handleDateRangeFromChart} />
+            <MessagesOverTimeChart
+              onDateRangeChange={handleDateRangeFromChart}
+              selectedDateStart={filters.dateStart}
+              selectedDateEnd={filters.dateEnd}
+            />
           </ChartErrorBoundary>
 
           {/* Barra de búsqueda en mensajes */}

@@ -8,7 +8,7 @@ import {
   Alert,
   Snackbar 
 } from '@mui/material';
-import { Refresh as RefreshIcon } from '@mui/icons-material';
+import { Refresh as RefreshIcon, Download as DownloadIcon } from '@mui/icons-material';
 import MessageCard from './MessageCard';
 import { messagesAPI } from '../utils/api';
 
@@ -154,6 +154,39 @@ const MessageList = ({ filters = {} }) => {
     }
   };
 
+  const handleDownloadMessages = async () => {
+    try {
+      const response = await messagesAPI.downloadFilteredCSV(filters);
+      const blob = new Blob([response.data], { type: 'text/csv;charset=utf-8;' });
+      const disposition = response.headers['content-disposition'];
+      let filename = 'mensajes_filtrados.csv';
+      if (disposition && disposition.includes('filename=')) {
+        const match = disposition.match(/filename[*]?=['"]?(?:UTF-8'')?([^;\n"']+)['"]?/i);
+        if (match) filename = match[1].trim();
+      }
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      setSnackbar({
+        open: true,
+        message: 'Descarga iniciada',
+        severity: 'success'
+      });
+    } catch (err) {
+      console.error('Error al descargar:', err);
+      setSnackbar({
+        open: true,
+        message: `Error al descargar: ${err.message}`,
+        severity: 'error'
+      });
+    }
+  };
+
   const handleCloseSnackbar = () => {
     setSnackbar({ ...snackbar, open: false });
   };
@@ -203,7 +236,14 @@ const MessageList = ({ filters = {} }) => {
           >
             Actualizar
           </Button>
-          
+          <Button
+            variant="outlined"
+            onClick={handleDownloadMessages}
+            startIcon={<DownloadIcon />}
+            disabled={loading}
+          >
+            Descargar mensajes
+          </Button>
           <Button
             variant="contained"
             color="secondary"

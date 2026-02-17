@@ -98,6 +98,19 @@ export const messagesAPI = {
       throw error;
     }
   },
+
+  // Descargar mensajes filtrados como CSV
+  downloadFilteredCSV: async (filters = {}) => {
+    try {
+      const response = await api.post('/download_filtered_messages', filters, {
+        responseType: 'blob',
+      });
+      return response;
+    } catch (error) {
+      console.error('Error al descargar mensajes:', error);
+      throw error;
+    }
+  },
 };
 
 // Funciones de API para canales
