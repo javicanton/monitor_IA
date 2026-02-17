@@ -364,16 +364,26 @@ def load_more(offset=0):
         # Aplicar los mismos filtros que en /filter_messages
         filtered_df = df.copy()
 
-        # Búsqueda full-text (FTS5)
+        # Búsqueda en texto (FTS5 o fallback pandas)
         search_query = (filters.get('search') or filters.get('q') or '').strip()
-        if search_query:
+        if search_query and 'Message Text' in df.columns:
+            search_applied = False
             try:
                 ensure_index_synced(df)
                 ids = search_message_ids(search_query)
                 if ids is not None:
                     filtered_df = df[df['Message ID'].isin(ids)].copy()
+                    search_applied = True
             except Exception:
                 pass
+            if not search_applied:
+                q_lower = search_query.lower()
+                text_series = filtered_df['Message Text'].astype(str).fillna('')
+                mask = text_series.str.lower().str.contains(q_lower, na=False, regex=False)
+                if 'Title' in filtered_df.columns:
+                    title_series = filtered_df['Title'].astype(str).fillna('')
+                    mask = mask | title_series.str.lower().str.contains(q_lower, na=False, regex=False)
+                filtered_df = filtered_df[mask].copy()
 
         # Filtro de Fecha (Rango)
         if 'Date Sent' in filtered_df.columns and (date_start_str or date_end_str):
@@ -685,18 +695,32 @@ def filter_messages():
         # --- Aplicar filtros ---
         filtered_df = df.copy()
 
-        # Búsqueda full-text (índice FTS5): se aplica primero para escalar con datasets grandes
+        # Búsqueda en texto: FTS5 si está disponible; si no, fallback a pandas
         search_query = (filters.get('search') or filters.get('q') or '').strip()
-        if search_query:
+        if search_query and 'Message Text' in df.columns:
+            search_applied = False
             try:
                 ensure_index_synced(df)
                 ids = search_message_ids(search_query)
                 if ids is not None:
                     filtered_df = df[df['Message ID'].isin(ids)].copy()
+                    search_applied = True
                     logger.info("Filtrado por búsqueda FTS: '%s' -> %d resultados", search_query[:50], len(filtered_df))
             except Exception as e:
-                logger.exception("Error en búsqueda FTS; se ignoran filtro de búsqueda y se continúa")
-                # No devolver 400: permitir que el resto de filtros funcione aunque falle FTS
+                logger.warning("FTS no disponible (%s); usando búsqueda por texto en pandas", e)
+            if not search_applied:
+                # Fallback: filtro por subcadena en Message Text y Title (funciona sin índice)
+                try:
+                    q_lower = search_query.lower()
+                    text_series = filtered_df['Message Text'].astype(str).fillna('')
+                    mask = text_series.str.lower().str.contains(q_lower, na=False, regex=False)
+                    if 'Title' in filtered_df.columns:
+                        title_series = filtered_df['Title'].astype(str).fillna('')
+                        mask = mask | title_series.str.lower().str.contains(q_lower, na=False, regex=False)
+                    filtered_df = filtered_df[mask].copy()
+                    logger.info("Filtrado por búsqueda (pandas): '%s' -> %d resultados", search_query[:50], len(filtered_df))
+                except Exception as e:
+                    logger.warning("Error en búsqueda por texto: %s", e)
 
         # Filtro de Fecha (Rango)
         if 'Date Sent' in filtered_df.columns and (date_start_str or date_end_str):
