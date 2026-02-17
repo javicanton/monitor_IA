@@ -800,10 +800,6 @@ async def main(args):
                         # Si la columna no tiene zona horaria o ya está en el formato correcto
                         df[col] = pd.to_datetime(df[col])
             
-            # Guardar en Excel
-            with pd.ExcelWriter('telegram_data.xlsx', engine='openpyxl') as writer:
-                df.to_excel(writer, sheet_name='Messages', index=False)
-            print("17. Datos guardados en telegram_data.xlsx")
             
             if args.upload_s3:
                 print("18. Subiendo dataset a S3...")
