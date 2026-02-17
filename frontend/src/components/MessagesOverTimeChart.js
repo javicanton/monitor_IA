@@ -175,6 +175,23 @@ const MessagesOverTimeChart = ({ filters = {}, onDateRangeChange, selectedDateSt
     }
   };
 
+  const renderClickableDot = (props) => {
+    const { cx, cy, payload } = props;
+    if (cx == null || cy == null) return null;
+    return (
+      <g
+        onClick={() => handleDayClick(payload)}
+        style={{ cursor: 'pointer' }}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => e.key === 'Enter' && handleDayClick(payload)}
+        aria-label={`Seleccionar día ${payload?.date || ''}`}
+      >
+        <circle cx={cx} cy={cy} r={6} fill="#1976d2" fillOpacity={0.9} />
+      </g>
+    );
+  };
+
   return (
     <Paper sx={{ p: 2, mb: 3 }} elevation={0} variant="outlined">
       <Typography variant="subtitle1" color="textSecondary" gutterBottom>
@@ -241,8 +258,7 @@ const MessagesOverTimeChart = ({ filters = {}, onDateRangeChange, selectedDateSt
               strokeWidth={2}
               fill="url(#messagesOverTimeGradient)"
               isAnimationActive={true}
-              activeDot={{ cursor: 'pointer', r: 5 }}
-              onClick={handleDayClick}
+              dot={renderClickableDot}
             />
             <Brush
               dataKey="date"
