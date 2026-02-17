@@ -43,10 +43,14 @@ api.interceptors.response.use(
 
 // Funciones de API para mensajes
 export const messagesAPI = {
-  // Evolución de mensajes por día (para gráfico y filtro de fechas)
-  getMessagesOverTime: async () => {
+  // Evolución de mensajes por día (respeta filtros: canal, topics, mediaType, etc.; sin fecha)
+  getMessagesOverTime: async (filters = {}) => {
     try {
-      const response = await api.get('/messages_over_time');
+      const { dateStart, dateEnd, ...rest } = filters || {};
+      const body = Object.keys(rest).length ? rest : {};
+      const response = Object.keys(body).length
+        ? await api.post('/messages_over_time', body)
+        : await api.get('/messages_over_time');
       return response.data;
     } catch (error) {
       console.error('Error al obtener evolución de mensajes:', error);

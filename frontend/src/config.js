@@ -15,7 +15,7 @@ const config = {
   
   // Configuración de la aplicación
   APP_NAME: 'Telegram Analytics App',
-  APP_VERSION: '0.25 (en desarrollo)',
+  APP_VERSION: '0.33 (en desarrollo)',
   
   // Configuración de paginación
   MESSAGES_PER_PAGE: 24,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   AreaChart,
   Area,
@@ -18,18 +18,28 @@ function formatDateLabel(ymd) {
   return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' });
 }
 
+/** Filtros para la serie (sin fecha: el backend ignora fecha en /messages_over_time). */
+function filtersForSeries(filters) {
+  if (!filters || typeof filters !== 'object') return {};
+  const { dateStart, dateEnd, ...rest } = filters;
+  return rest;
+}
+
 /**
  * Gráfico de evolución del número de mensajes por día.
- * Permite seleccionar un rango (brush) o una fecha concreta (campo "Ver solo esta fecha").
+ * Respeta filtros del menú (canal, temas, tipo de contenido). Permite rango por brush, dos campos fecha inicio/fin o clic en un día.
  */
-const MessagesOverTimeChart = ({ onDateRangeChange, selectedDateStart, selectedDateEnd }) => {
+const MessagesOverTimeChart = ({ filters = {}, onDateRangeChange, selectedDateStart, selectedDateEnd }) => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [singleDateInput, setSingleDateInput] = useState('');
+  const [dateStartInput, setDateStartInput] = useState('');
+  const [dateEndInput, setDateEndInput] = useState('');
+  const seriesKey = useMemo(() => JSON.stringify(filtersForSeries(filters)), [filters]);
+
   useEffect(() => {
-    if (!selectedDateStart && !selectedDateEnd) setSingleDateInput('');
-    else if (selectedDateStart && selectedDateStart === selectedDateEnd) setSingleDateInput(selectedDateStart);
+    setDateStartInput(selectedDateStart || '');
+    setDateEndInput(selectedDateEnd || '');
   }, [selectedDateStart, selectedDateEnd]);
 
   useEffect(() => {
@@ -38,7 +48,7 @@ const MessagesOverTimeChart = ({ onDateRangeChange, selectedDateStart, selectedD
       try {
         setLoading(true);
         setError(null);
-        const res = await messagesAPI.getMessagesOverTime();
+        const res = await messagesAPI.getMessagesOverTime(filters);
         if (!cancelled && res.success && Array.isArray(res.data)) {
           setData(res.data);
         }
@@ -50,7 +60,7 @@ const MessagesOverTimeChart = ({ onDateRangeChange, selectedDateStart, selectedD
     };
     fetchData();
     return () => { cancelled = true; };
-  }, []);
+  }, [seriesKey]);
 
   const handleBrushChange = (rangeOrStart, endIndexArg) => {
     if (!data.length || typeof onDateRangeChange !== 'function') return;
@@ -122,17 +132,47 @@ const MessagesOverTimeChart = ({ onDateRangeChange, selectedDateStart, selectedD
     countInRange = inRange.reduce((acc, d) => acc + (d.count || 0), 0);
   }
   const titleText = hasRange
-    ? `${countInRange.toLocaleString('es-ES')} mensajes disponibles publicados entre ${formatDateLabel(start)} y ${formatDateLabel(end)}`
-    : 'Evolución de mensajes — selecciona un rango en el gráfico o elige una fecha concreta';
+    ? `${countInRange.toLocaleString('es-ES')} mensajes entre ${formatDateLabel(start)} y ${formatDateLabel(end)}`
+    : 'Evolución de mensajes — selecciona un rango en el gráfico o indica fecha inicio y fin';
 
-  const handleSingleDateChange = (e) => {
-    const v = e.target.value;
-    setSingleDateInput(v);
-    if (v) onDateRangeChange(v, v);
+  const applyDateRange = (start, end) => {
+    if (!start && !end) {
+      onDateRangeChange('', '');
+      return;
+    }
+    if (start && end && start > end) {
+      const tmp = start;
+      start = end;
+      end = tmp;
+    }
+    onDateRangeChange(start || '', end || '');
   };
-  const handleClearSingleDate = () => {
-    setSingleDateInput('');
+  const handleDateStartChange = (e) => {
+    const v = e.target.value;
+    setDateStartInput(v);
+    const endVal = dateEndInput || v;
+    if (v) applyDateRange(v, endVal);
+    else if (dateEndInput) applyDateRange('', dateEndInput);
+    else onDateRangeChange('', '');
+  };
+  const handleDateEndChange = (e) => {
+    const v = e.target.value;
+    setDateEndInput(v);
+    const startVal = dateStartInput || v;
+    if (v) applyDateRange(startVal, v);
+    else if (dateStartInput) applyDateRange(dateStartInput, '');
+    else onDateRangeChange('', '');
+  };
+  const handleClearDateRange = () => {
+    setDateStartInput('');
+    setDateEndInput('');
     onDateRangeChange('', '');
+  };
+
+  const handleDayClick = (point) => {
+    if (point?.date && typeof onDateRangeChange === 'function') {
+      onDateRangeChange(point.date, point.date);
+    }
   };
 
   return (
@@ -143,15 +183,24 @@ const MessagesOverTimeChart = ({ onDateRangeChange, selectedDateStart, selectedD
       <Box display="flex" flexWrap="wrap" alignItems="center" gap={2} sx={{ mb: 2 }}>
         <TextField
           size="small"
-          label="Ver solo esta fecha"
+          label="Fecha inicio"
           type="date"
-          value={singleDateInput}
-          onChange={handleSingleDateChange}
+          value={dateStartInput}
+          onChange={handleDateStartChange}
           InputLabelProps={{ shrink: true }}
-          sx={{ width: 200 }}
+          sx={{ width: 180 }}
         />
-        {(singleDateInput || hasRange) && (
-          <Button size="small" onClick={handleClearSingleDate}>
+        <TextField
+          size="small"
+          label="Fecha fin"
+          type="date"
+          value={dateEndInput}
+          onChange={handleDateEndChange}
+          InputLabelProps={{ shrink: true }}
+          sx={{ width: 180 }}
+        />
+        {(dateStartInput || dateEndInput || hasRange) && (
+          <Button size="small" onClick={handleClearDateRange}>
             Limpiar filtro de fecha
           </Button>
         )}
@@ -191,6 +240,9 @@ const MessagesOverTimeChart = ({ onDateRangeChange, selectedDateStart, selectedD
               stroke="#1976d2"
               strokeWidth={2}
               fill="url(#messagesOverTimeGradient)"
+              isAnimationActive={true}
+              activeDot={{ cursor: 'pointer', r: 5 }}
+              onClick={handleDayClick}
             />
             <Brush
               dataKey="date"

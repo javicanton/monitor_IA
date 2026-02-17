@@ -956,7 +956,7 @@ def download_filtered_messages():
         buf = BytesIO()
         export_df.to_csv(buf, index=False, encoding='utf-8-sig')
         buf.seek(0)
-        filename = f'mensajes_filtrados_{datetime.now().strftime("%Y%m%d_%H%M")}.csv'
+        filename = f'filtered_messages_{datetime.now().strftime("%Y%m%d_%H%M")}.csv'
         return send_file(buf, mimetype='text/csv', as_attachment=True, download_name=filename)
     except Exception as e:
         logger.exception("Error en download_filtered_messages")
@@ -1025,13 +1025,24 @@ def login():
     access_token = create_access_token(identity=username)
     return jsonify({'access_token': access_token}), 200
 
-@app.route('/messages_over_time', methods=['GET'])
+@app.route('/messages_over_time', methods=['GET', 'POST'])
 def messages_over_time():
-    """Devuelve el número de mensajes por día para el gráfico de evolución (filtro por fechas)."""
+    """Devuelve el número de mensajes por día para el gráfico. Acepta filtros (canal, topics, mediaType, etc.) sin fecha para mostrar evolución del subconjunto."""
     try:
         df = load_data()
         if df.empty:
             return jsonify(success=True, data=[])
+
+        # Aplicar filtros del menú lateral (sin fecha: queremos serie temporal completa del subconjunto)
+        filters = request.get_json(silent=True) if request.method == 'POST' else {}
+        if filters:
+            filters_no_date = {k: v for k, v in filters.items() if k not in ('dateStart', 'dateEnd')}
+            sorted_df, err = _apply_message_filters(df, {**filters_no_date, 'dateStart': '', 'dateEnd': ''})
+            if err is not None:
+                return err
+            df = sorted_df
+            if df.empty:
+                return jsonify(success=True, data=[])
 
         date_col = 'Date Sent' if 'Date Sent' in df.columns else ('Date' if 'Date' in df.columns else None)
         if not date_col:
