@@ -7,7 +7,7 @@ const API_BASE_URL = config.API_BASE_URL;
 // Crear instancia de axios con configuración base
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 30000, // 30 segundos
+  timeout: 90000, // 90 segundos (carga de mensajes con filtros puede ser pesada)
   headers: {
     'Content-Type': 'application/json',
   },

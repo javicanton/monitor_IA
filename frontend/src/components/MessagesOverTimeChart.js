@@ -58,8 +58,18 @@ const MessagesOverTimeChart = ({ onDateRangeChange }) => {
       return;
     }
     if (startIndex == null || endIndex == null) return;
-    const start = data[Math.min(Math.max(0, startIndex), data.length - 1)]?.date;
-    const end = data[Math.min(Math.max(0, endIndex), data.length - 1)]?.date;
+    const lastIdx = data.length - 1;
+    const isFullRange = startIndex <= 0 && endIndex >= lastIdx;
+    if (isFullRange) {
+      try {
+        onDateRangeChange('', '');
+      } catch (e) {
+        console.error('MessagesOverTimeChart onDateRangeChange:', e);
+      }
+      return;
+    }
+    const start = data[Math.min(Math.max(0, startIndex), lastIdx)]?.date;
+    const end = data[Math.min(Math.max(0, endIndex), lastIdx)]?.date;
     if (start && end) {
       try {
         onDateRangeChange(start, end);
