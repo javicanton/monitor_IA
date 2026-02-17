@@ -232,7 +232,7 @@ const Dashboard = () => {
           <FilterBar 
             onFilterChange={handleFilterChange}
             onChannelsLoad={handleChannelsLoad}
-            appliedFilters={filters}
+            currentFilters={filters}
           />
         </Grid>
       </Grid>

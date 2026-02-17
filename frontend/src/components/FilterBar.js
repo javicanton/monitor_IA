@@ -44,7 +44,7 @@ function fromYYYYMMDD(str) {
   return isNaN(d.getTime()) ? null : d;
 }
 
-function FilterBar({ onFilterChange, onChannelsLoad, appliedFilters = {} }) {
+function FilterBar({ onFilterChange, onChannelsLoad, currentFilters = {} }) {
   const [channels, setChannels] = useState([]);
   const [loading, setLoading] = useState(false);
   const [topics, setTopics] = useState([]);
@@ -149,7 +149,7 @@ function FilterBar({ onFilterChange, onChannelsLoad, appliedFilters = {} }) {
     }
 
     // Mantener la búsqueda que viene de la barra principal (fuera de este panel)
-    const merged = { ...filters, search: appliedFilters.search ?? '' };
+    const merged = { ...filters, search: currentFilters.search ?? '' };
     onFilterChange(merged);
     setAppliedFilters(merged);
     setHasPendingChanges(false);
@@ -456,7 +456,7 @@ function FilterBar({ onFilterChange, onChannelsLoad, appliedFilters = {} }) {
         <Box mt={2} p={2} bgcolor="grey.50" borderRadius={1}>
           <Typography variant="body2" color="textSecondary">
             <strong>Filtros activos:</strong>
-            {appliedFilters.search && ` Búsqueda: "${appliedFilters.search}"`}
+            {currentFilters.search && ` Búsqueda: "${currentFilters.search}"`}
             {filters.channel.length > 0 && ` Canales: ${filters.channel.join(', ')}`}
             {filters.topics.length > 0 && ` Temas: ${selectedTopicLabels.join(', ')}`}
             {filters.sortBy !== 'score' && ` Orden: ${filters.sortBy}`}
