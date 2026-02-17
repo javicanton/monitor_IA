@@ -44,12 +44,13 @@ function fromYYYYMMDD(str) {
   return isNaN(d.getTime()) ? null : d;
 }
 
-function FilterBar({ onFilterChange, onChannelsLoad }) {
+function FilterBar({ onFilterChange, onChannelsLoad, appliedFilters = {} }) {
   const [channels, setChannels] = useState([]);
   const [loading, setLoading] = useState(false);
   const [topics, setTopics] = useState([]);
   const [loadingTopics, setLoadingTopics] = useState(false);
   const [filters, setFilters] = useState({
+    search: '',
     dateStart: '',
     dateEnd: '',
     channel: [],
@@ -61,6 +62,7 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
   });
   const [hasPendingChanges, setHasPendingChanges] = useState(false);
   const [appliedFilters, setAppliedFilters] = useState({
+    search: '',
     dateStart: '',
     dateEnd: '',
     channel: [],
@@ -146,13 +148,16 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
       return;
     }
 
-    onFilterChange(filters);
-    setAppliedFilters(filters);
+    // Mantener la búsqueda que viene de la barra principal (fuera de este panel)
+    const merged = { ...filters, search: appliedFilters.search ?? '' };
+    onFilterChange(merged);
+    setAppliedFilters(merged);
     setHasPendingChanges(false);
   };
 
   const handleReset = () => {
     const resetFilters = {
+      search: '',
       dateStart: '',
       dateEnd: '',
       channel: [],
@@ -447,10 +452,11 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
       </Grid>
 
       {/* Información sobre filtros activos */}
-          {(Object.values(filters).some(value => value !== '' && value !== 'score') || hasPendingChanges) && (
+          {(Object.values(filters).some(value => (Array.isArray(value) ? value.length > 0 : value !== '' && value !== 'score')) || hasPendingChanges) && (
         <Box mt={2} p={2} bgcolor="grey.50" borderRadius={1}>
           <Typography variant="body2" color="textSecondary">
             <strong>Filtros activos:</strong>
+            {appliedFilters.search && ` Búsqueda: "${appliedFilters.search}"`}
             {filters.channel.length > 0 && ` Canales: ${filters.channel.join(', ')}`}
             {filters.topics.length > 0 && ` Temas: ${selectedTopicLabels.join(', ')}`}
             {filters.sortBy !== 'score' && ` Orden: ${filters.sortBy}`}

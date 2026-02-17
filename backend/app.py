@@ -16,6 +16,7 @@ from botocore.exceptions import ClientError
 import logging
 from threading import Thread
 from topic_processor import process_topics
+from search_index import ensure_index_synced, search_message_ids
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -350,7 +351,8 @@ def load_more(offset=0):
                 'scoreMin': request.args.get('scoreMin'),
                 'scoreMax': request.args.get('scoreMax'),
                 'mediaType': request.args.get('mediaType'),
-                'sortBy': request.args.get('sortBy', 'score')
+                'sortBy': request.args.get('sortBy', 'score'),
+                'search': request.args.get('search') or request.args.get('q')
             }
             date_start_str = filters.get('dateStart')
             date_end_str = filters.get('dateEnd')
@@ -361,6 +363,17 @@ def load_more(offset=0):
 
         # Aplicar los mismos filtros que en /filter_messages
         filtered_df = df.copy()
+
+        # Búsqueda full-text (FTS5)
+        search_query = (filters.get('search') or filters.get('q') or '').strip()
+        if search_query:
+            try:
+                ensure_index_synced(df)
+                ids = search_message_ids(search_query)
+                if ids is not None:
+                    filtered_df = df[df['Message ID'].isin(ids)].copy()
+            except Exception:
+                pass
 
         # Filtro de Fecha (Rango)
         if 'Date Sent' in filtered_df.columns and (date_start_str or date_end_str):
@@ -671,6 +684,19 @@ def filter_messages():
 
         # --- Aplicar filtros ---
         filtered_df = df.copy()
+
+        # Búsqueda full-text (índice FTS5): se aplica primero para escalar con datasets grandes
+        search_query = (filters.get('search') or filters.get('q') or '').strip()
+        if search_query:
+            try:
+                ensure_index_synced(df)
+                ids = search_message_ids(search_query)
+                if ids is not None:
+                    filtered_df = df[df['Message ID'].isin(ids)].copy()
+                    logger.info("Filtrado por búsqueda FTS: '%s' -> %d resultados", search_query[:50], len(filtered_df))
+            except Exception as e:
+                logger.exception("Error en búsqueda FTS")
+                return jsonify(success=False, error=f"Error en búsqueda: {str(e)}"), 400
 
         # Filtro de Fecha (Rango)
         if 'Date Sent' in filtered_df.columns and (date_start_str or date_end_str):

@@ -6,7 +6,11 @@ import {
   Paper,
   Chip,
   Grid,
+  TextField,
+  Button,
+  InputAdornment,
 } from '@mui/material';
+import { Search as SearchIcon } from '@mui/icons-material';
 import FilterBar from './FilterBar';
 import MessageList from './MessageList';
 import ScoreExplanation from './ScoreExplanation';
@@ -18,6 +22,7 @@ const LOGO_SIZE_SMALL = 88;
 
 const Dashboard = () => {
   const [filters, setFilters] = useState({});
+  const [searchInput, setSearchInput] = useState('');
   const [channels, setChannels] = useState([]);
   const [scrollProgress, setScrollProgress] = useState(0);
   const logoRef = useRef(null);
@@ -61,6 +66,11 @@ const Dashboard = () => {
 
   const handleFilterChange = (newFilters) => {
     setFilters(newFilters);
+    setSearchInput(newFilters.search ?? '');
+  };
+
+  const handleSearchApply = () => {
+    setFilters((prev) => ({ ...prev, search: searchInput.trim() }));
   };
 
   const handleChannelsLoad = (loadedChannels) => {
@@ -168,6 +178,37 @@ const Dashboard = () => {
             </Paper>
           )}
 
+          {/* Barra de búsqueda en mensajes (entre canales y lista) */}
+          <Paper sx={{ p: 2, mb: 3 }} elevation={0} variant="outlined">
+            <Box display="flex" gap={2} alignItems="center" flexWrap="wrap">
+              <TextField
+                fullWidth
+                size="small"
+                label="Buscar en mensajes"
+                placeholder="Escribe palabras para buscar en el texto y título..."
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSearchApply()}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon color="action" />
+                    </InputAdornment>
+                  )
+                }}
+                sx={{ flex: { xs: '1 1 100%', sm: '1 1 auto' }, minWidth: 200 }}
+              />
+              <Button
+                variant="contained"
+                onClick={handleSearchApply}
+                startIcon={<SearchIcon />}
+                sx={{ flexShrink: 0 }}
+              >
+                Buscar
+              </Button>
+            </Box>
+          </Paper>
+
           {/* Lista de mensajes */}
           <MessageList 
             filters={filters}
@@ -191,6 +232,7 @@ const Dashboard = () => {
           <FilterBar 
             onFilterChange={handleFilterChange}
             onChannelsLoad={handleChannelsLoad}
+            appliedFilters={filters}
           />
         </Grid>
       </Grid>
