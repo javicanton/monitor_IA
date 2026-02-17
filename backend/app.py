@@ -695,8 +695,8 @@ def filter_messages():
                     filtered_df = df[df['Message ID'].isin(ids)].copy()
                     logger.info("Filtrado por búsqueda FTS: '%s' -> %d resultados", search_query[:50], len(filtered_df))
             except Exception as e:
-                logger.exception("Error en búsqueda FTS")
-                return jsonify(success=False, error=f"Error en búsqueda: {str(e)}"), 400
+                logger.exception("Error en búsqueda FTS; se ignoran filtro de búsqueda y se continúa")
+                # No devolver 400: permitir que el resto de filtros funcione aunque falle FTS
 
         # Filtro de Fecha (Rango)
         if 'Date Sent' in filtered_df.columns and (date_start_str or date_end_str):

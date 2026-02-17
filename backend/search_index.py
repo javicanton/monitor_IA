@@ -81,17 +81,28 @@ def rebuild_index_from_dataframe(df) -> int:
         df['Message Text'] = df['Message Text'].astype(str).fillna('')
         df['Title'] = df['Title'].astype(str).fillna('') if 'Title' in df.columns else ''
 
+        def _safe_message_id(val):
+            """Acepta int, float o string numérico (p. ej. desde JSON)."""
+            if pd.isna(val):
+                return None
+            try:
+                return int(float(val))
+            except (TypeError, ValueError):
+                return None
+
         total = 0
         for start in range(0, len(df), INSERT_BATCH_SIZE):
             batch = df.iloc[start:start + INSERT_BATCH_SIZE]
-            rows = [
-                (
-                    int(row['Message ID']),
-                    (row['Message Text'] or '')[:1_000_000],  # límite razonable por campo
+            rows = []
+            for _, row in batch.iterrows():
+                mid = _safe_message_id(row.get('Message ID'))
+                if mid is None:
+                    continue
+                rows.append((
+                    mid,
+                    (row['Message Text'] or '')[:1_000_000],
                     (row['Title'] or '')[:10_000]
-                )
-                for _, row in batch.iterrows()
-            ]
+                ))
             conn.executemany(
                 f'INSERT INTO {FTS_TABLE}(message_id, message_text, title) VALUES (?, ?, ?)',
                 rows
