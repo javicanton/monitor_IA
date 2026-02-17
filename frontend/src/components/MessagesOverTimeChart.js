@@ -42,22 +42,31 @@ const MessagesOverTimeChart = ({ onDateRangeChange }) => {
     return () => { cancelled = true; };
   }, []);
 
-  const handleBrushChange = (range) => {
-    if (!data.length || !onDateRangeChange) return;
+  const handleBrushChange = (rangeOrStart, endIndexArg) => {
+    if (!data.length || typeof onDateRangeChange !== 'function') return;
     let startIndex, endIndex;
-    if (typeof range === 'object' && range !== null && !Array.isArray(range)) {
-      startIndex = range.startIndex;
-      endIndex = range.endIndex;
-    } else if (Array.isArray(range) && range.length >= 2) {
-      startIndex = range[0];
-      endIndex = range[1];
+    if (endIndexArg !== undefined && typeof rangeOrStart === 'number') {
+      startIndex = rangeOrStart;
+      endIndex = endIndexArg;
+    } else if (typeof rangeOrStart === 'object' && rangeOrStart !== null && !Array.isArray(rangeOrStart)) {
+      startIndex = rangeOrStart.startIndex;
+      endIndex = rangeOrStart.endIndex;
+    } else if (Array.isArray(rangeOrStart) && rangeOrStart.length >= 2) {
+      startIndex = rangeOrStart[0];
+      endIndex = rangeOrStart[1];
     } else {
       return;
     }
     if (startIndex == null || endIndex == null) return;
     const start = data[Math.min(Math.max(0, startIndex), data.length - 1)]?.date;
     const end = data[Math.min(Math.max(0, endIndex), data.length - 1)]?.date;
-    if (start && end) onDateRangeChange(start, end);
+    if (start && end) {
+      try {
+        onDateRangeChange(start, end);
+      } catch (e) {
+        console.error('MessagesOverTimeChart onDateRangeChange:', e);
+      }
+    }
   };
 
   if (loading) {
@@ -89,14 +98,14 @@ const MessagesOverTimeChart = ({ onDateRangeChange }) => {
       <Typography variant="subtitle1" color="textSecondary" gutterBottom>
         Evolución de mensajes — selecciona un rango para filtrar por fechas
       </Typography>
-      <Box sx={{ width: '100%', height: 280 }}>
-        <ResponsiveContainer width="100%" height="100%">
+      <Box sx={{ width: '100%', minWidth: 0, height: 280, minHeight: 280 }}>
+        <ResponsiveContainer width="100%" height={280} minWidth={0} minHeight={280}>
           <AreaChart
             data={data}
             margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
           >
             <defs>
-              <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
+              <linearGradient id="messagesOverTimeGradient" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="#1976d2" stopOpacity={0.3} />
                 <stop offset="95%" stopColor="#1976d2" stopOpacity={0} />
               </linearGradient>
@@ -112,15 +121,18 @@ const MessagesOverTimeChart = ({ onDateRangeChange }) => {
             />
             <YAxis allowDecimals={false} tick={{ fontSize: 11 }} width={32} />
             <Tooltip
-              labelFormatter={(v) => new Date(v + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}
-              formatter={([value]) => [`${value} mensajes`, 'Total']}
+              labelFormatter={(v) => (v ? new Date(v + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }) : '')}
+              formatter={(val) => {
+                const n = Array.isArray(val) ? val[0] : val;
+                return [`${Number(n) ?? 0} mensajes`, 'Total'];
+              }}
             />
             <Area
               type="monotone"
               dataKey="count"
               stroke="#1976d2"
               strokeWidth={2}
-              fill="url(#colorCount)"
+              fill="url(#messagesOverTimeGradient)"
             />
             <Brush
               dataKey="date"

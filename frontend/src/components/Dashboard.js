@@ -13,6 +13,7 @@ import FilterBar from './FilterBar';
 import MessageList from './MessageList';
 import ScoreExplanation from './ScoreExplanation';
 import MessagesOverTimeChart from './MessagesOverTimeChart';
+import ChartErrorBoundary from './ChartErrorBoundary';
 import logo from '../assets/Logo_MonitorIA ajustado.png';
 
 const SCROLL_THRESHOLD = 180;
@@ -150,7 +151,9 @@ const Dashboard = () => {
         >
 
           {/* Gráfico de evolución de mensajes (filtro de fechas por rango) */}
-          <MessagesOverTimeChart onDateRangeChange={handleDateRangeFromChart} />
+          <ChartErrorBoundary>
+            <MessagesOverTimeChart onDateRangeChange={handleDateRangeFromChart} />
+          </ChartErrorBoundary>
 
           {/* Barra de búsqueda en mensajes */}
           <Paper sx={{ p: 2, mb: 3 }} elevation={0} variant="outlined">
