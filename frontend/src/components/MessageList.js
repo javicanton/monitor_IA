@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   Box, 
   Grid, 
@@ -12,6 +12,8 @@ import { Refresh as RefreshIcon } from '@mui/icons-material';
 import MessageCard from './MessageCard';
 import { messagesAPI } from '../utils/api';
 
+const DEBOUNCE_MS = 500;
+
 const MessageList = ({ filters = {} }) => {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -20,6 +22,8 @@ const MessageList = ({ filters = {} }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalMessages, setTotalMessages] = useState(0);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
+  const debounceRef = useRef(null);
+  const isFirstLoad = useRef(true);
 
   const MESSAGES_PER_PAGE = 24;
  
@@ -71,7 +75,19 @@ const MessageList = ({ filters = {} }) => {
   }, [filters, MESSAGES_PER_PAGE]);
 
   useEffect(() => {
-    fetchMessages(1, false);
+    if (isFirstLoad.current) {
+      isFirstLoad.current = false;
+      fetchMessages(1, false);
+      return;
+    }
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      fetchMessages(1, false);
+      debounceRef.current = null;
+    }, DEBOUNCE_MS);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
   }, [fetchMessages]);
 
   const loadMore = async () => {

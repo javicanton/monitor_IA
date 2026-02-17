@@ -51,8 +51,18 @@ app.register_blueprint(auth_bp, url_prefix='/api/auth')
 with app.app_context():
     db.create_all()
 
+# Caché en memoria para load_data(): evita saturar S3 y CPU con peticiones seguidas
+_DATA_CACHE = None
+_DATA_CACHE_TIME = 0
+DATA_CACHE_TTL_SEC = 300  # 5 minutos: mismo dataset para todas las peticiones
+
 def load_data():
-    """Carga los datos desde S3 y maneja posibles errores."""
+    """Carga los datos desde S3 (o caché) y maneja posibles errores."""
+    global _DATA_CACHE, _DATA_CACHE_TIME
+    now = datetime.now().timestamp()
+    if _DATA_CACHE is not None and (now - _DATA_CACHE_TIME) < DATA_CACHE_TTL_SEC:
+        logger.info("Datos servidos desde caché (%d filas)", len(_DATA_CACHE))
+        return _DATA_CACHE
     try:
         # Intentar cargar desde URL pública primero (más rápido)
         try:
@@ -63,6 +73,8 @@ def load_data():
                 data = response.json()
                 df = pd.DataFrame(data['messages'])
                 logger.info(f"Datos cargados desde URL pública, filas: {len(df)}")
+                _DATA_CACHE = df
+                _DATA_CACHE_TIME = datetime.now().timestamp()
                 return df
         except Exception as e:
             logger.warning(f"No se pudo cargar desde URL pública: {e}")
@@ -73,7 +85,11 @@ def load_data():
         # Verificar conexión con S3
         if not s3_client.check_connection():
             logger.warning("No se pudo conectar con S3, intentando cargar desde archivo local")
-            return load_data_local()
+            df = load_data_local()
+            if df is not None and not df.empty:
+                _DATA_CACHE = df
+                _DATA_CACHE_TIME = datetime.now().timestamp()
+            return df
         
         # Listar archivos disponibles en S3
         files = s3_client.list_files()
@@ -91,7 +107,11 @@ def load_data():
         
         if not messages_file:
             logger.warning("No se encontró archivo de mensajes en S3, intentando archivo local")
-            return load_data_local()
+            df = load_data_local()
+            if df is not None and not df.empty:
+                _DATA_CACHE = df
+                _DATA_CACHE_TIME = datetime.now().timestamp()
+            return df
         
         logger.info(f"Cargando datos desde S3: {messages_file}")
         
@@ -103,7 +123,11 @@ def load_data():
             df = s3_client.load_csv_from_s3(messages_file)
         else:
             logger.error(f"Formato de archivo no soportado: {messages_file}")
-            return load_data_local()
+            df = load_data_local()
+            if df is not None and not df.empty:
+                _DATA_CACHE = df
+                _DATA_CACHE_TIME = datetime.now().timestamp()
+            return df
         
         # Verificar y limpiar la columna Title (usada como Channel)
         if 'Title' in df.columns:
@@ -124,12 +148,18 @@ def load_data():
                         del df[col]
         
         logger.info(f"Datos cargados desde S3 exitosamente: {len(df)} mensajes")
+        _DATA_CACHE = df
+        _DATA_CACHE_TIME = datetime.now().timestamp()
         return df
 
     except Exception as e:
         logger.error(f"Error al cargar datos desde S3: {e}")
         logger.info("Intentando cargar desde archivo local como fallback")
-        return load_data_local()
+        df = load_data_local()
+        if df is not None and not df.empty:
+            _DATA_CACHE = df
+            _DATA_CACHE_TIME = datetime.now().timestamp()
+        return df
 
 def load_data_local():
     """Carga los datos del archivo JSON local como fallback."""
