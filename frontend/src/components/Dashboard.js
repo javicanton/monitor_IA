@@ -2,9 +2,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { 
   Container, 
   Box, 
-  Typography, 
   Paper,
-  Chip,
   Grid,
   TextField,
   Button,
@@ -14,6 +12,7 @@ import { Search as SearchIcon } from '@mui/icons-material';
 import FilterBar from './FilterBar';
 import MessageList from './MessageList';
 import ScoreExplanation from './ScoreExplanation';
+import MessagesOverTimeChart from './MessagesOverTimeChart';
 import logo from '../assets/Logo_MonitorIA ajustado.png';
 
 const SCROLL_THRESHOLD = 180;
@@ -23,7 +22,6 @@ const LOGO_SIZE_SMALL = 88;
 const Dashboard = () => {
   const [filters, setFilters] = useState({});
   const [searchInput, setSearchInput] = useState('');
-  const [channels, setChannels] = useState([]);
   const [scrollProgress, setScrollProgress] = useState(0);
   const logoRef = useRef(null);
   const [logoTransform, setLogoTransform] = useState({
@@ -73,9 +71,11 @@ const Dashboard = () => {
     setFilters((prev) => ({ ...prev, search: searchInput.trim() }));
   };
 
-  const handleChannelsLoad = (loadedChannels) => {
-    setChannels(loadedChannels);
+  const handleDateRangeFromChart = (dateStart, dateEnd) => {
+    setFilters((prev) => ({ ...prev, dateStart, dateEnd }));
   };
+
+  const handleChannelsLoad = () => {};
 
   const clampedProgress = Math.min(scrollProgress, 1);
   const largeLogoOpacity = 1 - clampedProgress;
@@ -149,36 +149,10 @@ const Dashboard = () => {
           sx={{ flexBasis: { md: '80%' }, maxWidth: { md: '80%' } }}
         >
 
-          {/* Información de canales disponibles */}
-          {channels.length > 0 && (
-            <Paper sx={{ p: 2, mb: 3, bgcolor: 'grey.50' }}>
-              <Typography variant="subtitle2" color="textSecondary" gutterBottom>
-                Canales disponibles ({channels.length}):
-              </Typography>
-              <Box display="flex" flexWrap="wrap" gap={1}>
-                {channels.slice(0, 10).map((channel) => (
-                  <Chip 
-                    key={channel} 
-                    label={channel} 
-                    size="small" 
-                    variant="outlined"
-                    onClick={() => setFilters(prev => ({ ...prev, channel }))}
-                    sx={{ cursor: 'pointer' }}
-                  />
-                ))}
-                {channels.length > 10 && (
-                  <Chip 
-                    label={`+${channels.length - 10} más`} 
-                    size="small" 
-                    variant="outlined"
-                    color="primary"
-                  />
-                )}
-              </Box>
-            </Paper>
-          )}
+          {/* Gráfico de evolución de mensajes (filtro de fechas por rango) */}
+          <MessagesOverTimeChart onDateRangeChange={handleDateRangeFromChart} />
 
-          {/* Barra de búsqueda en mensajes (entre canales y lista) */}
+          {/* Barra de búsqueda en mensajes */}
           <Paper sx={{ p: 2, mb: 3 }} elevation={0} variant="outlined">
             <Box display="flex" gap={2} alignItems="center" flexWrap="wrap">
               <TextField

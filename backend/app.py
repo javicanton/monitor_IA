@@ -980,6 +980,31 @@ def login():
     access_token = create_access_token(identity=username)
     return jsonify({'access_token': access_token}), 200
 
+@app.route('/messages_over_time', methods=['GET'])
+def messages_over_time():
+    """Devuelve el número de mensajes por día para el gráfico de evolución (filtro por fechas)."""
+    try:
+        df = load_data()
+        if df.empty:
+            return jsonify(success=True, data=[])
+
+        date_col = 'Date Sent' if 'Date Sent' in df.columns else ('Date' if 'Date' in df.columns else None)
+        if not date_col:
+            return jsonify(success=True, data=[])
+
+        df = df.copy()
+        df[date_col] = pd.to_datetime(df[date_col], errors='coerce').dt.tz_localize(None)
+        df = df.dropna(subset=[date_col])
+        df['_date'] = df[date_col].dt.normalize().dt.strftime('%Y-%m-%d')
+        counts = df.groupby('_date').size().reset_index(name='count')
+        counts = counts.sort_values('_date')
+        data = [{'date': row['_date'], 'count': int(row['count'])} for _, row in counts.iterrows()]
+        return jsonify(success=True, data=data)
+    except Exception as e:
+        logger.exception("Error en /messages_over_time")
+        return jsonify(success=False, error=str(e)), 500
+
+
 @app.route('/api/messages', methods=['GET'])
 def get_messages():
     """Endpoint para obtener los mensajes para el frontend."""
