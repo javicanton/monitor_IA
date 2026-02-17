@@ -472,6 +472,7 @@ yarn-error.log*
 *.session
 credentials.txt
 telegram_channels_test.csv
+telegram_channels_ampliado.csv
 
 # Carpeta de datos
 /data/*

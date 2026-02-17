@@ -175,19 +175,18 @@ const MessagesOverTimeChart = ({ filters = {}, onDateRangeChange, selectedDateSt
     }
   };
 
-  const renderClickableDot = (props) => {
+  // Punto solo al hover (aspecto anterior), clickeable para fijar ese día
+  const renderActiveDot = (props) => {
     const { cx, cy, payload } = props;
     if (cx == null || cy == null) return null;
     return (
       <g
-        onClick={() => handleDayClick(payload)}
+        onClick={(e) => { e.stopPropagation(); handleDayClick(payload); }}
         style={{ cursor: 'pointer' }}
         role="button"
-        tabIndex={0}
-        onKeyDown={(e) => e.key === 'Enter' && handleDayClick(payload)}
         aria-label={`Seleccionar día ${payload?.date || ''}`}
       >
-        <circle cx={cx} cy={cy} r={6} fill="#1976d2" fillOpacity={0.9} />
+        <circle cx={cx} cy={cy} r={4} fill="#1976d2" stroke="#fff" strokeWidth={2} />
       </g>
     );
   };
@@ -258,7 +257,8 @@ const MessagesOverTimeChart = ({ filters = {}, onDateRangeChange, selectedDateSt
               strokeWidth={2}
               fill="url(#messagesOverTimeGradient)"
               isAnimationActive={true}
-              dot={renderClickableDot}
+              dot={false}
+              activeDot={renderActiveDot}
             />
             <Brush
               dataKey="date"
