@@ -18,6 +18,7 @@ import logging
 from threading import Thread
 from topic_processor import process_topics
 from search_index import ensure_index_synced, search_message_ids
+import re
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -408,13 +409,20 @@ def load_more(offset=0):
             except Exception:
                 pass
             if not search_applied:
-                q_lower = search_query.lower()
-                text_series = filtered_df['Message Text'].astype(str).fillna('')
-                mask = text_series.str.lower().str.contains(q_lower, na=False, regex=False)
-                if 'Title' in filtered_df.columns:
-                    title_series = filtered_df['Title'].astype(str).fillna('')
-                    mask = mask | title_series.str.lower().str.contains(q_lower, na=False, regex=False)
-                filtered_df = filtered_df[mask].copy()
+                text_series = filtered_df['Message Text']
+                title_series = filtered_df['Title'] if 'Title' in filtered_df.columns else None
+                parsed = _parse_boolean_search(search_query)
+                if parsed:
+                    mask = _apply_boolean_search_mask(parsed, text_series, title_series)
+                    filtered_df = filtered_df[mask].copy()
+                else:
+                    q_lower = search_query.lower()
+                    text_series = filtered_df['Message Text'].astype(str).fillna('')
+                    mask = text_series.str.lower().str.contains(re.escape(q_lower), na=False, regex=True)
+                    if title_series is not None:
+                        title_series = filtered_df['Title'].astype(str).fillna('')
+                        mask = mask | title_series.str.lower().str.contains(re.escape(q_lower), na=False, regex=True)
+                    filtered_df = filtered_df[mask].copy()
 
         # Filtro de Fecha (Rango)
         if 'Date Sent' in filtered_df.columns and (date_start_str or date_end_str):
@@ -711,6 +719,93 @@ def run_topics():
         print(f"Error en /admin/run_topics: {e}")
         return jsonify(success=False, error=str(e)), 500
 
+def _parse_boolean_search(query: str):
+    """
+    Parsea una consulta con operadores AND, OR, NOT (case insensitive).
+    Devuelve una lista de "grupos OR"; cada grupo es una lista de (op, term) con op en ('AND', 'NOT').
+    Ej: "clima AND aemet" -> [[('AND', 'clima'), ('AND', 'aemet')]]
+    "a OR b AND c" -> [[('AND', 'a')], [('AND', 'b'), ('AND', 'c')]]
+    """
+    if not query or not query.strip():
+        return None
+    tokens = query.strip().split()
+    if not tokens:
+        return None
+    # Dividir por OR (precedencia más baja)
+    or_groups = []
+    current = []
+    for t in tokens:
+        if t.upper() == 'OR':
+            or_groups.append(current)
+            current = []
+        else:
+            current.append(t)
+    if current:
+        or_groups.append(current)
+
+    # Dentro de cada grupo, dividir por AND; cada segmento puede ser "NOT term" o "term"
+    result = []
+    for group in or_groups:
+        and_segments = []
+        i = 0
+        while i < len(group):
+            if group[i].upper() == 'AND':
+                i += 1
+                continue
+            seg = []
+            while i < len(group) and group[i].upper() != 'AND':
+                seg.append(group[i])
+                i += 1
+            if not seg:
+                continue
+            if seg[0].upper() == 'NOT':
+                term = ' '.join(seg[1:]).strip() if len(seg) > 1 else ''
+                if term:
+                    and_segments.append(('NOT', term))
+            else:
+                and_segments.append(('AND', ' '.join(seg).strip()))
+        if and_segments:
+            result.append(and_segments)
+    return result if result else None
+
+
+def _apply_boolean_search_mask(parsed, text_series, title_series=None):
+    """
+    Aplica la consulta booleana parseada a las series de texto/título.
+    Devuelve una máscara pandas (True = fila cumple la búsqueda).
+    """
+    if not parsed:
+        return pd.Series([False] * len(text_series))
+    combined = None
+    for or_group in parsed:
+        group_mask = None
+        for op, term in or_group:
+            if not term:
+                continue
+            term_lower = term.lower()
+            term_escaped = re.escape(term_lower)
+            m_text = text_series.astype(str).fillna('').str.lower().str.contains(term_escaped, na=False, regex=True)
+            if title_series is not None and len(title_series) == len(text_series):
+                m_title = title_series.astype(str).fillna('').str.lower().str.contains(term_escaped, na=False, regex=True)
+                term_mask = m_text | m_title
+            else:
+                term_mask = m_text
+            if op == 'NOT':
+                term_mask = ~term_mask
+            if group_mask is None:
+                group_mask = term_mask
+            else:
+                group_mask = group_mask & term_mask
+        if group_mask is not None:
+            if combined is None:
+                combined = group_mask
+            else:
+                combined = combined | group_mask
+    if combined is None:
+        return pd.Series([False] * len(text_series))
+    return combined
+
+
 def _apply_message_filters(df, filters):
     """Aplica los mismos filtros que filter_messages. Devuelve (sorted_df, None) o (None, (response, status))."""
     date_start_str = filters.get('dateStart')
@@ -731,13 +826,20 @@ def _apply_message_filters(df, filters):
             logger.warning("FTS no disponible (%s); usando búsqueda por texto en pandas", e)
         if not search_applied:
             try:
-                q_lower = search_query.lower()
-                text_series = filtered_df['Message Text'].astype(str).fillna('')
-                mask = text_series.str.lower().str.contains(q_lower, na=False, regex=False)
-                if 'Title' in filtered_df.columns:
-                    title_series = filtered_df['Title'].astype(str).fillna('')
-                    mask = mask | title_series.str.lower().str.contains(q_lower, na=False, regex=False)
-                filtered_df = filtered_df[mask].copy()
+                text_series = filtered_df['Message Text']
+                title_series = filtered_df['Title'] if 'Title' in filtered_df.columns else None
+                parsed = _parse_boolean_search(search_query)
+                if parsed:
+                    mask = _apply_boolean_search_mask(parsed, text_series, title_series)
+                    filtered_df = filtered_df[mask].copy()
+                else:
+                    q_lower = search_query.lower()
+                    text_series = filtered_df['Message Text'].astype(str).fillna('')
+                    mask = text_series.str.lower().str.contains(re.escape(q_lower), na=False, regex=True)
+                    if title_series is not None:
+                        title_series = filtered_df['Title'].astype(str).fillna('')
+                        mask = mask | title_series.str.lower().str.contains(re.escape(q_lower), na=False, regex=True)
+                    filtered_df = filtered_df[mask].copy()
             except Exception as e:
                 logger.warning("Error en búsqueda por texto: %s", e)
 

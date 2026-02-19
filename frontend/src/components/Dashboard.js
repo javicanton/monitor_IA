@@ -167,7 +167,7 @@ const Dashboard = () => {
                 fullWidth
                 size="small"
                 label="Buscar en mensajes"
-                placeholder="Escribe palabras para buscar en el texto y título..."
+                placeholder="Busca términos en mensajes y título. Puedes usar operadores booleanos como AND, OR, NOT (ej: clima AND aemet)"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearchApply()}

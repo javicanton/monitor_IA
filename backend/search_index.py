@@ -137,8 +137,7 @@ def search_message_ids(query: str) -> Optional[List[int]]:
     conn = _get_connection()
     try:
         _ensure_fts_table(conn)
-        # FTS5 MATCH: cada palabra debe aparecer (AND implícito con espacio)
-        # Encerrar en comillas para buscar frase exacta, o dejar palabras sueltas
+        # FTS5 MATCH: admite AND, OR, NOT (ej: "clima AND aemet"); espacio = AND implícito
         try:
             cur = conn.execute(
                 f'SELECT message_id FROM {FTS_TABLE} WHERE {FTS_TABLE} MATCH ?',
