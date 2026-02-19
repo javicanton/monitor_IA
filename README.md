@@ -139,15 +139,13 @@ TOPICS_SAMPLE_RATIO=0.3
 
 ### 4. Inicializar la base de datos
 
-Desde la raíz del proyecto (con dependencias instaladas y `backend` en `PYTHONPATH` si hace falta):
+Desde la raíz del proyecto (con dependencias instaladas):
 
 ```bash
-# Opción: desde raíz, asegurando que Python encuentre el backend
-export PYTHONPATH=backend
 python init_db.py
 ```
 
-O ejecutar la creación de tablas desde el propio backend la primera vez que arranque (`db.create_all()` en `app.py`). El script `init_db.py` además crea el usuario administrador por defecto.
+El script crea las tablas y el usuario administrador por defecto. La primera vez que arranques el backend también se ejecuta `db.create_all()` en `app.py`.
 
 ### 5. Frontend
 
