@@ -5,6 +5,7 @@ import subprocess
 import sys
 import importlib.util
 import csv
+import io
 import os
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any, Union, cast
@@ -55,7 +56,7 @@ check_and_install_dependencies()
 # Importar las dependencias después de la instalación
 import pandas as pd
 from telethon import TelegramClient
-from telethon.errors import ChannelInvalidError, ChatAdminRequiredError
+from telethon.errors import ChannelInvalidError, ChatAdminRequiredError, FloodWaitError
 from telethon.tl.types import Message, Channel, User
 from telethon.tl.custom import Message as CustomMessage
 from telethon.tl.types.messages import Messages
@@ -72,6 +73,11 @@ load_dotenv()
 
 DEFAULT_DAYS = 7
 DEFAULT_MAX_MESSAGES = 500
+DEFAULT_CHANNELS_S3_KEY = os.environ.get('TELEGRAM_CHANNELS_S3_KEY', 's3://monitoria-data/telegram_channels.csv')
+DEFAULT_SESSION_PATH = os.environ.get('TELEGRAM_SESSION_PATH', '~/.telethon/monitorIA.session')
+DEFAULT_CHANNEL_DELAY_SEC = float(os.environ.get('TELEGRAM_CHANNEL_DELAY_SEC', '1.5'))
+DEFAULT_FLOOD_WAIT_PADDING_SEC = float(os.environ.get('TELEGRAM_FLOOD_WAIT_PADDING_SEC', '1.0'))
+DEFAULT_MAX_RETRIES = int(os.environ.get('TELEGRAM_MAX_RETRIES', '3'))
 
 def _read_credentials_file(filename):
     try:
@@ -168,28 +174,121 @@ def load_credentials(filename='credentials.txt', non_interactive=False, api_id=N
 
 def get_user_input(days_arg=None, messages_arg=None, non_interactive=False):
     """Obtiene la configuración del usuario"""
+    days_default = days_arg if days_arg is not None else DEFAULT_DAYS
+    messages_default = messages_arg if messages_arg is not None else DEFAULT_MAX_MESSAGES
+    if isinstance(days_default, int) and days_default <= 0:
+        days_default = None
+
+    if non_interactive:
+        return days_default, messages_default
+
+    while True:
+        raw_days = input(
+            "Ingresa el número de días a scrapear "
+            f"(deja en blanco para usar {'histórico completo' if days_default is None else f'{days_default} días'}; "
+            "puedes escribir 'all', 'todo' o 'histórico' para traer todo el histórico): "
+        ).strip()
+        if not raw_days:
+            days = days_default
+            break
+        if raw_days.lower() in {"all", "todo", "todas", "historico", "histórico"}:
+            days = None
+            break
+        try:
+            days = int(raw_days)
+            if days <= 0:
+                days = None
+            break
+        except ValueError:
+            print("Valor inválido para días. Prueba con un número o 'all'.")
+
+    while True:
+        raw_messages = input(
+            f"Ingresa el número máximo de mensajes por canal (deja en blanco para usar {messages_default}): "
+        ).strip()
+        if not raw_messages:
+            messages = messages_default
+            break
+        try:
+            messages = int(raw_messages)
+            if messages <= 0:
+                print("El número de mensajes debe ser mayor que 0.")
+                continue
+            break
+        except ValueError:
+            print("Valor inválido para mensajes. Prueba con un número.")
+
+    return days, messages
+
+def _parse_s3_uri(value):
+    if not value or not isinstance(value, str):
+        return None, None
+    if not value.startswith("s3://"):
+        return None, None
+    without_scheme = value.replace("s3://", "", 1)
+    if "/" not in without_scheme:
+        return without_scheme, ""
+    bucket, key = without_scheme.split("/", 1)
+    return bucket, key
+
+def _ensure_s3_bucket(bucket):
+    if not bucket:
+        return
+    current = os.environ.get("S3_BUCKET")
+    if current and current != bucket:
+        print(f"Advertencia: S3_BUCKET='{current}' no coincide con '{bucket}', se usará '{bucket}'.")
+    os.environ["S3_BUCKET"] = bucket
+
+def _normalize_s3_key(value):
+    bucket, key = _parse_s3_uri(value)
+    if bucket:
+        _ensure_s3_bucket(bucket)
+        return key
+    return value
+
+def load_channels_from_s3(s3_key):
     try:
-        if days_arg is not None or messages_arg is not None:
-            days = days_arg if days_arg is not None else DEFAULT_DAYS
-            messages = messages_arg if messages_arg is not None else DEFAULT_MAX_MESSAGES
-            return days, messages
+        bucket, key = _parse_s3_uri(s3_key)
+        if bucket:
+            _ensure_s3_bucket(bucket)
+            s3_key = key
+        if not s3_key:
+            print("Error: Key S3 de canales vacía.")
+            return []
 
-        if non_interactive:
-            return DEFAULT_DAYS, DEFAULT_MAX_MESSAGES
+        from s3_client import get_s3_client
+        s3_client = get_s3_client()
+        content = s3_client.get_file_content(s3_key)
+        reader = csv.reader(io.StringIO(content))
+        channels = []
+        for row in reader:
+            if row and row[0].strip():
+                channel = row[0].strip()
+                if not channel.startswith('#'):
+                    channels.append(channel)
+        if channels:
+            print(f"✓ Canales cargados desde S3: {s3_key} ({len(channels)})")
+        return channels
+    except Exception as e:
+        print(f"No se pudo cargar {s3_key} desde S3: {e}")
+        return []
 
-        days = input(f"Ingresa el número de días a scrapear (deja en blanco para usar {DEFAULT_DAYS} días): ")
-        days = int(days) if days.strip() else DEFAULT_DAYS
-
-        messages = input(f"Ingresa el número máximo de mensajes por canal (deja en blanco para usar {DEFAULT_MAX_MESSAGES}): ")
-        messages = int(messages) if messages.strip() else DEFAULT_MAX_MESSAGES
-
-        return days, messages
-    except ValueError:
-        print(f"Valor inválido. Usando valores por defecto ({DEFAULT_DAYS} días, {DEFAULT_MAX_MESSAGES} mensajes)")
-        return DEFAULT_DAYS, DEFAULT_MAX_MESSAGES
-
-def get_channels_from_user(channels_file=None, non_interactive=False):
+def get_channels_from_user(channels_file=None, channels_s3_key=None, non_interactive=False):
     """Solicita los canales al usuario y los guarda en un archivo CSV"""
+    if channels_file:
+        bucket, key = _parse_s3_uri(channels_file)
+        if key:
+            channels_s3_key = channels_file
+            channels_file = None
+
+    s3_key = channels_s3_key or DEFAULT_CHANNELS_S3_KEY
+    target_file = channels_file or 'telegram_channels.csv'
+
+    if s3_key:
+        channels = load_channels_from_s3(s3_key)
+        if channels:
+            return channels
+
     if channels_file:
         if not os.path.exists(channels_file):
             print(f"Error: No se encontró el archivo {channels_file}")
@@ -200,15 +299,15 @@ def get_channels_from_user(channels_file=None, non_interactive=False):
         return channels
 
     if non_interactive:
-        if os.path.exists('telegram_channels.csv'):
-            return load_channels_from_csv('telegram_channels.csv')
-        print("Error: No hay archivo telegram_channels.csv. Usa --channels-file.")
+        if os.path.exists(target_file):
+            return load_channels_from_csv(target_file)
+        print("Error: No hay archivo telegram_channels.csv y no se pudo leer desde S3.")
         return []
 
     # Preguntar si quiere usar el archivo existente solo si existe
-    if os.path.exists('telegram_channels.csv'):
-        if ask_use_existing_file('telegram_channels.csv', "la lista de canales"):
-            channels = load_channels_from_csv('telegram_channels.csv')
+    if os.path.exists(target_file):
+        if ask_use_existing_file(target_file, "la lista de canales"):
+            channels = load_channels_from_csv(target_file)
             if channels:
                 return channels
     
@@ -359,20 +458,36 @@ def extract_media_details(media):
         'Media Caption': getattr(media, 'caption', None)
     }
 
-def load_existing_data(filename):
+def load_existing_data(filename, s3_csv_key=None, s3_json_key=None):
     try:
-        return pd.read_csv(filename)
+        if os.path.exists(filename):
+            return pd.read_csv(filename)
     except (FileNotFoundError, pd.errors.EmptyDataError):
+        pass
+
+    s3_csv_key = _normalize_s3_key(s3_csv_key)
+    s3_json_key = _normalize_s3_key(s3_json_key)
+    if not s3_csv_key and not s3_json_key:
         return pd.DataFrame()
 
-def load_existing_message_ids(filename):
     try:
-        existing_data = pd.read_csv(filename)
-        # Create a set of tuples (Username, Message ID) for fast lookup
-        existing_ids = set(zip(existing_data['Username'], existing_data['Message ID']))
-        return existing_ids
-    except (FileNotFoundError, pd.errors.EmptyDataError):
+        from s3_client import get_s3_client
+        s3_client = get_s3_client()
+        if s3_csv_key:
+            content = s3_client.get_file_content(s3_csv_key)
+            return pd.read_csv(io.StringIO(content))
+        if s3_json_key:
+            data = s3_client.load_json_from_s3(s3_json_key)
+            messages = data.get('messages', data)
+            return pd.DataFrame(messages)
+    except Exception as e:
+        print(f"No se pudo cargar dataset previo desde S3: {e}")
+    return pd.DataFrame()
+
+def build_existing_message_ids(df):
+    if df.empty or 'Username' not in df.columns or 'Message ID' not in df.columns:
         return set()
+    return set(zip(df['Username'], df['Message ID']))
 
 def upload_dataset_to_s3(json_path, s3_key, csv_path=None, upload_csv=False, s3_csv_key=None):
     if not os.path.exists(json_path):
@@ -404,7 +519,9 @@ def upload_dataset_to_s3(json_path, s3_key, csv_path=None, upload_csv=False, s3_
 def parse_args():
     parser = argparse.ArgumentParser(description="Scraper de Telegram con subida opcional a S3")
     parser.add_argument("--channels-file", help="Ruta a CSV con la lista de canales")
+    parser.add_argument("--channels-s3-key", help="Key S3 para el CSV de canales (default: telegram_channels.csv)")
     parser.add_argument("--days", type=int, help="Días a scrapear")
+    parser.add_argument("--all-history", action="store_true", help="Traer todo el histórico (ignora --days)")
     parser.add_argument("--max-messages", type=int, help="Máximo de mensajes por canal")
     parser.add_argument("--upload-s3", action="store_true", help="Subir telegram_messages.json a S3")
     parser.add_argument("--upload-csv", action="store_true", help="Subir telegram_messages.csv a S3")
@@ -433,6 +550,7 @@ async def main(args):
     print("3. Cargando lista de canales...")
     channels = get_channels_from_user(
         channels_file=args.channels_file,
+        channels_s3_key=args.channels_s3_key,
         non_interactive=args.non_interactive
     )
     if not channels:
@@ -442,22 +560,38 @@ async def main(args):
     
     # Obtener configuración del usuario
     print("5. Configuración...")
+    days_arg = None if args.all_history else args.days
     days_to_scrape, max_messages = get_user_input(
-        days_arg=args.days,
+        days_arg=days_arg,
         messages_arg=args.max_messages,
         non_interactive=args.non_interactive
     )
-    time_days_ago = datetime.now(timezone.utc) - timedelta(days=days_to_scrape)
-    print(f"6. Configuración: {days_to_scrape} días, {max_messages} mensajes por canal")
+    if days_to_scrape is None:
+        time_days_ago = None
+        print(f"6. Configuración: histórico completo, {max_messages} mensajes por canal")
+    else:
+        time_days_ago = datetime.now(timezone.utc) - timedelta(days=days_to_scrape)
+        print(f"6. Configuración: {days_to_scrape} días, {max_messages} mensajes por canal")
     
     # Cargar datos existentes
     print("7. Cargando datos existentes...")
-    existing_messages = load_existing_data('telegram_messages.csv')
-    existing_ids = load_existing_message_ids('telegram_messages.csv')
+    existing_messages = load_existing_data(
+        'telegram_messages.csv',
+        s3_csv_key=args.s3_csv_key,
+        s3_json_key=args.s3_key
+    )
+    existing_ids = build_existing_message_ids(existing_messages)
     
     # Crear cliente
     print("8. Creando cliente...")
-    client = TelegramClient('anon', creds['API_ID'], creds['API_HASH'])
+    session_path = os.path.expanduser(DEFAULT_SESSION_PATH)
+    session_dir = os.path.dirname(session_path)
+    if session_dir and not os.path.exists(session_dir):
+        os.makedirs(session_dir, exist_ok=True)
+    client = TelegramClient(session_path, creds['API_ID'], creds['API_HASH'])
+    channel_delay = max(DEFAULT_CHANNEL_DELAY_SEC, 0.0)
+    flood_padding = max(DEFAULT_FLOOD_WAIT_PADDING_SEC, 0.0)
+    max_retries = max(DEFAULT_MAX_RETRIES, 0)
     
     try:
         # Conectar
@@ -471,7 +605,10 @@ async def main(args):
             print("   - Abre Telegram en tu dispositivo")
             print("   - Busca un mensaje con un código de verificación")
             print("   - Ingresa el código cuando se te solicite")
-            client.start()
+            if args.non_interactive:
+                print("Error: No hay sesión autorizada y el modo es no interactivo.")
+                return
+            await client.start()
         
         print("12. Conexión exitosa!")
         
@@ -479,12 +616,22 @@ async def main(args):
         for channel in channels:
             try:
                 print(f"Procesando canal: {channel}")
-                channel_details = await client.get_entity(channel)
-                messages = await client.get_messages(
-                    channel,
-                    limit=max_messages,
-                    offset_date=time_days_ago
-                )
+                fetch_kwargs = {"limit": max_messages}
+                if time_days_ago is not None:
+                    fetch_kwargs["offset_date"] = time_days_ago
+                retries = 0
+                while True:
+                    try:
+                        channel_details = await client.get_entity(channel)
+                        messages = await client.get_messages(channel, **fetch_kwargs)
+                        break
+                    except FloodWaitError as e:
+                        retries += 1
+                        wait_for = int(getattr(e, 'seconds', 0)) + flood_padding
+                        print(f"Rate limit detectado. Esperando {wait_for}s antes de reintentar...")
+                        await asyncio.sleep(wait_for)
+                        if max_retries and retries > max_retries:
+                            raise
                 
                 if not messages:
                     print(f"No se encontraron mensajes para el canal '{channel}'. Continuando con el siguiente.")
@@ -565,6 +712,8 @@ async def main(args):
                     mensajes_nuevos += 1
 
                 print(f"✓ Canal '{channel}': {mensajes_existentes} mensajes existentes, {mensajes_nuevos} nuevos mensajes añadidos")
+                if channel_delay:
+                    await asyncio.sleep(channel_delay)
 
             except ChannelInvalidError:
                 print(f"✗ Canal '{channel}' inválido o no accesible. Continuando con el siguiente.")
@@ -703,10 +852,6 @@ async def main(args):
                         # Si la columna no tiene zona horaria o ya está en el formato correcto
                         df[col] = pd.to_datetime(df[col])
             
-            # Guardar en Excel
-            with pd.ExcelWriter('telegram_data.xlsx', engine='openpyxl') as writer:
-                df.to_excel(writer, sheet_name='Messages', index=False)
-            print("17. Datos guardados en telegram_data.xlsx")
             
             if args.upload_s3:
                 print("18. Subiendo dataset a S3...")
@@ -722,7 +867,7 @@ async def main(args):
         print("18. Cerrando conexión...")
         try:
             if client:
-                client.disconnect()  # Removed await since disconnect() likely returns None
+                await client.disconnect()
         except:
             pass
         print("19. Script completado!")
