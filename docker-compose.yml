@@ -5,10 +5,13 @@ services:
     build: ./backend
     expose:
       - "5001"
+    volumes:
+      - backend_data:/app/data
     environment:
       - FLASK_APP=app.py
       - FLASK_ENV=production
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-tu-clave-secreta-por-defecto}
+      - SQLALCHEMY_DATABASE_URI=sqlite:////app/data/telegram_app.db
     networks:
       - monitoria
     restart: unless-stopped
@@ -44,3 +47,6 @@ services:
 networks:
   monitoria:
     driver: bridge
+
+volumes:
+  backend_data:

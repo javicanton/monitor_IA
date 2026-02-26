@@ -42,9 +42,9 @@ def init_database():
                 
                 admin_user = User(
                     email=admin_email,
-                    password=admin_password,
                     name=admin_name,
-                    role='admin'
+                    role='admin',
+                    password=admin_password
                 )
                 
                 # Marcar como verificado y activo

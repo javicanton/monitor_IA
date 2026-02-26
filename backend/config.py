@@ -7,7 +7,8 @@ class Config:
     
     # Configuración de la base de datos
     # Usar SQLite para desarrollo y AWS (sin PostgreSQL)
-    SQLALCHEMY_DATABASE_URI = 'sqlite:///telegram_app.db'
+    # En Docker se puede definir SQLALCHEMY_DATABASE_URI=sqlite:////app/data/telegram_app.db
+    SQLALCHEMY_DATABASE_URI = os.environ.get('SQLALCHEMY_DATABASE_URI', 'sqlite:///telegram_app.db')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # Configuración de JWT
