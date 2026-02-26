@@ -36,9 +36,11 @@ jwt = JWTManager(app)
 CORS(app, resources={
     r"/*": {
         "origins": [
-            "http://localhost:3000", 
-            "https://app.monitoria.org"
-            ],
+            "http://localhost:3000",
+            "https://app.monitoria.org",
+            "https://monitoria.org",
+            "http://localhost:3001"
+        ],
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"],
         "supports_credentials": True

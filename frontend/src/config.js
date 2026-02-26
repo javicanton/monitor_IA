@@ -8,7 +8,7 @@ const defaultApiBaseUrl =
 const config = {
   // URL de la API del backend
   API_BASE_URL: defaultApiBaseUrl,
-  
+
   // Configuración de AWS S3
   S3_BUCKET: process.env.REACT_APP_S3_BUCKET || 'monitoria-data',
   AWS_REGION: process.env.REACT_APP_AWS_REGION || 'eu-north-1',

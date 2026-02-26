@@ -36,14 +36,7 @@ function App() {
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/auth/callback" element={<AuthCallback />} />
-            <Route
-              path="/*"
-              element={
-                <ProtectedRoute>
-                  <Dashboard />
-                </ProtectedRoute>
-              }
-            />
+            <Route path="/*" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           </Routes>
         </BrowserRouter>
       </AuthProvider>

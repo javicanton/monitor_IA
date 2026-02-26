@@ -13,8 +13,8 @@ auth_bp = Blueprint('auth', __name__)
 mail = Mail()
 serializer = URLSafeTimedSerializer(os.environ.get('SECRET_KEY', 'your-secret-key'))
 
-# URL del frontend para redirigir tras login OAuth (ej. https://app.monitoria.org)
-FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
+# URL donde redirigir tras login OAuth = app (dashboard). Debe ser https://app.monitoria.org en producción.
+FRONTEND_URL = os.environ.get('FRONTEND_URL', 'https://app.monitoria.org')
 
 def _backend_base():
     """Base URL del backend para redirect_uri OAuth (debe ser la URL pública del API)."""

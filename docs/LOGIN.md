@@ -1,5 +1,7 @@
 # Login y OAuth (app.monitoria.org)
 
+Todo está en **app.monitoria.org**: la pantalla de login en `/login` y el dashboard en el resto de rutas. Sin sesión se redirige a `/login`.
+
 El acceso a la app requiere estar logueado. Se soporta:
 
 - **Email y contraseña** (registro en la app)

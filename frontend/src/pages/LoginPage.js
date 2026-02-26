@@ -54,7 +54,7 @@ const LoginPage = () => {
       setError('');
       setLoading(true);
       await login(email, password);
-      navigate('/');
+      navigate('/', { replace: true });
     } catch (err) {
       setError(err.response?.data?.error || 'Error al iniciar sesión');
     } finally {
@@ -74,7 +74,7 @@ const LoginPage = () => {
             Monitor IA
           </Typography>
           <Typography variant="body2" color="textSecondary" align="center" sx={{ mb: 3 }}>
-            Inicia sesión para acceder a app.monitoria.org
+            Inicia sesión para acceder
           </Typography>
 
           {error && (
