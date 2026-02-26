@@ -17,8 +17,8 @@ def init_database():
     print("=" * 50)
     
     try:
-        # Importar la aplicación Flask
-        from app import app, db
+        # Importar la aplicación Flask (desde raíz del repo, sin PYTHONPATH)
+        from backend.app import app, db
         from backend.models import User
         
         with app.app_context():

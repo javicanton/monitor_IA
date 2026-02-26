@@ -8,48 +8,16 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Autocomplete from '@mui/material/Autocomplete';
 import { FilterList as FilterIcon, Clear as ClearIcon } from '@mui/icons-material';
-import DatePicker from 'react-datepicker';
-import { es } from 'date-fns/locale';
-import 'react-datepicker/dist/react-datepicker.css';
 import { channelsAPI, topicsAPI } from '../utils/api';
 import config from '../config';
 
-const DateRangeInput = React.forwardRef(function DateRangeInput(
-  { value, onClick },
-  ref
-) {
-  return (
-    <TextField
-      fullWidth
-      size="small"
-      placeholder="Seleccionar rango de fechas"
-      value={value || ''}
-      onClick={onClick}
-      onChange={() => {}}
-      inputRef={ref}
-      InputProps={{ readOnly: true }}
-    />
-  );
-});
-
-function toYYYYMMDD(date) {
-  if (!date) return '';
-  const d = new Date(date);
-  return d.toISOString().slice(0, 10);
-}
-
-function fromYYYYMMDD(str) {
-  if (!str) return null;
-  const d = new Date(str + 'T12:00:00');
-  return isNaN(d.getTime()) ? null : d;
-}
-
-function FilterBar({ onFilterChange, onChannelsLoad }) {
+function FilterBar({ onFilterChange, onChannelsLoad, currentFilters = {} }) {
   const [channels, setChannels] = useState([]);
   const [loading, setLoading] = useState(false);
   const [topics, setTopics] = useState([]);
   const [loadingTopics, setLoadingTopics] = useState(false);
   const [filters, setFilters] = useState({
+    search: '',
     dateStart: '',
     dateEnd: '',
     channel: [],
@@ -61,6 +29,7 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
   });
   const [hasPendingChanges, setHasPendingChanges] = useState(false);
   const [appliedFilters, setAppliedFilters] = useState({
+    search: '',
     dateStart: '',
     dateEnd: '',
     channel: [],
@@ -117,22 +86,6 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
     setHasPendingChanges(JSON.stringify(newFilters) !== JSON.stringify(appliedFilters));
   };
 
-  const handleDateRangeChange = (dates) => {
-    const [start, end] = dates;
-    const newFilters = {
-      ...filters,
-      dateStart: toYYYYMMDD(start),
-      dateEnd: toYYYYMMDD(end)
-    };
-    setFilters(newFilters);
-    setHasPendingChanges(JSON.stringify(newFilters) !== JSON.stringify(appliedFilters));
-  };
-
-  const dateRangeValue = [
-    fromYYYYMMDD(filters.dateStart),
-    fromYYYYMMDD(filters.dateEnd)
-  ];
-
   const handleApplyFilters = () => {
     // Validar fechas
     if (filters.dateStart && filters.dateEnd && filters.dateStart > filters.dateEnd) {
@@ -146,13 +99,21 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
       return;
     }
 
-    onFilterChange(filters);
-    setAppliedFilters(filters);
+    // Mantener la búsqueda que viene de la barra principal (fuera de este panel)
+    const merged = {
+      ...filters,
+      search: currentFilters.search ?? '',
+      dateStart: currentFilters.dateStart ?? '',
+      dateEnd: currentFilters.dateEnd ?? ''
+    };
+    onFilterChange(merged);
+    setAppliedFilters(merged);
     setHasPendingChanges(false);
   };
 
   const handleReset = () => {
     const resetFilters = {
+      search: '',
       dateStart: '',
       dateEnd: '',
       channel: [],
@@ -302,26 +263,6 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
           </TextField>
         </Grid>
 
-        {/* Filtros de fecha - calendario unificado con rango */}
-        <Grid item xs={12}>
-          <Typography variant="subtitle2" color="textSecondary" gutterBottom>
-            Fecha
-          </Typography>
-          <DatePicker
-            selectsRange
-            startDate={dateRangeValue[0]}
-            endDate={dateRangeValue[1]}
-            onChange={handleDateRangeChange}
-            monthsShown={2}
-            locale={es}
-            dateFormat="d MMM yyyy"
-            isClearable
-            placeholderText="Seleccionar rango de fechas"
-            calendarClassName="monitoria-date-range"
-            customInput={<DateRangeInput />}
-          />
-        </Grid>
-
         {/* Filtro de tipo de contenido (selección múltiple) */}
         <Grid item xs={12}>
           <Autocomplete
@@ -447,14 +388,15 @@ function FilterBar({ onFilterChange, onChannelsLoad }) {
       </Grid>
 
       {/* Información sobre filtros activos */}
-          {(Object.values(filters).some(value => value !== '' && value !== 'score') || hasPendingChanges) && (
+          {(Object.values(filters).some(value => (Array.isArray(value) ? value.length > 0 : value !== '' && value !== 'score')) || (currentFilters.dateStart || currentFilters.dateEnd) || hasPendingChanges) && (
         <Box mt={2} p={2} bgcolor="grey.50" borderRadius={1}>
           <Typography variant="body2" color="textSecondary">
             <strong>Filtros activos:</strong>
+            {currentFilters.search && ` Búsqueda: "${currentFilters.search}"`}
+            {(currentFilters.dateStart || currentFilters.dateEnd) && ` Fecha: ${currentFilters.dateStart || '...'} - ${currentFilters.dateEnd || '...'}`}
             {filters.channel.length > 0 && ` Canales: ${filters.channel.join(', ')}`}
             {filters.topics.length > 0 && ` Temas: ${selectedTopicLabels.join(', ')}`}
             {filters.sortBy !== 'score' && ` Orden: ${filters.sortBy}`}
-            {(filters.dateStart || filters.dateEnd) && ` Fecha: ${filters.dateStart || '...'} - ${filters.dateEnd || '...'}`}
             {filters.mediaType.length > 0 &&
               ` Tipo: ${filters.mediaType
                 .map((v) => config.MEDIA_TYPES.find((o) => o.value === v)?.label ?? v)

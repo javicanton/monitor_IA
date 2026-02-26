@@ -7,7 +7,7 @@ const API_BASE_URL = config.API_BASE_URL;
 // Crear instancia de axios con configuración base
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 30000, // 30 segundos
+  timeout: 90000, // 90 segundos (carga de mensajes con filtros puede ser pesada)
   headers: {
     'Content-Type': 'application/json',
   },
@@ -43,6 +43,21 @@ api.interceptors.response.use(
 
 // Funciones de API para mensajes
 export const messagesAPI = {
+  // Evolución de mensajes por día (respeta filtros: canal, topics, mediaType, etc.; sin fecha)
+  getMessagesOverTime: async (filters = {}) => {
+    try {
+      const { dateStart, dateEnd, ...rest } = filters || {};
+      const body = Object.keys(rest).length ? rest : {};
+      const response = Object.keys(body).length
+        ? await api.post('/messages_over_time', body)
+        : await api.get('/messages_over_time');
+      return response.data;
+    } catch (error) {
+      console.error('Error al obtener evolución de mensajes:', error);
+      throw error;
+    }
+  },
+
   // Obtener mensajes con filtros
   getMessages: async (filters = {}) => {
     try {
@@ -84,6 +99,19 @@ export const messagesAPI = {
       return response.data;
     } catch (error) {
       console.error('Error al exportar mensajes relevantes:', error);
+      throw error;
+    }
+  },
+
+  // Descargar mensajes filtrados como CSV
+  downloadFilteredCSV: async (filters = {}) => {
+    try {
+      const response = await api.post('/download_filtered_messages', filters, {
+        responseType: 'blob',
+      });
+      return response;
+    } catch (error) {
+      console.error('Error al descargar mensajes:', error);
       throw error;
     }
   },
