@@ -75,6 +75,7 @@ DEFAULT_DAYS = 7
 DEFAULT_MAX_MESSAGES = 500
 DEFAULT_CHANNELS_S3_KEY = os.environ.get('TELEGRAM_CHANNELS_S3_KEY', 's3://monitoria-data/telegram_channels.csv')
 DEFAULT_SESSION_PATH = os.environ.get('TELEGRAM_SESSION_PATH', '~/.telethon/monitorIA.session')
+DEFAULT_PARQUET_S3_KEY = os.environ.get('DATASTORE_S3_PARQUET_KEY', 'telegram_messages.parquet')
 DEFAULT_CHANNEL_DELAY_SEC = float(os.environ.get('TELEGRAM_CHANNEL_DELAY_SEC', '1.5'))
 DEFAULT_FLOOD_WAIT_PADDING_SEC = float(os.environ.get('TELEGRAM_FLOOD_WAIT_PADDING_SEC', '1.0'))
 DEFAULT_MAX_RETRIES = int(os.environ.get('TELEGRAM_MAX_RETRIES', '3'))
@@ -458,21 +459,32 @@ def extract_media_details(media):
         'Media Caption': getattr(media, 'caption', None)
     }
 
-def load_existing_data(filename, s3_csv_key=None, s3_json_key=None):
+def load_existing_data(filename, s3_parquet_key=None, s3_csv_key=None, s3_json_key=None):
     try:
         if os.path.exists(filename):
             return pd.read_csv(filename)
     except (FileNotFoundError, pd.errors.EmptyDataError):
         pass
 
+    try:
+        local_parquet = 'telegram_messages.parquet'
+        if os.path.exists(local_parquet):
+            return pd.read_parquet(local_parquet)
+    except Exception:
+        pass
+
+    s3_parquet_key = _normalize_s3_key(s3_parquet_key)
     s3_csv_key = _normalize_s3_key(s3_csv_key)
     s3_json_key = _normalize_s3_key(s3_json_key)
-    if not s3_csv_key and not s3_json_key:
+    if not s3_parquet_key and not s3_csv_key and not s3_json_key:
         return pd.DataFrame()
 
     try:
         from s3_client import get_s3_client
         s3_client = get_s3_client()
+        if s3_parquet_key:
+            response = s3_client.s3_client.get_object(Bucket=s3_client.bucket_name, Key=s3_parquet_key)
+            return pd.read_parquet(io.BytesIO(response['Body'].read()))
         if s3_csv_key:
             content = s3_client.get_file_content(s3_csv_key)
             return pd.read_csv(io.StringIO(content))
@@ -489,7 +501,7 @@ def build_existing_message_ids(df):
         return set()
     return set(zip(df['Username'], df['Message ID']))
 
-def upload_dataset_to_s3(json_path, s3_key, csv_path=None, upload_csv=False, s3_csv_key=None):
+def upload_dataset_to_s3(json_path, s3_key, parquet_path=None, s3_parquet_key=None, csv_path=None, upload_csv=False, s3_csv_key=None):
     if not os.path.exists(json_path):
         print(f"Error: No se encontró el archivo {json_path} para subir a S3")
         return False
@@ -503,6 +515,14 @@ def upload_dataset_to_s3(json_path, s3_key, csv_path=None, upload_csv=False, s3_
         s3_client = get_s3_client()
         s3_client.upload_file(json_path, s3_key)
         print(f"✓ Dataset subido a S3: {s3_key}")
+
+        if parquet_path:
+            if not os.path.exists(parquet_path):
+                print(f"Advertencia: No se encontró {parquet_path} para subir a S3")
+            else:
+                parquet_key = s3_parquet_key or os.path.basename(parquet_path)
+                s3_client.upload_file(parquet_path, parquet_key)
+                print(f"✓ Parquet subido a S3: {parquet_key}")
 
         if upload_csv and csv_path:
             if not os.path.exists(csv_path):
@@ -526,6 +546,7 @@ def parse_args():
     parser.add_argument("--upload-s3", action="store_true", help="Subir telegram_messages.json a S3")
     parser.add_argument("--upload-csv", action="store_true", help="Subir telegram_messages.csv a S3")
     parser.add_argument("--s3-key", default="telegram_messages.json", help="Key S3 para el JSON")
+    parser.add_argument("--s3-parquet-key", default=DEFAULT_PARQUET_S3_KEY, help="Key S3 para el Parquet")
     parser.add_argument("--s3-csv-key", default="telegram_messages.csv", help="Key S3 para el CSV")
     parser.add_argument("--non-interactive", action="store_true", help="Modo no interactivo (SSH)")
     parser.add_argument("--api-id", type=int, help="API_ID de Telegram (opcional)")
@@ -577,6 +598,7 @@ async def main(args):
     print("7. Cargando datos existentes...")
     existing_messages = load_existing_data(
         'telegram_messages.csv',
+        s3_parquet_key=args.s3_parquet_key,
         s3_csv_key=args.s3_csv_key,
         s3_json_key=args.s3_key
     )
@@ -840,6 +862,14 @@ async def main(args):
                 json.dump(json_data, f, ensure_ascii=False, indent=4)
             print("16. Datos guardados en telegram_messages.json")
 
+            df_parquet = df.copy()
+            for col in ['Photo', 'Media', 'Entities']:
+                if col in df_parquet.columns:
+                    df_parquet = df_parquet.drop(columns=[col])
+            parquet_path = 'telegram_messages.parquet'
+            df_parquet.to_parquet(parquet_path, index=False, engine='pyarrow', compression='zstd')
+            print("17. Datos guardados en telegram_messages.parquet")
+
             # Convertir todas las columnas de fecha a datetime sin zona horaria
             for col in ['Date Sent', 'Creation Date', 'Edit Date']:
                 if col in df.columns:
@@ -858,6 +888,8 @@ async def main(args):
                 upload_dataset_to_s3(
                     json_path='telegram_messages.json',
                     s3_key=args.s3_key,
+                    parquet_path='telegram_messages.parquet',
+                    s3_parquet_key=args.s3_parquet_key,
                     csv_path='telegram_messages.csv',
                     upload_csv=args.upload_csv,
                     s3_csv_key=args.s3_csv_key

@@ -34,6 +34,11 @@ class Config:
     AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID')
     AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
 
+    # DataStore (DuckDB + Parquet)
+    DATASTORE_S3_PARQUET_KEY = os.environ.get('DATASTORE_S3_PARQUET_KEY', 'telegram_messages.parquet')
+    DATASTORE_CACHE_DIR = os.environ.get('DATASTORE_CACHE_DIR', '/app/data/cache')
+    DATASTORE_CACHE_TTL = int(os.environ.get('DATASTORE_CACHE_TTL', 1800))
+
     # Configuración de topics
     TOPIC_POLL_INTERVAL_MIN = int(os.environ.get('TOPIC_POLL_INTERVAL_MIN', 1440))
     TOPICS_S3_PREFIX = os.environ.get('TOPICS_S3_PREFIX', 'topics/')

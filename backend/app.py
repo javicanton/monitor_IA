@@ -18,6 +18,7 @@ import logging
 from threading import Thread
 from topic_processor import process_topics
 from search_index import ensure_index_synced, search_message_ids
+from data_store import DataStore
 import re
 
 # Configurar logging
@@ -50,6 +51,7 @@ db.init_app(app)
 
 # Registrar blueprints
 app.register_blueprint(auth_bp, url_prefix='/api/auth')
+data_store = DataStore()
 
 # Crear tablas de base de datos
 with app.app_context():
@@ -58,7 +60,7 @@ with app.app_context():
 # Caché en memoria para load_data(): evita saturar S3 y CPU con peticiones seguidas
 _DATA_CACHE = None
 _DATA_CACHE_TIME = 0
-DATA_CACHE_TTL_SEC = 300  # 5 minutos: mismo dataset para todas las peticiones
+DATA_CACHE_TTL_SEC = int(os.environ.get('DATA_CACHE_TTL_SEC', '1800'))  # 30 min por defecto
 
 def load_data():
     """Carga los datos desde S3 (o caché) y maneja posibles errores."""
@@ -344,6 +346,71 @@ def save_data(df):
         print(f"Error al guardar en S3: {e}")
         return False
 
+
+def _parse_pagination(filters):
+    default_limit = 24
+    default_offset = 0
+
+    def parse_int(value, default):
+        try:
+            return int(value)
+        except (ValueError, TypeError):
+            return default
+
+    limit = parse_int(filters.get('limit'), None)
+    offset = parse_int(filters.get('offset'), None)
+    page = parse_int(filters.get('page'), 1)
+    per_page = parse_int(filters.get('per_page'), default_limit)
+
+    if limit is None and offset is None:
+        page = max(1, page)
+        per_page = max(1, min(per_page, 100))
+        limit = per_page
+        offset = (page - 1) * per_page
+    else:
+        if limit is None:
+            limit = default_limit
+        if offset is None:
+            offset = default_offset
+        limit = max(1, min(limit, 100))
+        offset = max(0, offset)
+
+    return limit, offset
+
+
+def _attach_topic_titles_to_df(df):
+    if df is None or df.empty or 'topic_id' not in df.columns:
+        return df
+    try:
+        normalized = df.copy()
+        normalized['topic_id'] = pd.to_numeric(normalized['topic_id'], errors='coerce').astype('Int64')
+        topic_labels = {item['id']: item['label'] for item in load_topics_meta()}
+        normalized['topic_title'] = normalized['topic_id'].map(topic_labels)
+        return normalized
+    except Exception as e:
+        print(f"Error al adjuntar topic_title: {e}")
+        return df
+
+
+def _messages_from_dataframe(df):
+    required_columns = ['Embed', 'Score', 'Message ID', 'URL', 'Label', 'topic_id', 'topic_title']
+    messages = []
+    for _, row in df.iterrows():
+        msg = {}
+        for col in required_columns:
+            if col in row:
+                value = row[col]
+                if hasattr(value, "item"):
+                    try:
+                        value = value.item()
+                    except Exception:
+                        pass
+                msg[col] = value if pd.notna(value) else None
+            else:
+                msg[col] = None
+        messages.append(msg)
+    return messages
+
 @app.route('/')
 def index():
     """Renderiza la página principal con los mensajes ordenados por puntuación."""
@@ -563,29 +630,13 @@ def label_message():
 
         message_id = int(data['message_id'])
         label = int(data['label'])
+        updated = data_store.update_label(message_id, label)
+        if not updated:
+            return jsonify(success=False, error="Message ID no encontrado"), 404
 
-        df = load_data()
-        if df.empty:
-            return jsonify(success=False, error="No hay datos disponibles o error al cargar"), 404
-
-        # Verifica si la columna 'Message ID' existe
-        if 'Message ID' not in df.columns:
-            return jsonify(success=False, error="La columna 'Message ID' no existe en el archivo JSON"), 500
-
-        # Verifica si el message_id existe en el DataFrame
-        if message_id not in df['Message ID'].values:
-            print(f"Advertencia: message_id {message_id} no encontrado en el DataFrame para etiquetar.")
-            return jsonify(success=True, message="Message ID no encontrado, pero operación ignorada.")
-
-        # Actualiza el DataFrame
-        if 'Label' not in df.columns:
-            df['Label'] = pd.NA
-
-        df.loc[df['Message ID'] == message_id, 'Label'] = label
-
-        # Guarda en S3
-        if not save_data(df):
-            return jsonify(success=False, error="Error al guardar cambios en S3"), 500
+        global _DATA_CACHE, _DATA_CACHE_TIME
+        _DATA_CACHE = None
+        _DATA_CACHE_TIME = 0
 
         return jsonify(success=True)
     except ValueError as e:
@@ -598,30 +649,12 @@ def label_message():
 def export_relevants():
     """Exporta los mensajes etiquetados como relevantes a un nuevo archivo CSV."""
     try:
-        df = load_data()
-        if df.empty:
-            return jsonify(success=False, error="No hay datos disponibles o error al cargar"), 404
-
-        # Verifica si la columna 'Label' existe
-        if 'Label' not in df.columns:
-            return jsonify(success=False, error="No hay columna 'Label' para filtrar mensajes relevantes"), 404
-
-        # Filtra los mensajes etiquetados como relevantes (Label == 1)
-        # Maneja posibles NaNs o tipos incorrectos en 'Label'
-        try:
-            # Intentar convertir a numérico (float), luego comparar con 1.0
-            relevant_df = df[pd.to_numeric(df['Label'], errors='coerce') == 1.0]
-        except Exception as e:
-             print(f"Error al filtrar relevantes por Label: {e}")
-             return jsonify(success=False, error="Error al procesar la columna 'Label'"), 500
-
+        relevant_df = data_store.export_filtered_dataframe({'label': 1, 'sortBy': 'score'})
         if relevant_df.empty:
-            return jsonify(success=True, message="No hay mensajes etiquetados como relevantes para exportar."), 200 # O 404 si prefieres error
+            return jsonify(success=True, message="No hay mensajes etiquetados como relevantes para exportar."), 200
 
-        # Guarda en un nuevo CSV tanto localmente como en S3
         export_path = 'telegram_messages_relevant.csv'
         try:
-            # Guardar localmente
             relevant_df.to_csv(export_path, index=False, encoding='utf-8')
             logger.info(f"Mensajes relevantes exportados localmente a {export_path}")
             
@@ -651,10 +684,7 @@ def export_relevants():
 def get_channels():
     """Devuelve la lista de canales disponibles."""
     try:
-        df = load_data()
-        if df.empty or 'Title' not in df.columns:
-            return jsonify(success=True, channels=[])
-        channels = sorted(df['Title'].fillna('Desconocido').replace('', 'Desconocido').unique().tolist())
+        channels = data_store.get_channels()
         return jsonify(success=True, channels=channels)
     except Exception as e:
         print(f"Error en /channels: {e}")
@@ -944,88 +974,12 @@ def filter_messages():
     """Filtra los mensajes según los criterios especificados."""
     try:
         filters = request.get_json(silent=True) or {}
-        df = load_data()
-        if df.empty:
-            return jsonify(success=True, messages=[], total_messages=0)
-        sorted_df, err = _apply_message_filters(df, filters)
-        if err is not None:
-            return err
-
-        # Paginación
-        try:
-            default_limit = 24
-            default_offset = 0
-
-            limit = filters.get('limit')
-            offset = filters.get('offset')
-            page = filters.get('page')
-            per_page = filters.get('per_page')
-
-            def parse_int(value, default):
-                try:
-                    return int(value)
-                except (ValueError, TypeError):
-                    return default
-
-            limit = parse_int(limit, None)
-            offset = parse_int(offset, None)
-
-            if limit is None and offset is None:
-                page = parse_int(page, 1)
-                per_page = parse_int(per_page, default_limit)
-
-                page = max(1, page)
-                per_page = max(1, min(per_page, 100))
-
-                limit = per_page
-                offset = (page - 1) * per_page
-            else:
-                if limit is None:
-                    limit = default_limit
-                if offset is None:
-                    offset = default_offset
-
-                limit = max(1, min(limit, 100))
-                offset = max(0, offset)
-
-            start_idx = offset
-            end_idx = start_idx + limit
-
-            # Seleccionar solo los mensajes de la página actual
-            paginated_df = sorted_df.iloc[start_idx:end_idx]
-            print(f"Paginación: offset {offset}, limit {limit}")
-        except Exception as e:
-            print(f"Error en paginación: {str(e)}")
-            return jsonify(success=False, error=f"Error en paginación: {str(e)}"), 400
-
-        # Adjuntar topics para mostrar en tarjetas
-        try:
-            paginated_df = attach_topic_assignments(paginated_df)
-            if 'topic_id' in paginated_df.columns:
-                paginated_df['topic_id'] = pd.to_numeric(paginated_df['topic_id'], errors='coerce').astype('Int64')
-                topic_labels = {item['id']: item['label'] for item in load_topics_meta()}
-                paginated_df['topic_title'] = paginated_df['topic_id'].map(topic_labels)
-        except Exception as e:
-            print(f"Error al adjuntar topics: {e}")
-
-        # Seleccionar columnas y convertir a dict
-        try:
-            required_columns = ['Embed', 'Score', 'Message ID', 'URL', 'Label', 'topic_id', 'topic_title']
-            messages = []
-            for _, row in paginated_df.iterrows():
-                msg = {}
-                for col in required_columns:
-                    if col in row:
-                        msg[col] = row[col] if pd.notna(row[col]) else None
-                    else:
-                        msg[col] = None
-                messages.append(msg)
-            print(f"Total de mensajes filtrados: {len(messages)}")
-        except Exception as e:
-            print(f"Error al preparar mensajes: {str(e)}")
-            return jsonify(success=False, error=f"Error al preparar mensajes: {str(e)}"), 400
-
-        return jsonify(success=True, messages=messages, total_messages=len(sorted_df))
+        limit, offset = _parse_pagination(filters)
+        paginated_df, total_messages = data_store.query_messages(filters, limit=limit, offset=offset)
+        paginated_df = _attach_topic_titles_to_df(paginated_df)
+        messages = _messages_from_dataframe(paginated_df)
+        print(f"Total de mensajes filtrados: {len(messages)}")
+        return jsonify(success=True, messages=messages, total_messages=total_messages)
 
     except Exception as e:
         print(f"Error crítico en /filter_messages: {e}")
@@ -1037,20 +991,10 @@ def download_filtered_messages():
     """Devuelve los mensajes filtrados (mismos criterios que filter_messages) como CSV."""
     try:
         filters = request.get_json(silent=True) or {}
-        df = load_data()
-        if df.empty:
+        sorted_df = data_store.export_filtered_dataframe(filters)
+        if sorted_df.empty:
             return jsonify(success=False, error="No hay datos"), 404
-        sorted_df, err = _apply_message_filters(df, filters)
-        if err is not None:
-            return err
-        try:
-            sorted_df = attach_topic_assignments(sorted_df)
-            if 'topic_id' in sorted_df.columns:
-                sorted_df['topic_id'] = pd.to_numeric(sorted_df['topic_id'], errors='coerce').astype('Int64')
-                topic_labels = {item['id']: item['label'] for item in load_topics_meta()}
-                sorted_df['topic_title'] = sorted_df['topic_id'].map(topic_labels)
-        except Exception as e:
-            logger.warning("Error al adjuntar topics para CSV: %s", e)
+        sorted_df = _attach_topic_titles_to_df(sorted_df)
         export_columns = [
             'Message ID', 'Message Text', 'Title', 'Date Sent', 'Views', 'Score', 'Label', 'URL',
             'Media Type', 'topic_id', 'topic_title'
@@ -1133,32 +1077,8 @@ def login():
 def messages_over_time():
     """Devuelve el número de mensajes por día para el gráfico. Acepta filtros (canal, topics, mediaType, etc.) sin fecha para mostrar evolución del subconjunto."""
     try:
-        df = load_data()
-        if df.empty:
-            return jsonify(success=True, data=[])
-
-        # Aplicar filtros del menú lateral (sin fecha: queremos serie temporal completa del subconjunto)
         filters = request.get_json(silent=True) if request.method == 'POST' else {}
-        if filters:
-            filters_no_date = {k: v for k, v in filters.items() if k not in ('dateStart', 'dateEnd')}
-            sorted_df, err = _apply_message_filters(df, {**filters_no_date, 'dateStart': '', 'dateEnd': ''})
-            if err is not None:
-                return err
-            df = sorted_df
-            if df.empty:
-                return jsonify(success=True, data=[])
-
-        date_col = 'Date Sent' if 'Date Sent' in df.columns else ('Date' if 'Date' in df.columns else None)
-        if not date_col:
-            return jsonify(success=True, data=[])
-
-        df = df.copy()
-        df[date_col] = pd.to_datetime(df[date_col], errors='coerce').dt.tz_localize(None)
-        df = df.dropna(subset=[date_col])
-        df['_date'] = df[date_col].dt.normalize().dt.strftime('%Y-%m-%d')
-        counts = df.groupby('_date').size().reset_index(name='count')
-        counts = counts.sort_values('_date')
-        data = [{'date': row['_date'], 'count': int(row['count'])} for _, row in counts.iterrows()]
+        data = data_store.messages_over_time(filters or {})
         return jsonify(success=True, data=data)
     except Exception as e:
         logger.exception("Error en /messages_over_time")

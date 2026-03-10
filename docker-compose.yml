@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   backend:
     build: ./backend
@@ -12,6 +10,9 @@ services:
       - FLASK_ENV=production
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-tu-clave-secreta-por-defecto}
       - SQLALCHEMY_DATABASE_URI=sqlite:////app/data/telegram_app.db
+      - DATASTORE_CACHE_DIR=${DATASTORE_CACHE_DIR:-/app/data/cache}
+      - DATASTORE_S3_PARQUET_KEY=${DATASTORE_S3_PARQUET_KEY:-telegram_messages.parquet}
+      - DATA_CACHE_TTL_SEC=${DATA_CACHE_TTL_SEC:-1800}
     networks:
       - monitoria
     restart: unless-stopped
