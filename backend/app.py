@@ -18,8 +18,18 @@ import logging
 from threading import Thread
 from topic_processor import process_topics
 from search_index import ensure_index_synced, search_message_ids
-from data_store import DataStore
 import re
+
+# Store de mensajes: PostgreSQL si DATABASE_URL está definido, si no DuckDB+Parquet (solo analytics/offline)
+def _get_data_store():
+    if os.environ.get('DATABASE_URL'):
+        from data_store_pg import DataStorePG
+        return DataStorePG()
+    from data_store import DataStore
+    return DataStore()
+
+data_store = _get_data_store()
+USE_POSTGRES = bool(os.environ.get('DATABASE_URL'))
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -51,13 +61,12 @@ db.init_app(app)
 
 # Registrar blueprints
 app.register_blueprint(auth_bp, url_prefix='/api/auth')
-data_store = DataStore()
 
 # Crear tablas de base de datos
 with app.app_context():
     db.create_all()
 
-# Caché en memoria para load_data(): evita saturar S3 y CPU con peticiones seguidas
+# Caché en memoria solo cuando no se usa PostgreSQL (path DuckDB/JSON)
 _DATA_CACHE = None
 _DATA_CACHE_TIME = 0
 DATA_CACHE_TTL_SEC = int(os.environ.get('DATA_CACHE_TTL_SEC', '1800'))  # 30 min por defecto
@@ -414,6 +423,17 @@ def _messages_from_dataframe(df):
 @app.route('/')
 def index():
     """Renderiza la página principal con los mensajes ordenados por puntuación."""
+    if USE_POSTGRES:
+        paginated_df, _ = data_store.query_messages({}, limit=MESSAGES_LIMIT, offset=0)
+        if paginated_df.empty:
+            return render_template('index.html', messages=[], channels=[], min_date='', max_date='')
+        messages = _messages_from_dataframe(_attach_topic_titles_to_df(paginated_df))
+        channels = data_store.get_channels()
+        min_date, max_date = data_store.get_date_bounds()
+        min_date = min_date or ''
+        max_date = max_date or ''
+        return render_template('index.html', messages=messages, channels=channels, min_date=min_date, max_date=max_date)
+
     df = load_data()
     if df.empty:
         return render_template('index.html', messages=[], channels=[], min_date='', max_date='')
@@ -438,12 +458,8 @@ def index():
 def load_more(offset=0):
     """Carga más mensajes a partir de un offset dado."""
     try:
-        # Obtener los filtros del body
         filters = request.get_json(silent=True) or {}
-        date_start_str = filters.get('dateStart')
-        date_end_str = filters.get('dateEnd')
         if not filters:
-            # Fallback para compatibilidad con query params
             filters = {
                 'dateStart': request.args.get('dateStart'),
                 'dateEnd': request.args.get('dateEnd'),
@@ -455,8 +471,25 @@ def load_more(offset=0):
                 'sortBy': request.args.get('sortBy', 'score'),
                 'search': request.args.get('search') or request.args.get('q')
             }
-            date_start_str = filters.get('dateStart')
-            date_end_str = filters.get('dateEnd')
+        date_start_str = filters.get('dateStart')
+        date_end_str = filters.get('dateEnd')
+
+        if USE_POSTGRES:
+            paginated_df, total = data_store.query_messages(filters, limit=24, offset=offset)
+            if paginated_df.empty or offset >= total:
+                return ('', 204)
+            paginated_df = _attach_topic_titles_to_df(paginated_df)
+            messages = []
+            for _, row in paginated_df.iterrows():
+                score = row.get('Score')
+                messages.append({
+                    'Embed': row.get('Embed', ''),
+                    'Score': round(score, 2) if score is not None and isinstance(score, (int, float)) else 'N/A',
+                    'Message ID': row.get('Message ID', ''),
+                    'URL': row.get('URL', ''),
+                    'Label': row.get('Label', None),
+                })
+            return render_template('message_cards_partial.html', messages=messages)
 
         df = load_data()
         if df.empty:
@@ -634,9 +667,10 @@ def label_message():
         if not updated:
             return jsonify(success=False, error="Message ID no encontrado"), 404
 
-        global _DATA_CACHE, _DATA_CACHE_TIME
-        _DATA_CACHE = None
-        _DATA_CACHE_TIME = 0
+        if not USE_POSTGRES:
+            global _DATA_CACHE, _DATA_CACHE_TIME
+            _DATA_CACHE = None
+            _DATA_CACHE_TIME = 0
 
         return jsonify(success=True)
     except ValueError as e:
@@ -1089,6 +1123,10 @@ def messages_over_time():
 def get_messages():
     """Endpoint para obtener los mensajes para el frontend."""
     try:
+        if USE_POSTGRES:
+            messages = data_store.get_messages_list(limit=500)
+            return jsonify(success=True, messages=messages)
+
         df = load_data()
         if df.empty:
             return jsonify(success=True, messages=[])

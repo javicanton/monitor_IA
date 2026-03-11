@@ -473,8 +473,9 @@ yarn-error.log*
 credentials.txt
 telegram_channels_test.csv
 telegram_channels_ampliado.csv
-INSTRUCCIONES_DATABASE.md
-INSTRUCCIONES_LEVANTAR.md
+# Guías de despliegue y migración (contienen datos sensibles o internos)
+MIGRATION_POSTGRESQL.md
+DEPLOY_AWS.md
 
 # Carpeta de datos
 /data/*

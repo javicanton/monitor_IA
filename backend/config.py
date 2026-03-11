@@ -1,14 +1,26 @@
 import os
 from datetime import timedelta
 
+# PostgreSQL (AWS RDS compatible): usar DATABASE_URL.
+# Ejemplo: postgresql://user:pass@host:5432/dbname
+# Para desarrollo local: postgresql://localhost/monitor_ia
+DATABASE_URL = os.environ.get('DATABASE_URL')
+
+# Si no hay DATABASE_URL, se usa SQLite (solo para desarrollo sin PostgreSQL)
+if DATABASE_URL:
+    # RDS a veces devuelve URL con protocolo postgres://; SQLAlchemy necesita postgresql://
+    if DATABASE_URL.startswith('postgres://'):
+        DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
+    SQLALCHEMY_DATABASE_URI = DATABASE_URL
+else:
+    SQLALCHEMY_DATABASE_URI = os.environ.get('SQLALCHEMY_DATABASE_URI', 'sqlite:///telegram_app.db')
+
 class Config:
     # Configuración básica de Flask
     SECRET_KEY = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-production')
     
-    # Configuración de la base de datos
-    # Usar SQLite para desarrollo y AWS (sin PostgreSQL)
-    # En Docker se puede definir SQLALCHEMY_DATABASE_URI=sqlite:////app/data/telegram_app.db
-    SQLALCHEMY_DATABASE_URI = os.environ.get('SQLALCHEMY_DATABASE_URI', 'sqlite:///telegram_app.db')
+    # Base de datos: PostgreSQL vía DATABASE_URL o SQLite por defecto
+    SQLALCHEMY_DATABASE_URI = SQLALCHEMY_DATABASE_URI
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # Configuración de JWT
