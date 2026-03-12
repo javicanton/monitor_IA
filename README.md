@@ -6,11 +6,16 @@ Aplicación web para analizar y etiquetar mensajes de alto rendimiento en canale
 
 ## Estado del proyecto
 
-- **Frontend**: React 18 + Material-UI (v0.33), con autenticación, filtros, gráficos (Recharts) y exportación.
-- **Backend**: Flask en `backend/`, puerto 5001, con API REST, JWT, S3, SQLite por defecto y endpoints de administración.
+- **Frontend**: React 18 + Material-UI (v0.33), con filtros, gráficos (Recharts) y exportación.
+- **Backend**: Flask en `backend/`, puerto 5001, con API REST, JWT, S3 y endpoints de administración.
 - **Topics**: Worker asíncrono (pytopicgram) que genera temas sobre los mensajes y los guarda en S3; opcionalmente arranca en el mismo proceso con `TOPIC_WORKER_AUTOSTART`.
 - **Búsqueda**: Índice FTS5 (SQLite) sobre mensajes para búsqueda full-text; se mantiene sincronizado con los datos cargados.
-- **Despliegue**: Docker Compose (backend + frontend + topic_worker), y documentación para GitHub Actions + ECS en [GITHUB_ACTIONS_SETUP.md](GITHUB_ACTIONS_SETUP.md).
+- **Despliegue**: Docker Compose (backend + frontend + topic_worker), y documentación para GitHub Actions + ECS en `docs/GITHUB_ACTIONS_SETUP.md`.
+
+**En desarrollo**
+
+- **Sistema de login**: Autenticación (email/contraseña, recuperación), roles admin/user y preparación para OAuth (Google, GitHub, Apple). Flujo de registro y verificación de email en curso.
+- **Base de datos**: Migración a **PostgreSQL** (compatible con AWS RDS) para la API web: consultas paginadas, sin cargar el dataset en memoria. Script de ingesta desde CSV/Parquet (`scripts/import_dataset.py`). SQLite sigue disponible como fallback en desarrollo.
 
 ## Características
 
@@ -31,7 +36,7 @@ Aplicación web para analizar y etiquetar mensajes de alto rendimiento en canale
 | Backend         | Flask (Python), Gunicorn en producción         |
 | Frontend        | React 18, Material-UI, Recharts, Axios         |
 | Datos           | AWS S3 (mensajes JSON/CSV) + caché en memoria  |
-| Base de datos   | SQLite por defecto (`backend/instance/`)       |
+| Base de datos   | PostgreSQL (RDS) con `DATABASE_URL`; SQLite por defecto si no está definido |
 | Autenticación   | JWT (Flask-JWT-Extended), bcrypt               |
 | Topics          | Worker Python (pytopicgram), estado en S3     |
 | Búsqueda        | SQLite FTS5 (`backend/instance/telegram_search.db`) |
@@ -73,7 +78,7 @@ monitor_IA/
 ├── init_db.py               # Inicializar DB y usuario admin (desde raíz)
 ├── test_s3_connection.py    # Probar conexión S3
 ├── requirements.txt         # Dependencias Python (raíz; scraper/topics)
-└── GITHUB_ACTIONS_SETUP.md  # CI/CD con GitHub Actions y ECS
+└── docs/                    # Documentación (guías, OAuth, despliegue)
 ```
 
 ## Instalación
@@ -101,9 +106,13 @@ pip install -r requirements-topics.txt   # desde backend/
 
 ### 3. Variables de entorno
 
-Crear `.env` en la raíz o en `backend/` (el backend carga desde su directorio):
+Crear **`.env`** en la **raíz del repositorio** (o en `backend/`). Ese archivo está en `.gitignore` y **no se sube al repo**; ahí van las credenciales (DB, AWS, etc.). Puedes copiar `.env.example` y renombrarlo a `.env`.
 
 ```bash
+# PostgreSQL (RDS). Si está definido, la API usa solo PostgreSQL. No commitear .env.
+# DATABASE_URL=postgresql://usuario:contraseña@host.rds.amazonaws.com:5432/nombre_bd
+# Si la contraseña tiene caracteres especiales (!#@ etc.), codificarlos en URL (ej. ! → %21).
+
 # Flask
 SECRET_KEY=tu_secret_key_cambiar_en_produccion
 JWT_SECRET_KEY=tu_jwt_secret_key_cambiar_en_produccion
@@ -114,7 +123,7 @@ AWS_SECRET_ACCESS_KEY=tu_secret_access_key
 AWS_REGION=eu-north-1
 S3_BUCKET=monitoria-data
 
-# Base de datos (por defecto SQLite en backend/instance/)
+# Base de datos (sin DATABASE_URL se usa SQLite en backend/instance/)
 # SQLALCHEMY_DATABASE_URI=sqlite:///telegram_app.db
 
 # Correo (AWS SES, opcional)
@@ -266,7 +275,7 @@ curl -X POST http://localhost:5001/api/auth/login \
 ## Despliegue y CI/CD
 
 - **Docker**: Usar `docker-compose.yml` para backend, frontend y topic_worker.
-- **GitHub Actions + ECS**: Ver [GITHUB_ACTIONS_SETUP.md](GITHUB_ACTIONS_SETUP.md) para secrets, ECR, ECS y rama `deploy-beta`.
+- **GitHub Actions + ECS**: Ver `docs/GITHUB_ACTIONS_SETUP.md` para secrets, ECR, ECS y rama `deploy-beta`.
 
 ## Solución de problemas
 
@@ -274,6 +283,10 @@ curl -X POST http://localhost:5001/api/auth/login \
 - **Datos no cargan**: Revisar logs del backend y formato/nombres de archivos en S3.
 - **Frontend no conecta**: Comprobar que el backend esté en el puerto correcto y CORS (`CORS_ORIGINS`).
 - **Topics**: Revisar variables `TOPICS_*` y que el worker tenga acceso a S3 y al archivo de mensajes.
+
+## Documentación adicional
+
+En la carpeta **`docs/`** hay guías de despliegue, OAuth (Google/GitHub/Apple), referencia de variables de entorno y CI/CD. Esa carpeta no se sube al repo (está en `.gitignore`).
 
 ## Contribución
 
@@ -286,9 +299,3 @@ curl -X POST http://localhost:5001/api/auth/login \
 ## Licencia
 
 Este proyecto está bajo la Licencia MIT. Ver [LICENSE](LICENSE) para más detalles.
-
-## Soporte
-
-1. Revisar este README y [GITHUB_ACTIONS_SETUP.md](GITHUB_ACTIONS_SETUP.md).
-2. Buscar en los issues del repositorio.
-3. Abrir un nuevo issue con detalles del problema.

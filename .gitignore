@@ -468,14 +468,15 @@ yarn-error.log*
 *.swo
 .DS_Store
 
-# Archivos de datos y credenciales
+# Archivos de datos y credenciales (no subir al repo)
+.env
+.env.example
 *.session
 credentials.txt
 telegram_channels_test.csv
 telegram_channels_ampliado.csv
-# Guías de despliegue y migración (contienen datos sensibles o internos)
-MIGRATION_POSTGRESQL.md
-DEPLOY_AWS.md
+# Documentación (guías, secrets, despliegue)
+docs/
 
 # Carpeta de datos
 /data/*

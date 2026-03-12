@@ -1,3 +1,13 @@
+import os
+from pathlib import Path
+# Cargar .env antes de importar Config (raíz del repo o backend/)
+for _dir in (Path(__file__).resolve().parent.parent, Path(__file__).resolve().parent):
+    _env = _dir / ".env"
+    if _env.exists():
+        from dotenv import load_dotenv
+        load_dotenv(_env)
+        break
+
 from flask import Flask, render_template, request, jsonify, send_file
 from flask_cors import CORS
 from io import BytesIO
@@ -5,7 +15,6 @@ from flask_jwt_extended import JWTManager, create_access_token, jwt_required, ge
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_sqlalchemy import SQLAlchemy
 import pandas as pd
-import os
 from datetime import datetime, timedelta
 import json
 from s3_client import get_s3_client
