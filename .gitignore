@@ -494,3 +494,4 @@ backend/data/*.json
 backend/data/*.csv
 backend/data/*.xlsx
 backend/data/*.session
+README oculto.md
