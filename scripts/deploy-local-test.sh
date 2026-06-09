@@ -22,8 +22,13 @@ done
 export FRONTEND_PORT
 
 if [[ ! -f .env ]]; then
-  echo "AVISO: no hay .env — el backend necesita AWS_* para cargar mensajes desde S3."
-  echo "       cp credentials.example.txt .env y edita las variables."
+  if [[ -f .env.example ]]; then
+    cp .env.example .env
+    echo "AVISO: creado .env desde .env.example."
+  else
+    touch .env
+    echo "AVISO: creado .env vacío."
+  fi
 fi
 
 echo "==> Build imágenes (backend + frontend)..."

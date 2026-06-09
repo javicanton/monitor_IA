@@ -6,8 +6,6 @@ version: '3.8'
 services:
   backend:
     container_name: monitoria-staging-backend
-    env_file:
-      - .env
 
   frontend:
     container_name: monitoria-staging-frontend

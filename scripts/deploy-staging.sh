@@ -31,7 +31,13 @@ if $down; then
 fi
 
 if [[ ! -f .env ]]; then
-  echo "AVISO: no hay .env — copia credentials.example.txt y configura AWS_*."
+  if [[ -f .env.example ]]; then
+    cp .env.example .env
+    echo "AVISO: creado .env desde .env.example (edítalo si hace falta)."
+  else
+    touch .env
+    echo "AVISO: creado .env vacío; en EC2 suele bastar el rol IAM o la URL pública de S3."
+  fi
 fi
 
 echo "==> Build staging (${PROJECT_NAME})..."
