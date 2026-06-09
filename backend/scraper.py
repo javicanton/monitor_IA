@@ -498,7 +498,37 @@ def parse_args():
     parser.add_argument("--non-interactive", action="store_true", help="Modo no interactivo (SSH)")
     parser.add_argument("--api-id", type=int, help="API_ID de Telegram (opcional)")
     parser.add_argument("--api-hash", help="API_HASH de Telegram (opcional)")
+    parser.add_argument(
+        "--postgres",
+        action="store_true",
+        help="Guardar en PostgreSQL (requiere DATABASE_URL). Upsert: nuevos mensajes y actualización de views/score.",
+    )
+    parser.add_argument(
+        "--postgres-batch-size",
+        type=int,
+        default=500,
+        help="Tamaño de lote para upsert en PostgreSQL (default: 500)",
+    )
+    parser.add_argument(
+        "--export-csv",
+        action="store_true",
+        help="Además de PostgreSQL, generar telegram_messages.csv/json local (legacy)",
+    )
     return parser.parse_args()
+
+
+def upsert_channel_rows_to_postgres(
+    app,
+    rows: List[Dict[str, Any]],
+    batch_size: int = 500,
+) -> Dict[str, int]:
+    """Inserta o actualiza mensajes de un canal en PostgreSQL."""
+    if not rows:
+        return {"channels": 0, "inserted": 0, "updated": 0}
+    from pg_upsert import upsert_records
+
+    with app.app_context():
+        return upsert_records(rows, batch_size=batch_size, preserve_labels=True)
 
 async def main(args):
     print("1. Iniciando script...")
@@ -536,14 +566,27 @@ async def main(args):
     time_days_ago = datetime.now(timezone.utc) - timedelta(days=days_to_scrape)
     print(f"6. Configuración: {days_to_scrape} días, {max_messages} mensajes por canal")
     
-    # Cargar datos existentes
-    print("7. Cargando datos existentes...")
-    existing_messages = load_existing_data(
-        'telegram_messages.csv',
-        s3_csv_key=args.s3_csv_key,
-        s3_json_key=args.s3_key
-    )
-    existing_ids = build_existing_message_ids(existing_messages)
+    use_postgres = bool(args.postgres or os.environ.get("DATABASE_URL"))
+    pg_app = None
+    if use_postgres and not os.environ.get("DATABASE_URL"):
+        print("Error: --postgres requiere DATABASE_URL en el entorno")
+        return
+    if use_postgres:
+        from pg_upsert import clear_channel_cache, create_app
+
+        print("7. Modo PostgreSQL: los mensajes se guardan con upsert en la base de datos")
+        pg_app = create_app()
+        clear_channel_cache()
+        existing_messages = pd.DataFrame()
+        existing_ids = set()
+    else:
+        print("7. Cargando datos existentes...")
+        existing_messages = load_existing_data(
+            'telegram_messages.csv',
+            s3_csv_key=args.s3_csv_key,
+            s3_json_key=args.s3_key
+        )
+        existing_ids = build_existing_message_ids(existing_messages)
     
     # Crear cliente
     print("8. Creando cliente...")
@@ -573,7 +616,9 @@ async def main(args):
         print("12. Conexión exitosa!")
         
         all_data = []
+        pg_totals = {"channels": 0, "inserted": 0, "updated": 0}
         for channel in channels:
+            channel_rows = []
             try:
                 print(f"Procesando canal: {channel}")
                 channel_details = await client.get_entity(channel)
@@ -620,9 +665,8 @@ async def main(args):
                     data.update(extract_channel_details(channel_details))
                     data.update(extract_message_details(message))
                     
-                    # Verificar si el mensaje ya existe en el dataset
                     message_key = (data['Username'], message.id)
-                    if message_key in existing_ids:
+                    if not use_postgres and message_key in existing_ids:
                         mensajes_existentes += 1
                         continue
         
@@ -659,9 +703,27 @@ async def main(args):
                     data['Label'] = ''
 
                     all_data.append(data)
+                    channel_rows.append(data)
                     mensajes_nuevos += 1
 
-                print(f"✓ Canal '{channel}': {mensajes_existentes} mensajes existentes, {mensajes_nuevos} nuevos mensajes añadidos")
+                if use_postgres and channel_rows and pg_app is not None:
+                    stats = upsert_channel_rows_to_postgres(
+                        pg_app,
+                        channel_rows,
+                        batch_size=args.postgres_batch_size,
+                    )
+                    pg_totals["inserted"] += stats.get("inserted", 0)
+                    pg_totals["updated"] += stats.get("updated", 0)
+                    pg_totals["channels"] = stats.get("channels", pg_totals["channels"])
+                    print(
+                        f"✓ Canal '{channel}': {len(channel_rows)} mensajes → "
+                        f"+{stats.get('inserted', 0)} nuevos, {stats.get('updated', 0)} actualizados"
+                    )
+                else:
+                    print(
+                        f"✓ Canal '{channel}': {mensajes_existentes} mensajes existentes, "
+                        f"{mensajes_nuevos} nuevos mensajes añadidos"
+                    )
 
             except ChannelInvalidError:
                 print(f"✗ Canal '{channel}' inválido o no accesible. Continuando con el siguiente.")
@@ -669,8 +731,14 @@ async def main(args):
                 print(f"Error al procesar {channel}: {str(e)}")
                 continue
 
-        if all_data:
-            print("13. Guardando datos...")
+        if use_postgres and all_data:
+            print(
+                f"13. PostgreSQL: {pg_totals['inserted']} mensajes nuevos, "
+                f"{pg_totals['updated']} actualizados ({pg_totals['channels']} canales)"
+            )
+
+        if all_data and (not use_postgres or args.export_csv):
+            print("13. Guardando datos en ficheros locales...")
             # Convert the new data to a DataFrame
             new_data_df = pd.DataFrame(all_data)
 
@@ -814,8 +882,10 @@ async def main(args):
                     upload_csv=args.upload_csv,
                     s3_csv_key=args.s3_csv_key
                 )
-        else:
+        elif not all_data:
             print("13. No hay datos para guardar")
+        elif use_postgres and not args.export_csv:
+            print("13. Modo PostgreSQL: omitida exportación CSV/JSON local (usa --export-csv si la necesitas)")
         print("18. Cerrando conexión...")
         try:
             if client:

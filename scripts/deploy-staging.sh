@@ -30,6 +30,14 @@ if $down; then
   exit 0
 fi
 
+if [[ -f .env ]]; then
+  if grep -q '^DATABASE_URL=' .env 2>/dev/null; then
+    echo "==> Modo datos: PostgreSQL (DATABASE_URL definido)"
+  else
+    echo "==> Modo datos: Parquet/S3 (sin DATABASE_URL). Ver docs/SQL_MIGRATION.md para escalar."
+  fi
+fi
+
 if [[ ! -f .env ]]; then
   if [[ -f .env.example ]]; then
     cp .env.example .env

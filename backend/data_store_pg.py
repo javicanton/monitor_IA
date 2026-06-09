@@ -49,23 +49,55 @@ def _date_expr(model=Message):
 class DataStorePG:
     """Store de mensajes sobre PostgreSQL. Sin carga en memoria."""
 
+    def _search_query(self, filters: Dict) -> str:
+        return (filters.get("search") or filters.get("q") or "").strip()
+
     def _search_ids(self, filters: Dict) -> Optional[List[int]]:
-        search_query = (filters.get("search") or filters.get("q") or "").strip()
+        search_query = self._search_query(filters)
         if not search_query:
             return None
         try:
             from search_index_pg import search_message_ids_pg
+
             ids = search_message_ids_pg(search_query)
-            return ids if ids is not None else None
+            if ids:
+                return ids
         except Exception as exc:
             logger.warning("Búsqueda full-text PostgreSQL no disponible: %s", exc)
         return None
 
-    def _apply_filters(self, q, filters: Dict, search_ids: Optional[List[int]], join_topics: bool):
+    def _apply_text_search(self, q, search_query: str):
+        terms = [
+            term
+            for term in search_query.split()
+            if term.upper() not in ("AND", "OR", "NOT") and term.strip()
+        ]
+        if not terms:
+            terms = [search_query]
+        for term in terms:
+            pattern = f"%{term}%"
+            q = q.filter(
+                or_(
+                    Message.message_text.ilike(pattern),
+                    Channel.title.ilike(pattern),
+                    Message.embed.ilike(pattern),
+                )
+            )
+        return q
+
+    def _apply_filters(
+        self,
+        q,
+        filters: Dict,
+        search_ids: Optional[List[int]],
+        join_topics: bool,
+        use_like_search: bool = False,
+    ):
+        search_query = self._search_query(filters)
         if search_ids is not None:
-            if not search_ids:
-                return q.filter(Message.id == -1)
             q = q.filter(Message.message_id.in_(search_ids))
+        elif use_like_search and search_query:
+            q = self._apply_text_search(q, search_query)
         channel = filters.get("channel")
         if channel:
             if isinstance(channel, list):
@@ -128,7 +160,9 @@ class DataStorePG:
     def query_messages(self, filters: Dict, limit: int, offset: int) -> Tuple[pd.DataFrame, int]:
         limit = min(max(1, limit), MAX_PAGE_SIZE)
         offset = max(0, offset)
-        search_ids = self._search_ids(filters)
+        search_query = self._search_query(filters)
+        search_ids = self._search_ids(filters) if search_query else None
+        use_like_search = bool(search_query and search_ids is None)
         topic_filter = filters.get("topics") or filters.get("topic")
         join_topics = bool(topic_filter)
 
@@ -143,7 +177,7 @@ class DataStorePG:
         if join_topics:
             q = q.outerjoin(MessageTopic, Message.id == MessageTopic.message_id)
         q = q.join(Channel, Message.channel_id == Channel.id)
-        q = self._apply_filters(q, filters, search_ids, join_topics)
+        q = self._apply_filters(q, filters, search_ids, join_topics, use_like_search=use_like_search)
         count_q = q.with_entities(func.count(distinct(Message.id)))
         total = count_q.scalar() or 0
         q = self._order_by(q, filters)
@@ -185,7 +219,9 @@ class DataStorePG:
 
     def messages_over_time(self, filters: Dict) -> List[Dict]:
         filters = {k: v for k, v in (filters or {}).items() if k not in ("dateStart", "dateEnd")}
-        search_ids = self._search_ids(filters)
+        search_query = self._search_query(filters)
+        search_ids = self._search_ids(filters) if search_query else None
+        use_like_search = bool(search_query and search_ids is None)
         topic_filter = filters.get("topics") or filters.get("topic")
         join_topics = bool(topic_filter)
 
@@ -195,7 +231,7 @@ class DataStorePG:
         ).join(Channel, Message.channel_id == Channel.id)
         if topic_filter:
             q = q.outerjoin(MessageTopic, Message.id == MessageTopic.message_id)
-        q = self._apply_filters(q, filters, search_ids, join_topics)
+        q = self._apply_filters(q, filters, search_ids, join_topics, use_like_search=use_like_search)
         q = q.filter(_date_expr().isnot(None))
         q = q.group_by(func.date(_date_expr())).order_by(func.date(_date_expr()))
         rows = q.all()
@@ -204,7 +240,9 @@ class DataStorePG:
     def export_filtered_dataframe(self, filters: Dict) -> pd.DataFrame:
         topic_filter = filters.get("topics") or filters.get("topic")
         join_topics = bool(topic_filter)
-        search_ids = self._search_ids(filters)
+        search_query = self._search_query(filters)
+        search_ids = self._search_ids(filters) if search_query else None
+        use_like_search = bool(search_query and search_ids is None)
 
         q = db.session.query(
             Message.message_id,
@@ -222,7 +260,7 @@ class DataStorePG:
         if join_topics:
             q = q.outerjoin(MessageTopic, Message.id == MessageTopic.message_id)
         q = q.join(Channel, Message.channel_id == Channel.id)
-        q = self._apply_filters(q, filters, search_ids, join_topics)
+        q = self._apply_filters(q, filters, search_ids, join_topics, use_like_search=use_like_search)
         q = self._order_by(q, filters)
         rows = q.all()
 

@@ -13,6 +13,7 @@ services:
       - AWS_REGION=${AWS_REGION:-eu-north-1}
       - S3_BUCKET=${S3_BUCKET:-monitoria-data}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-tu-clave-secreta-por-defecto}
+      - DATABASE_URL=${DATABASE_URL:-}
 
   frontend:
     build:
