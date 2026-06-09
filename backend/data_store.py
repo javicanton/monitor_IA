@@ -273,8 +273,8 @@ class DataStore:
 
         topic_filter = filters.get("topics") or filters.get("topic")
         topic_ids = self._normalize_topic_filter(topic_filter)
-        if topic_filter:
-            if include_topics and topic_ids:
+        if topic_filter and topic_ids:
+            if include_topics:
                 placeholders = ", ".join(["?"] * len(topic_ids))
                 clauses.append(f"cast(a.topic_id as BIGINT) IN ({placeholders})")
                 params.extend(topic_ids)
@@ -328,16 +328,26 @@ class DataStore:
             return " ORDER BY lower(coalesce(m.\"Title\", '')) ASC, cast(m.\"Message ID\" as BIGINT) DESC"
         return " ORDER BY coalesce(try_cast(m.\"Score\" as DOUBLE), 0) DESC, cast(m.\"Message ID\" as BIGINT) DESC"
 
+    def _has_topic_join(self, filters: Dict) -> bool:
+        topic_filter = filters.get("topics") or filters.get("topic")
+        if bool(topic_filter):
+            return os.path.exists(self.assignments_csv_path)
+        return os.path.exists(self.assignments_csv_path)
+
     def query_messages(self, filters: Dict, limit: int, offset: int) -> Tuple[pd.DataFrame, int]:
         search_ids = self._search_ids(filters)
         topic_filter = filters.get("topics") or filters.get("topic")
-        include_topics = bool(topic_filter) or os.path.exists(self.assignments_csv_path)
-        from_clause = self._build_from_clause(include_topics)
-        where_sql, params = self._build_where_clause(filters, search_ids, include_topics)
+        has_topic_join = self._has_topic_join(filters)
+        from_clause = self._build_from_clause(has_topic_join)
+        where_sql, params = self._build_where_clause(filters, search_ids, has_topic_join)
         sort_sql = self._sort_clause(filters)
 
-        topic_select = "cast(a.topic_id as BIGINT) as topic_id" if include_topics and os.path.exists(self.assignments_csv_path) else "NULL::BIGINT as topic_id"
-        count_sql = f"SELECT COUNT(*){from_clause}{where_sql}"
+        topic_select = "cast(a.topic_id as BIGINT) as topic_id" if has_topic_join else "NULL::BIGINT as topic_id"
+        count_sql = (
+            f"SELECT COUNT(DISTINCT cast(m.\"Message ID\" AS BIGINT)){from_clause}{where_sql}"
+            if has_topic_join
+            else f"SELECT COUNT(*){from_clause}{where_sql}"
+        )
         query_sql = (
             "SELECT m.\"Embed\", coalesce(try_cast(m.\"Score\" as DOUBLE), 0) as \"Score\", "
             "cast(m.\"Message ID\" as BIGINT) as \"Message ID\", m.\"URL\", m.\"Label\", "
@@ -366,39 +376,82 @@ class DataStore:
     def messages_over_time(self, filters: Dict) -> List[Dict]:
         filters = {k: v for k, v in (filters or {}).items() if k not in ("dateStart", "dateEnd")}
         search_ids = self._search_ids(filters)
-        topic_filter = filters.get("topics") or filters.get("topic")
-        include_topics = bool(topic_filter)
-        from_clause = self._build_from_clause(include_topics)
-        where_sql, params = self._build_where_clause(filters, search_ids, include_topics)
+        has_topic_join = self._has_topic_join(filters)
+        from_clause = self._build_from_clause(has_topic_join)
+        where_sql, params = self._build_where_clause(filters, search_ids, has_topic_join)
         date_expr = self._date_expr()
-        sql = (
-            "SELECT strftime(date_trunc('day', {date_expr}), '%Y-%m-%d') as day, COUNT(*) as count "
-            "{from_clause}{where_sql} "
-            "AND {date_expr} IS NOT NULL "
-            "GROUP BY 1 ORDER BY 1"
-        )
+        day_expr = f"CAST(date_trunc('day', {date_expr}) AS DATE)"
+
+        sql_parts = [
+            f"SELECT {day_expr} AS day,",
+            " COUNT(DISTINCT cast(m.\"Message ID\" AS BIGINT)) AS count",
+            from_clause,
+        ]
         if where_sql:
-            sql = sql.format(date_expr=date_expr, from_clause=from_clause, where_sql=where_sql)
+            sql_parts.extend([where_sql, f"AND {date_expr} IS NOT NULL"])
         else:
-            sql = (
-                "SELECT strftime(date_trunc('day', {date_expr}), '%Y-%m-%d') as day, COUNT(*) as count "
-                "{from_clause} WHERE {date_expr} IS NOT NULL GROUP BY 1 ORDER BY 1"
-            ).format(date_expr=date_expr, from_clause=from_clause)
+            sql_parts.append(f"WHERE {date_expr} IS NOT NULL")
+        sql_parts.append("GROUP BY day ORDER BY day")
+        sql = " ".join(sql_parts)
 
         con = self._connect()
         try:
             rows = con.execute(sql, params).fetchall()
-            return [{"date": row[0], "count": int(row[1])} for row in rows]
+            return [
+                {"date": row[0].isoformat() if hasattr(row[0], "isoformat") else str(row[0]), "count": int(row[1])}
+                for row in rows
+                if row[0] is not None
+            ]
+        except Exception as exc:
+            logger.exception("messages_over_time SQL falló (%s); usando pandas", exc)
+            return self._messages_over_time_pandas(filters)
         finally:
             con.close()
 
+    def _messages_over_time_pandas(self, filters: Dict) -> List[Dict]:
+        """Fallback robusto: lee parquet y agrupa por día en pandas."""
+        parquet_path = self.ensure_local_parquet()
+        con = self._connect()
+        try:
+            df = con.execute(
+                f"SELECT * FROM read_parquet('{self._quoted(parquet_path)}')"
+            ).fetchdf()
+        finally:
+            con.close()
+        if df.empty:
+            return []
+
+        filtered = df
+        channel = filters.get("channel")
+        if channel:
+            titles = channel if isinstance(channel, list) else [channel]
+            if "Title" in filtered.columns:
+                filtered = filtered[filtered["Title"].isin(titles)]
+
+        date_col = next((c for c in ("Date Sent", "Date", "Creation Date") if c in filtered.columns), None)
+        if not date_col:
+            return []
+
+        dates = pd.to_datetime(filtered[date_col], errors="coerce", utc=True)
+        if hasattr(dates.dt, "tz") and dates.dt.tz is not None:
+            dates = dates.dt.tz_convert(None)
+        filtered = filtered.assign(_day=dates.dt.normalize())
+        filtered = filtered.dropna(subset=["_day"])
+        if filtered.empty:
+            return []
+
+        counts = filtered.groupby("_day").size().reset_index(name="count")
+        return [
+            {"date": row["_day"].strftime("%Y-%m-%d"), "count": int(row["count"])}
+            for _, row in counts.iterrows()
+        ]
+
     def export_filtered_dataframe(self, filters: Dict) -> pd.DataFrame:
         search_ids = self._search_ids(filters)
-        topic_filter = filters.get("topics") or filters.get("topic")
-        include_topics = bool(topic_filter) or os.path.exists(self.assignments_csv_path)
-        from_clause = self._build_from_clause(include_topics)
-        where_sql, params = self._build_where_clause(filters, search_ids, include_topics)
-        topic_select = "cast(a.topic_id as BIGINT) as topic_id" if include_topics and os.path.exists(self.assignments_csv_path) else "NULL::BIGINT as topic_id"
+        has_topic_join = self._has_topic_join(filters)
+        from_clause = self._build_from_clause(has_topic_join)
+        where_sql, params = self._build_where_clause(filters, search_ids, has_topic_join)
+        topic_select = "cast(a.topic_id as BIGINT) as topic_id" if has_topic_join else "NULL::BIGINT as topic_id"
         sql = (
             "SELECT cast(m.\"Message ID\" as BIGINT) as \"Message ID\", m.\"Message Text\", m.\"Title\", "
             f"{self._date_expr()} as \"Date Sent\", coalesce(try_cast(m.\"Views\" as DOUBLE), 0) as \"Views\", "
