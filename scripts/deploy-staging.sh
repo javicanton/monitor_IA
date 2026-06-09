@@ -40,6 +40,19 @@ if [[ ! -f .env ]]; then
   fi
 fi
 
+echo "==> Espacio en disco (/)..."
+df -h / | tail -1
+
+echo "==> Liberando caché de build de Docker no usada..."
+docker builder prune -f --filter "until=48h" 2>/dev/null || true
+
+if [[ -f backend/telegram_messages.csv ]]; then
+  csv_size="$(du -h backend/telegram_messages.csv | cut -f1)"
+  echo "AVISO: backend/telegram_messages.csv (${csv_size}) está en el servidor pero NO se copia a la imagen."
+  echo "       Los datos se cargan desde S3 / volúmenes en runtime. Puedes borrarlo para liberar disco:"
+  echo "       rm -f backend/telegram_messages.csv"
+fi
+
 echo "==> Build staging (${PROJECT_NAME})..."
 docker compose -p "$PROJECT_NAME" "${COMPOSE_FILES[@]}" build
 

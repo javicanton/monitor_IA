@@ -1,0 +1,29 @@
+# Datos locales: el contenedor carga desde S3 o volúmenes Docker en runtime
+*.csv
+*.parquet
+*.xlsx
+telegram_messages.json
+telegram_messages.*
+
+instance/
+cache/
+data/
+
+# Entornos y cachés de desarrollo
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+
+# Git y secretos
+.git/
+.gitignore
+*.session
+*credentials*
+*Credentials*
+
+# Logs
+*.log
+logs/
