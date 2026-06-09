@@ -23,9 +23,15 @@ fi
 DAYS="${SCRAPER_DAYS:-7}"
 MAX_MSG="${SCRAPER_MAX_MESSAGES:-500}"
 
+PYTHON="${ROOT}/.venv/bin/python"
+if [[ ! -x "$PYTHON" ]]; then
+  echo "AVISO: no hay .venv; ejecuta ./scripts/setup-venv.sh"
+  PYTHON=python3
+fi
+
 echo "==> Scraper → PostgreSQL (últimos ${DAYS} días, máx ${MAX_MSG} msg/canal)"
 cd backend
-python3 scraper.py \
+"$PYTHON" scraper.py \
   --postgres \
   --non-interactive \
   --days "$DAYS" \

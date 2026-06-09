@@ -45,17 +45,24 @@ DATABASE_URL=postgresql://monitoria:TU_PASSWORD@monitor-ia.xxxxx.eu-north-1.rds.
 
 El contenedor backend recibe esta variable vía `docker-compose.deploy-test.yml`.
 
-### 4. Inicializar tablas e índices (una vez)
+### 4. Entorno Python en EC2 (una vez)
 
-En la instancia EC2 (con venv o dentro del contenedor):
+Ubuntu 24+ no permite `pip install` global. Usa el venv del proyecto:
 
 ```bash
 cd ~/monitor_IA
+./scripts/setup-venv.sh
+source .venv/bin/activate
 export $(grep -v '^#' .env | xargs)
-python3 scripts/init_postgres.py
 ```
 
-### 5. Importar el dataset actual (una vez)
+### 5. Inicializar tablas e índices (una vez)
+
+```bash
+python scripts/init_postgres.py
+```
+
+### 6. Importar el dataset actual (una vez)
 
 Opción A — desde JSON en S3 (descargar y importar):
 
@@ -85,7 +92,7 @@ with app.app_context():
 "
 ```
 
-### 6. Redesplegar staging con SQL
+### 7. Redesplegar staging con SQL
 
 ```bash
 cd ~/monitor_IA
@@ -96,7 +103,7 @@ curl -s -X POST http://localhost:8080/api/filter_messages \
   -H 'Content-Type: application/json' -d '{"page":1}' | head -c 200
 ```
 
-### 7. Scraper periódico → PostgreSQL
+### 8. Scraper periódico → PostgreSQL
 
 Primera vez: autorizar sesión Telethon en la instancia (modo interactivo).
 
