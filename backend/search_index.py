@@ -209,6 +209,15 @@ def search_message_ids(query: str) -> Optional[List[int]]:
                 (q,)
             )
             ids = [row[0] for row in cur.fetchall()]
+            if not ids and q and " " not in q and " AND " not in q.upper():
+                try:
+                    cur = conn.execute(
+                        f'SELECT message_id FROM {FTS_TABLE} WHERE {FTS_TABLE} MATCH ?',
+                        (f"{q}*",),
+                    )
+                    ids = [row[0] for row in cur.fetchall()]
+                except sqlite3.OperationalError:
+                    pass
             logger.info("search_index: búsqueda '%s' -> %d resultados", q[:50], len(ids))
             return ids
         except sqlite3.OperationalError as e:

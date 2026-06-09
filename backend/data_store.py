@@ -12,6 +12,10 @@ from s3_client import get_s3_client
 
 logger = logging.getLogger(__name__)
 
+_DATE_COLUMN_CANDIDATES = ("Date Sent", "Date", "Creation Date")
+_TEXT_SEARCH_COLUMNS = ("Message Text", "Title", "Embed")
+_SEARCH_ID_IN_LIMIT = 500
+
 
 def _parse_s3_uri(value: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
     if not value or not isinstance(value, str):
@@ -45,6 +49,7 @@ class DataStore:
         self.assignments_csv_path = os.path.join(self.cache_dir, "message_topics.csv")
         self.meta_path = os.path.join(self.cache_dir, "datastore_meta.json")
         self.lock = threading.Lock()
+        self._parquet_columns: Optional[set] = None
 
     def _ensure_cache_dir(self) -> None:
         os.makedirs(self.cache_dir, exist_ok=True)
@@ -182,6 +187,7 @@ class DataStore:
                 Config.TOPICS_ASSIGNMENTS_KEY, self.assignments_csv_path, meta, "topics_assignments"
             )
             self._write_meta(meta)
+            self._parquet_columns = None
             return self.messages_parquet_path
 
     def get_dataset_fingerprint(self) -> str:
@@ -197,13 +203,58 @@ class DataStore:
     def _connect(self):
         return duckdb.connect(database=":memory:")
 
+    def _get_parquet_columns(self) -> set:
+        if self._parquet_columns is not None:
+            return self._parquet_columns
+        parquet_path = self._quoted(self.ensure_local_parquet())
+        con = self._connect()
+        try:
+            rows = con.execute(f"DESCRIBE SELECT * FROM read_parquet('{parquet_path}')").fetchall()
+            self._parquet_columns = {row[0] for row in rows}
+            return self._parquet_columns
+        finally:
+            con.close()
+
     def _date_expr(self, alias: str = "m") -> str:
+        cols = [col for col in _DATE_COLUMN_CANDIDATES if col in self._get_parquet_columns()]
+        if not cols:
+            return "NULL::TIMESTAMP"
+        casts = [f"try_cast({alias}.\"{col}\" as TIMESTAMP)" for col in cols]
+        return casts[0] if len(casts) == 1 else f"coalesce({', '.join(casts)})"
+
+    @staticmethod
+    def _normalize_date_param(value) -> str:
+        if value in (None, ""):
+            return ""
+        return str(value).strip()[:10]
+
+    def _search_query(self, filters: Dict) -> str:
+        return (filters.get("search") or filters.get("q") or "").strip()
+
+    def _append_text_search_clause(self, clauses: List[str], params: List, search_query: str) -> None:
+        text_cols = [col for col in _TEXT_SEARCH_COLUMNS if col in self._get_parquet_columns()]
+        if not text_cols:
+            clauses.append("1 = 0")
+            return
+        terms = [term for term in search_query.split() if term.upper() not in ("AND", "OR", "NOT") and term.strip()]
+        if not terms:
+            terms = [search_query]
+        for term in terms:
+            pattern = f"%{term.lower()}%"
+            parts = [f"lower(coalesce(m.\"{col}\", '')) LIKE ?" for col in text_cols]
+            clauses.append(f"({' OR '.join(parts)})")
+            params.extend([pattern] * len(text_cols))
+
+    def _register_search_ids(self, con, search_ids: List[int]) -> None:
+        con.register(
+            "_search_ids_tmp",
+            pd.DataFrame({"message_id": [int(item) for item in search_ids]}),
+        )
+
+    def _append_search_join(self, from_clause: str) -> str:
         return (
-            f"coalesce("
-            f"try_cast({alias}.\"Date Sent\" as TIMESTAMP), "
-            f"try_cast({alias}.\"Date\" as TIMESTAMP), "
-            f"try_cast({alias}.\"Creation Date\" as TIMESTAMP)"
-            f")"
+            f"{from_clause} INNER JOIN _search_ids_tmp s"
+            f" ON cast(m.\"Message ID\" as BIGINT) = s.message_id"
         )
 
     def _normalize_topic_filter(self, topic_filter) -> List[int]:
@@ -223,7 +274,7 @@ class DataStore:
         return normalized
 
     def _search_ids(self, filters) -> Optional[List[int]]:
-        search_query = (filters.get("search") or filters.get("q") or "").strip()
+        search_query = self._search_query(filters)
         if not search_query:
             return None
         try:
@@ -233,7 +284,7 @@ class DataStore:
             ensure_index_synced_from_parquet(parquet_path, self.get_dataset_fingerprint())
             ids = search_message_ids(search_query)
             if ids is not None:
-                return ids
+                return [int(item) for item in ids]
         except Exception as exc:
             logger.warning("Búsqueda FTS no disponible: %s", exc)
         return None
@@ -249,17 +300,24 @@ class DataStore:
             )
         return from_clause
 
-    def _build_where_clause(self, filters: Dict, search_ids: Optional[List[int]], include_topics: bool) -> Tuple[str, List]:
+    def _build_where_clause(
+        self,
+        filters: Dict,
+        search_ids: Optional[List[int]],
+        include_topics: bool,
+        search_query: str = "",
+        search_via_join: bool = False,
+    ) -> Tuple[str, List]:
         clauses = []
         params: List = []
 
         if search_ids is not None:
-            if not search_ids:
-                clauses.append("1 = 0")
-            else:
+            if not search_via_join:
                 placeholders = ", ".join(["?"] * len(search_ids))
                 clauses.append(f"cast(m.\"Message ID\" as BIGINT) IN ({placeholders})")
                 params.extend(search_ids)
+        elif search_query:
+            self._append_text_search_clause(clauses, params, search_query)
 
         channel = filters.get("channel")
         if channel:
@@ -305,14 +363,14 @@ class DataStore:
                 clauses.append(f"lower(coalesce(m.\"Media Type\", '')) IN ({placeholders})")
                 params.extend(media_values)
 
-        date_start = filters.get("dateStart")
+        date_start = self._normalize_date_param(filters.get("dateStart"))
         if date_start:
-            clauses.append(f"date_trunc('day', {self._date_expr()}) >= date_trunc('day', cast(? as TIMESTAMP))")
+            clauses.append(f"CAST({self._date_expr()} AS DATE) >= CAST(? AS DATE)")
             params.append(date_start)
 
-        date_end = filters.get("dateEnd")
+        date_end = self._normalize_date_param(filters.get("dateEnd"))
         if date_end:
-            clauses.append(f"date_trunc('day', {self._date_expr()}) < date_trunc('day', cast(? as TIMESTAMP)) + INTERVAL 1 DAY")
+            clauses.append(f"CAST({self._date_expr()} AS DATE) <= CAST(? AS DATE)")
             params.append(date_end)
 
         where_sql = f" WHERE {' AND '.join(clauses)}" if clauses else ""
@@ -334,12 +392,31 @@ class DataStore:
             return os.path.exists(self.assignments_csv_path)
         return os.path.exists(self.assignments_csv_path)
 
-    def query_messages(self, filters: Dict, limit: int, offset: int) -> Tuple[pd.DataFrame, int]:
-        search_ids = self._search_ids(filters)
-        topic_filter = filters.get("topics") or filters.get("topic")
-        has_topic_join = self._has_topic_join(filters)
+    def _prepare_query_parts(self, filters: Dict, has_topic_join: bool):
+        search_query = self._search_query(filters)
+        search_ids = self._search_ids(filters) if search_query else None
+        # FTS no encuentra tokens parciales (p. ej. "clim" vs "clima"); usar LIKE como en producción.
+        use_like_search = bool(search_query and (search_ids is None or len(search_ids) == 0))
+        if use_like_search:
+            search_ids = None
+        search_via_join = bool(search_ids and len(search_ids) > _SEARCH_ID_IN_LIMIT)
         from_clause = self._build_from_clause(has_topic_join)
-        where_sql, params = self._build_where_clause(filters, search_ids, has_topic_join)
+        if search_via_join:
+            from_clause = self._append_search_join(from_clause)
+        where_sql, params = self._build_where_clause(
+            filters,
+            search_ids,
+            has_topic_join,
+            search_query=search_query if use_like_search else "",
+            search_via_join=search_via_join,
+        )
+        return from_clause, where_sql, params, search_ids, search_via_join
+
+    def query_messages(self, filters: Dict, limit: int, offset: int) -> Tuple[pd.DataFrame, int]:
+        has_topic_join = self._has_topic_join(filters)
+        from_clause, where_sql, params, search_ids, search_via_join = self._prepare_query_parts(
+            filters, has_topic_join
+        )
         sort_sql = self._sort_clause(filters)
 
         topic_select = "cast(a.topic_id as BIGINT) as topic_id" if has_topic_join else "NULL::BIGINT as topic_id"
@@ -357,6 +434,8 @@ class DataStore:
 
         con = self._connect()
         try:
+            if search_via_join:
+                self._register_search_ids(con, search_ids)
             total = int(con.execute(count_sql, params).fetchone()[0])
             df = con.execute(query_sql, params + [limit, offset]).fetchdf()
             return df, total
@@ -375,10 +454,10 @@ class DataStore:
 
     def messages_over_time(self, filters: Dict) -> List[Dict]:
         filters = {k: v for k, v in (filters or {}).items() if k not in ("dateStart", "dateEnd")}
-        search_ids = self._search_ids(filters)
         has_topic_join = self._has_topic_join(filters)
-        from_clause = self._build_from_clause(has_topic_join)
-        where_sql, params = self._build_where_clause(filters, search_ids, has_topic_join)
+        from_clause, where_sql, params, search_ids, search_via_join = self._prepare_query_parts(
+            filters, has_topic_join
+        )
         date_expr = self._date_expr()
         day_expr = f"CAST(date_trunc('day', {date_expr}) AS DATE)"
 
@@ -396,6 +475,8 @@ class DataStore:
 
         con = self._connect()
         try:
+            if search_via_join:
+                self._register_search_ids(con, search_ids)
             rows = con.execute(sql, params).fetchall()
             return [
                 {"date": row[0].isoformat() if hasattr(row[0], "isoformat") else str(row[0]), "count": int(row[1])}
@@ -447,14 +528,19 @@ class DataStore:
         ]
 
     def export_filtered_dataframe(self, filters: Dict) -> pd.DataFrame:
-        search_ids = self._search_ids(filters)
         has_topic_join = self._has_topic_join(filters)
-        from_clause = self._build_from_clause(has_topic_join)
-        where_sql, params = self._build_where_clause(filters, search_ids, has_topic_join)
+        from_clause, where_sql, params, search_ids, search_via_join = self._prepare_query_parts(
+            filters, has_topic_join
+        )
         topic_select = "cast(a.topic_id as BIGINT) as topic_id" if has_topic_join else "NULL::BIGINT as topic_id"
+        views_expr = (
+            "coalesce(try_cast(m.\"Views\" as DOUBLE), 0)"
+            if "Views" in self._get_parquet_columns()
+            else "0::DOUBLE"
+        )
         sql = (
             "SELECT cast(m.\"Message ID\" as BIGINT) as \"Message ID\", m.\"Message Text\", m.\"Title\", "
-            f"{self._date_expr()} as \"Date Sent\", coalesce(try_cast(m.\"Views\" as DOUBLE), 0) as \"Views\", "
+            f"{self._date_expr()} as \"Date Sent\", {views_expr} as \"Views\", "
             "coalesce(try_cast(m.\"Score\" as DOUBLE), 0) as \"Score\", m.\"Label\", m.\"URL\", "
             "m.\"Media Type\", "
             f"{topic_select} "
@@ -462,6 +548,8 @@ class DataStore:
         )
         con = self._connect()
         try:
+            if search_via_join:
+                self._register_search_ids(con, search_ids)
             return con.execute(sql, params).fetchdf()
         finally:
             con.close()
