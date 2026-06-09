@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Despliegue de staging (puerto 8080 por defecto). No detiene producción en :80.
+# Despliegue de la rama desarrollo (puerto 8080). No toca funcional en :80.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

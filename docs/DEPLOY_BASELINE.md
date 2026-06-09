@@ -7,8 +7,8 @@ Este documento fija el **punto exacto** donde la web funciona igual que en produ
 | Referencia | Commit | Notas |
 |------------|--------|--------|
 | Tag `production-baseline-2026-02-17` | `06967fd` | Coincide con `build-id.txt` en producción (`2026-02-17T12:55:59Z`) |
-| Rama **`production`** | protegida | Despliega en https://app.monitoria.org — ver [BRANCHING.md](BRANCHING.md) |
-| Rama **`cursor/staging-next-a92b`** | puerto 8080 | Desarrollo y pruebas sin tocar producción |
+| Rama **`funcional`** | protegida | Despliega en https://app.monitoria.org — ver [RAMAS.md](RAMAS.md) |
+| Rama **`desarrollo`** | puerto 8080 | Nuevas funcionalidades sin tocar la versión pública |
 
 La rama remota `scraper` **contiene** este commit y tiene 5 commits posteriores (mejoras del scraper). Para la UI idéntica a producción, usa **`06967fd`**, no necesariamente la punta de `scraper`.
 
@@ -18,7 +18,7 @@ Si al hacer `git checkout` ves `M .venv/pyvenv.cfg`, es porque `.venv` estaba ve
 
 ```bash
 git fetch origin
-git checkout cursor/deploy-baseline-a92b
+git checkout funcional
 # Si sigue apareciendo .venv modificado:
 git restore .venv/pyvenv.cfg 2>/dev/null || rm -rf .venv
 ```
@@ -79,8 +79,8 @@ Instancia objetivo: **Monitor IA** (`eu-north-1`), la que sirve https://app.moni
 ```bash
 cd /ruta/al/repo
 git fetch origin
-git checkout cursor/deploy-baseline-a92b
-git pull origin cursor/deploy-baseline-a92b
+git checkout funcional
+git pull origin funcional
 ```
 
 ### 2. Variables de entorno
@@ -117,11 +117,11 @@ git checkout production-baseline-2026-02-17
 ./scripts/deploy-local-test.sh --production
 ```
 
-## Flujo recomendado (ver [BRANCHING.md](BRANCHING.md))
+## Flujo recomendado (ver [RAMAS.md](RAMAS.md))
 
-1. **Producción** (`production`): solo actualizar vía PR aprobado → `./scripts/deploy-local-test.sh --production`.
-2. **Desarrollo** (`cursor/staging-next-a92b`): cambios nuevos → `./scripts/deploy-staging.sh` (puerto 8080).
-3. No mezclar login/OAuth ni rama `database` en `production` hasta validarlos en staging.
+1. **`funcional`**: solo actualizar vía PR desde `desarrollo` → `./scripts/deploy-local-test.sh --production`.
+2. **`desarrollo`**: cambios nuevos → `./scripts/deploy-staging.sh` (puerto 8080).
+3. Login, SQL, etc. primero en `desarrollo`; a `funcional` solo cuando esté probado.
 
 ## Qué viene después (fuera de este baseline)
 

@@ -2,6 +2,15 @@
 
 Aplicación web para analizar y etiquetar mensajes de alto rendimiento en canales de Telegram, con integración completa con AWS S3.
 
+## Ramas
+
+| Rama | Uso |
+|------|-----|
+| **`funcional`** | Versión estable y mostrable (app.monitoria.org) |
+| **`desarrollo`** | Nuevas funcionalidades en curso |
+
+Detalle: [docs/RAMAS.md](docs/RAMAS.md)
+
 ## 🚀 Características
 
 - **Conexión automática con AWS S3**: Los datos se cargan automáticamente desde el bucket configurado
