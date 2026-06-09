@@ -19,7 +19,18 @@ touch .env   # o cp .env.example .env
 curl -s http://localhost:8080/api/health
 ```
 
-La primera petición de mensajes puede tardar (descarga S3 + generación de parquet).
+La primera petición de mensajes puede tardar (descarga JSON + generación de parquet).
+
+### Credenciales AWS en Docker
+
+- **Lectura de mensajes**: por defecto usa la **URL pública** de `telegram_messages.json` (igual que producción antigua).
+- **Escritura en S3** (etiquetas, topics): añade en `.env`:
+  ```bash
+  AWS_ACCESS_KEY_ID=...
+  AWS_SECRET_ACCESS_KEY=...
+  ```
+- **No** dejes `AWS_ACCESS_KEY_ID=` vacío en `.env` (rompe boto3).
+- El rol IAM de la instancia **no llega al contenedor** salvo configuración IMDS hop limit 2; para Docker usa claves en `.env` o URL pública.
 
 ## PostgreSQL (escalado)
 

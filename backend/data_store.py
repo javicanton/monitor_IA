@@ -97,30 +97,59 @@ class DataStore:
         s3_client.download_file(s3_key, local_path)
         meta[meta_key] = head
 
+    def _public_json_url(self) -> str:
+        json_key = os.environ.get("DATASTORE_S3_JSON_KEY", "telegram_messages.json")
+        return os.environ.get(
+            "S3_PUBLIC_JSON_URL",
+            f"https://{self.bucket}.s3.{Config.AWS_REGION}.amazonaws.com/{json_key}",
+        )
+
+    def _load_from_public_json(self) -> Optional[pd.DataFrame]:
+        """Misma vía que producción histórica: URL pública del JSON en S3."""
+        url = self._public_json_url()
+        try:
+            import requests
+
+            logger.info("Intentando cargar dataset desde URL pública: %s", url)
+            response = requests.get(url, timeout=120)
+            if response.status_code != 200:
+                logger.warning("URL pública respondió %s", response.status_code)
+                return None
+            data = response.json()
+            messages = data.get("messages", data) if isinstance(data, dict) else data
+            df = pd.DataFrame(messages)
+            if df.empty:
+                return None
+            logger.info("Dataset cargado desde URL pública (%d filas)", len(df))
+            return df
+        except Exception as exc:
+            logger.warning("No se pudo cargar desde URL pública: %s", exc)
+            return None
+
     def _build_parquet_from_json_or_csv(self, meta: Dict) -> None:
-        """Genera parquet local desde telegram_messages.json o .csv en S3."""
-        s3_client = self._get_s3_client()
+        """Genera parquet local desde URL pública, JSON o CSV en S3."""
         json_key = os.environ.get("DATASTORE_S3_JSON_KEY", "telegram_messages.json")
         csv_key = "telegram_messages.csv"
-        df = None
-        source_meta = None
-        for key, loader in (
-            (json_key, lambda k: pd.DataFrame(s3_client.load_json_from_s3(k).get("messages", []))),
-            (csv_key, s3_client.load_csv_from_s3),
-        ):
-            head = self._head_object(key)
-            if head is None:
-                continue
-            try:
-                df = loader(key)
-                source_meta = head
-                logger.info("Dataset cargado desde S3:%s (%d filas) para generar parquet", key, len(df))
-                break
-            except Exception as exc:
-                logger.warning("No se pudo leer %s: %s", key, exc)
+        df = self._load_from_public_json()
+        source_meta = {"source": "public_url"} if df is not None else None
+
+        if df is None:
+            s3_client = self._get_s3_client()
+            for key, loader in (
+                (json_key, lambda k: pd.DataFrame(s3_client.load_json_from_s3(k).get("messages", []))),
+                (csv_key, s3_client.load_csv_from_s3),
+            ):
+                try:
+                    df = loader(key)
+                    source_meta = self._head_object(key) or {"source": f"s3:{key}"}
+                    logger.info("Dataset cargado desde S3:%s (%d filas) para generar parquet", key, len(df))
+                    break
+                except Exception as exc:
+                    logger.warning("No se pudo leer %s vía API S3: %s", key, exc)
+
         if df is None or df.empty:
             raise FileNotFoundError(
-                f"No se encontró {self.parquet_key} ni {json_key}/{csv_key} en S3"
+                f"No se encontró {self.parquet_key} ni {json_key}/{csv_key} en S3 ni URL pública"
             )
         self._ensure_cache_dir()
         df.to_parquet(self.messages_parquet_path, index=False)
