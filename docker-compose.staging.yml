@@ -6,9 +6,16 @@ version: '3.8'
 services:
   backend:
     container_name: monitoria-staging-backend
+    restart: unless-stopped
+    volumes:
+      - staging-backend-cache:/app/data/cache
+      - staging-backend-instance:/app/instance
 
   frontend:
     container_name: monitoria-staging-frontend
+    depends_on:
+      backend:
+        condition: service_healthy
     build:
       context: ./frontend
       dockerfile: Dockerfile.deploy
@@ -20,3 +27,7 @@ services:
   topic_worker:
     profiles:
       - with-worker
+
+volumes:
+  staging-backend-cache:
+  staging-backend-instance:

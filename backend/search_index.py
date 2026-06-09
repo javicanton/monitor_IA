@@ -4,6 +4,7 @@
 Escalable con datasets grandes; el índice se mantiene en disco y se actualiza
 cuando el dataset cambia.
 """
+import json
 import os
 import sqlite3
 import logging
@@ -17,6 +18,7 @@ _INSTANCE_DIR = os.path.join(_BASEDIR, 'instance')
 FTS_DB_PATH = os.path.join(_INSTANCE_DIR, 'telegram_search.db')
 
 FTS_TABLE = 'messages_fts'
+META_TABLE = 'search_meta'
 # Tamaño del batch para inserts (mejor rendimiento en datasets grandes)
 INSERT_BATCH_SIZE = 5000
 
@@ -43,6 +45,26 @@ def _ensure_fts_table(conn: sqlite3.Connection) -> None:
             tokenize='unicode61'
         )
     """)
+    conn.execute(f"""
+        CREATE TABLE IF NOT EXISTS {META_TABLE} (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        )
+    """)
+    conn.commit()
+
+
+def _get_meta(conn: sqlite3.Connection, key: str) -> Optional[str]:
+    row = conn.execute(f"SELECT value FROM {META_TABLE} WHERE key = ?", (key,)).fetchone()
+    return row[0] if row else None
+
+
+def _set_meta(conn: sqlite3.Connection, key: str, value: str) -> None:
+    conn.execute(
+        f"INSERT INTO {META_TABLE}(key, value) VALUES(?, ?) "
+        f"ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        (key, value),
+    )
     conn.commit()
 
 
@@ -115,6 +137,49 @@ def rebuild_index_from_dataframe(df) -> int:
         conn.close()
 
 
+def ensure_index_synced_from_parquet(parquet_path: str, fingerprint: str = "") -> bool:
+    """
+    Reconstruye el índice desde Parquet si el fingerprint del dataset ha cambiado.
+    """
+    if not parquet_path or not os.path.exists(parquet_path):
+        return False
+
+    conn = _get_connection()
+    try:
+        _ensure_fts_table(conn)
+        current_fingerprint = _get_meta(conn, "dataset_fingerprint")
+    finally:
+        conn.close()
+
+    if current_fingerprint == fingerprint and get_indexed_count() > 0:
+        return True
+
+    import duckdb
+
+    duck = duckdb.connect(database=":memory:")
+    try:
+        quoted = parquet_path.replace("\\", "\\\\").replace("'", "''")
+        df = duck.execute(
+            f"SELECT cast(\"Message ID\" as BIGINT) as \"Message ID\", "
+            f"coalesce(\"Message Text\", '') as \"Message Text\", "
+            f"coalesce(\"Title\", '') as \"Title\" "
+            f"FROM read_parquet('{quoted}')"
+        ).fetchdf()
+    finally:
+        duck.close()
+
+    total = rebuild_index_from_dataframe(df)
+    conn = _get_connection()
+    try:
+        _ensure_fts_table(conn)
+        payload = json.dumps({"fingerprint": fingerprint, "rows": total}, ensure_ascii=True)
+        _set_meta(conn, "dataset_fingerprint", fingerprint)
+        _set_meta(conn, "dataset_info", payload)
+    finally:
+        conn.close()
+    return True
+
+
 def get_indexed_count() -> int:
     """Devuelve el número de filas en el índice FTS."""
     conn = _get_connection()
@@ -137,8 +202,7 @@ def search_message_ids(query: str) -> Optional[List[int]]:
     conn = _get_connection()
     try:
         _ensure_fts_table(conn)
-        # FTS5 MATCH: cada palabra debe aparecer (AND implícito con espacio)
-        # Encerrar en comillas para buscar frase exacta, o dejar palabras sueltas
+        # FTS5 MATCH: admite AND, OR, NOT (ej: "clima AND aemet"); espacio = AND implícito
         try:
             cur = conn.execute(
                 f'SELECT message_id FROM {FTS_TABLE} WHERE {FTS_TABLE} MATCH ?',

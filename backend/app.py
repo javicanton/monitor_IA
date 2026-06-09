@@ -1,3 +1,13 @@
+import os
+from pathlib import Path
+# Cargar .env antes de importar Config (raíz del repo o backend/)
+for _dir in (Path(__file__).resolve().parent.parent, Path(__file__).resolve().parent):
+    _env = _dir / ".env"
+    if _env.exists():
+        from dotenv import load_dotenv
+        load_dotenv(_env)
+        break
+
 from flask import Flask, render_template, request, jsonify, send_file
 from flask_cors import CORS
 from io import BytesIO
@@ -5,7 +15,6 @@ from flask_jwt_extended import JWTManager, create_access_token, jwt_required, ge
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_sqlalchemy import SQLAlchemy
 import pandas as pd
-import os
 from datetime import datetime, timedelta
 import json
 from s3_client import get_s3_client
@@ -18,6 +27,18 @@ import logging
 from threading import Thread
 from topic_processor import process_topics
 from search_index import ensure_index_synced, search_message_ids
+import re
+
+# Store de mensajes: PostgreSQL si DATABASE_URL está definido, si no DuckDB+Parquet (solo analytics/offline)
+def _get_data_store():
+    if os.environ.get('DATABASE_URL'):
+        from data_store_pg import DataStorePG
+        return DataStorePG()
+    from data_store import DataStore
+    return DataStore()
+
+data_store = _get_data_store()
+USE_POSTGRES = bool(os.environ.get('DATABASE_URL'))
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -35,9 +56,11 @@ jwt = JWTManager(app)
 CORS(app, resources={
     r"/*": {
         "origins": [
-            "http://localhost:3000", 
-            "https://app.monitoria.org"
-            ],
+            "http://localhost:3000",
+            "https://app.monitoria.org",
+            "https://monitoria.org",
+            "http://localhost:3001"
+        ],
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"],
         "supports_credentials": True
@@ -52,10 +75,10 @@ app.register_blueprint(auth_bp, url_prefix='/api/auth')
 with app.app_context():
     db.create_all()
 
-# Caché en memoria para load_data(): evita saturar S3 y CPU con peticiones seguidas
+# Caché en memoria solo cuando no se usa PostgreSQL (path DuckDB/JSON)
 _DATA_CACHE = None
 _DATA_CACHE_TIME = 0
-DATA_CACHE_TTL_SEC = 300  # 5 minutos: mismo dataset para todas las peticiones
+DATA_CACHE_TTL_SEC = int(os.environ.get('DATA_CACHE_TTL_SEC', '1800'))  # 30 min por defecto
 
 def load_data():
     """Carga los datos desde S3 (o caché) y maneja posibles errores."""
@@ -341,9 +364,85 @@ def save_data(df):
         print(f"Error al guardar en S3: {e}")
         return False
 
+
+def _parse_pagination(filters):
+    default_limit = 24
+    default_offset = 0
+
+    def parse_int(value, default):
+        try:
+            return int(value)
+        except (ValueError, TypeError):
+            return default
+
+    limit = parse_int(filters.get('limit'), None)
+    offset = parse_int(filters.get('offset'), None)
+    page = parse_int(filters.get('page'), 1)
+    per_page = parse_int(filters.get('per_page'), default_limit)
+
+    if limit is None and offset is None:
+        page = max(1, page)
+        per_page = max(1, min(per_page, 100))
+        limit = per_page
+        offset = (page - 1) * per_page
+    else:
+        if limit is None:
+            limit = default_limit
+        if offset is None:
+            offset = default_offset
+        limit = max(1, min(limit, 100))
+        offset = max(0, offset)
+
+    return limit, offset
+
+
+def _attach_topic_titles_to_df(df):
+    if df is None or df.empty or 'topic_id' not in df.columns:
+        return df
+    try:
+        normalized = df.copy()
+        normalized['topic_id'] = pd.to_numeric(normalized['topic_id'], errors='coerce').astype('Int64')
+        topic_labels = {item['id']: item['label'] for item in load_topics_meta()}
+        normalized['topic_title'] = normalized['topic_id'].map(topic_labels)
+        return normalized
+    except Exception as e:
+        print(f"Error al adjuntar topic_title: {e}")
+        return df
+
+
+def _messages_from_dataframe(df):
+    required_columns = ['Embed', 'Score', 'Message ID', 'URL', 'Label', 'topic_id', 'topic_title']
+    messages = []
+    for _, row in df.iterrows():
+        msg = {}
+        for col in required_columns:
+            if col in row:
+                value = row[col]
+                if hasattr(value, "item"):
+                    try:
+                        value = value.item()
+                    except Exception:
+                        pass
+                msg[col] = value if pd.notna(value) else None
+            else:
+                msg[col] = None
+        messages.append(msg)
+    return messages
+
 @app.route('/')
 def index():
     """Renderiza la página principal con los mensajes ordenados por puntuación."""
+    if USE_POSTGRES:
+        paginated_df, _ = data_store.query_messages({}, limit=MESSAGES_LIMIT, offset=0)
+        if paginated_df.empty:
+            return render_template('index.html', messages=[], channels=[], min_date='', max_date='')
+        messages = _messages_from_dataframe(_attach_topic_titles_to_df(paginated_df))
+        channels = data_store.get_channels()
+        min_date, max_date = data_store.get_date_bounds()
+        min_date = min_date or ''
+        max_date = max_date or ''
+        return render_template('index.html', messages=messages, channels=channels, min_date=min_date, max_date=max_date)
+
     df = load_data()
     if df.empty:
         return render_template('index.html', messages=[], channels=[], min_date='', max_date='')
@@ -368,12 +467,8 @@ def index():
 def load_more(offset=0):
     """Carga más mensajes a partir de un offset dado."""
     try:
-        # Obtener los filtros del body
         filters = request.get_json(silent=True) or {}
-        date_start_str = filters.get('dateStart')
-        date_end_str = filters.get('dateEnd')
         if not filters:
-            # Fallback para compatibilidad con query params
             filters = {
                 'dateStart': request.args.get('dateStart'),
                 'dateEnd': request.args.get('dateEnd'),
@@ -385,8 +480,25 @@ def load_more(offset=0):
                 'sortBy': request.args.get('sortBy', 'score'),
                 'search': request.args.get('search') or request.args.get('q')
             }
-            date_start_str = filters.get('dateStart')
-            date_end_str = filters.get('dateEnd')
+        date_start_str = filters.get('dateStart')
+        date_end_str = filters.get('dateEnd')
+
+        if USE_POSTGRES:
+            paginated_df, total = data_store.query_messages(filters, limit=24, offset=offset)
+            if paginated_df.empty or offset >= total:
+                return ('', 204)
+            paginated_df = _attach_topic_titles_to_df(paginated_df)
+            messages = []
+            for _, row in paginated_df.iterrows():
+                score = row.get('Score')
+                messages.append({
+                    'Embed': row.get('Embed', ''),
+                    'Score': round(score, 2) if score is not None and isinstance(score, (int, float)) else 'N/A',
+                    'Message ID': row.get('Message ID', ''),
+                    'URL': row.get('URL', ''),
+                    'Label': row.get('Label', None),
+                })
+            return render_template('message_cards_partial.html', messages=messages)
 
         df = load_data()
         if df.empty:
@@ -408,13 +520,20 @@ def load_more(offset=0):
             except Exception:
                 pass
             if not search_applied:
-                q_lower = search_query.lower()
-                text_series = filtered_df['Message Text'].astype(str).fillna('')
-                mask = text_series.str.lower().str.contains(q_lower, na=False, regex=False)
-                if 'Title' in filtered_df.columns:
-                    title_series = filtered_df['Title'].astype(str).fillna('')
-                    mask = mask | title_series.str.lower().str.contains(q_lower, na=False, regex=False)
-                filtered_df = filtered_df[mask].copy()
+                text_series = filtered_df['Message Text']
+                title_series = filtered_df['Title'] if 'Title' in filtered_df.columns else None
+                parsed = _parse_boolean_search(search_query)
+                if parsed:
+                    mask = _apply_boolean_search_mask(parsed, text_series, title_series)
+                    filtered_df = filtered_df[mask].copy()
+                else:
+                    q_lower = search_query.lower()
+                    text_series = filtered_df['Message Text'].astype(str).fillna('')
+                    mask = text_series.str.lower().str.contains(re.escape(q_lower), na=False, regex=True)
+                    if title_series is not None:
+                        title_series = filtered_df['Title'].astype(str).fillna('')
+                        mask = mask | title_series.str.lower().str.contains(re.escape(q_lower), na=False, regex=True)
+                    filtered_df = filtered_df[mask].copy()
 
         # Filtro de Fecha (Rango)
         if 'Date Sent' in filtered_df.columns and (date_start_str or date_end_str):
@@ -553,29 +672,14 @@ def label_message():
 
         message_id = int(data['message_id'])
         label = int(data['label'])
+        updated = data_store.update_label(message_id, label)
+        if not updated:
+            return jsonify(success=False, error="Message ID no encontrado"), 404
 
-        df = load_data()
-        if df.empty:
-            return jsonify(success=False, error="No hay datos disponibles o error al cargar"), 404
-
-        # Verifica si la columna 'Message ID' existe
-        if 'Message ID' not in df.columns:
-            return jsonify(success=False, error="La columna 'Message ID' no existe en el archivo JSON"), 500
-
-        # Verifica si el message_id existe en el DataFrame
-        if message_id not in df['Message ID'].values:
-            print(f"Advertencia: message_id {message_id} no encontrado en el DataFrame para etiquetar.")
-            return jsonify(success=True, message="Message ID no encontrado, pero operación ignorada.")
-
-        # Actualiza el DataFrame
-        if 'Label' not in df.columns:
-            df['Label'] = pd.NA
-
-        df.loc[df['Message ID'] == message_id, 'Label'] = label
-
-        # Guarda en S3
-        if not save_data(df):
-            return jsonify(success=False, error="Error al guardar cambios en S3"), 500
+        if not USE_POSTGRES:
+            global _DATA_CACHE, _DATA_CACHE_TIME
+            _DATA_CACHE = None
+            _DATA_CACHE_TIME = 0
 
         return jsonify(success=True)
     except ValueError as e:
@@ -588,30 +692,12 @@ def label_message():
 def export_relevants():
     """Exporta los mensajes etiquetados como relevantes a un nuevo archivo CSV."""
     try:
-        df = load_data()
-        if df.empty:
-            return jsonify(success=False, error="No hay datos disponibles o error al cargar"), 404
-
-        # Verifica si la columna 'Label' existe
-        if 'Label' not in df.columns:
-            return jsonify(success=False, error="No hay columna 'Label' para filtrar mensajes relevantes"), 404
-
-        # Filtra los mensajes etiquetados como relevantes (Label == 1)
-        # Maneja posibles NaNs o tipos incorrectos en 'Label'
-        try:
-            # Intentar convertir a numérico (float), luego comparar con 1.0
-            relevant_df = df[pd.to_numeric(df['Label'], errors='coerce') == 1.0]
-        except Exception as e:
-             print(f"Error al filtrar relevantes por Label: {e}")
-             return jsonify(success=False, error="Error al procesar la columna 'Label'"), 500
-
+        relevant_df = data_store.export_filtered_dataframe({'label': 1, 'sortBy': 'score'})
         if relevant_df.empty:
-            return jsonify(success=True, message="No hay mensajes etiquetados como relevantes para exportar."), 200 # O 404 si prefieres error
+            return jsonify(success=True, message="No hay mensajes etiquetados como relevantes para exportar."), 200
 
-        # Guarda en un nuevo CSV tanto localmente como en S3
         export_path = 'telegram_messages_relevant.csv'
         try:
-            # Guardar localmente
             relevant_df.to_csv(export_path, index=False, encoding='utf-8')
             logger.info(f"Mensajes relevantes exportados localmente a {export_path}")
             
@@ -641,10 +727,7 @@ def export_relevants():
 def get_channels():
     """Devuelve la lista de canales disponibles."""
     try:
-        df = load_data()
-        if df.empty or 'Title' not in df.columns:
-            return jsonify(success=True, channels=[])
-        channels = sorted(df['Title'].fillna('Desconocido').replace('', 'Desconocido').unique().tolist())
+        channels = data_store.get_channels()
         return jsonify(success=True, channels=channels)
     except Exception as e:
         print(f"Error en /channels: {e}")
@@ -711,6 +794,93 @@ def run_topics():
         print(f"Error en /admin/run_topics: {e}")
         return jsonify(success=False, error=str(e)), 500
 
+def _parse_boolean_search(query: str):
+    """
+    Parsea una consulta con operadores AND, OR, NOT (case insensitive).
+    Devuelve una lista de "grupos OR"; cada grupo es una lista de (op, term) con op en ('AND', 'NOT').
+    Ej: "clima AND aemet" -> [[('AND', 'clima'), ('AND', 'aemet')]]
+    "a OR b AND c" -> [[('AND', 'a')], [('AND', 'b'), ('AND', 'c')]]
+    """
+    if not query or not query.strip():
+        return None
+    tokens = query.strip().split()
+    if not tokens:
+        return None
+    # Dividir por OR (precedencia más baja)
+    or_groups = []
+    current = []
+    for t in tokens:
+        if t.upper() == 'OR':
+            or_groups.append(current)
+            current = []
+        else:
+            current.append(t)
+    if current:
+        or_groups.append(current)
+
+    # Dentro de cada grupo, dividir por AND; cada segmento puede ser "NOT term" o "term"
+    result = []
+    for group in or_groups:
+        and_segments = []
+        i = 0
+        while i < len(group):
+            if group[i].upper() == 'AND':
+                i += 1
+                continue
+            seg = []
+            while i < len(group) and group[i].upper() != 'AND':
+                seg.append(group[i])
+                i += 1
+            if not seg:
+                continue
+            if seg[0].upper() == 'NOT':
+                term = ' '.join(seg[1:]).strip() if len(seg) > 1 else ''
+                if term:
+                    and_segments.append(('NOT', term))
+            else:
+                and_segments.append(('AND', ' '.join(seg).strip()))
+        if and_segments:
+            result.append(and_segments)
+    return result if result else None
+
+
+def _apply_boolean_search_mask(parsed, text_series, title_series=None):
+    """
+    Aplica la consulta booleana parseada a las series de texto/título.
+    Devuelve una máscara pandas (True = fila cumple la búsqueda).
+    """
+    if not parsed:
+        return pd.Series([False] * len(text_series))
+    combined = None
+    for or_group in parsed:
+        group_mask = None
+        for op, term in or_group:
+            if not term:
+                continue
+            term_lower = term.lower()
+            term_escaped = re.escape(term_lower)
+            m_text = text_series.astype(str).fillna('').str.lower().str.contains(term_escaped, na=False, regex=True)
+            if title_series is not None and len(title_series) == len(text_series):
+                m_title = title_series.astype(str).fillna('').str.lower().str.contains(term_escaped, na=False, regex=True)
+                term_mask = m_text | m_title
+            else:
+                term_mask = m_text
+            if op == 'NOT':
+                term_mask = ~term_mask
+            if group_mask is None:
+                group_mask = term_mask
+            else:
+                group_mask = group_mask & term_mask
+        if group_mask is not None:
+            if combined is None:
+                combined = group_mask
+            else:
+                combined = combined | group_mask
+    if combined is None:
+        return pd.Series([False] * len(text_series))
+    return combined
+
+
 def _apply_message_filters(df, filters):
     """Aplica los mismos filtros que filter_messages. Devuelve (sorted_df, None) o (None, (response, status))."""
     date_start_str = filters.get('dateStart')
@@ -731,13 +901,20 @@ def _apply_message_filters(df, filters):
             logger.warning("FTS no disponible (%s); usando búsqueda por texto en pandas", e)
         if not search_applied:
             try:
-                q_lower = search_query.lower()
-                text_series = filtered_df['Message Text'].astype(str).fillna('')
-                mask = text_series.str.lower().str.contains(q_lower, na=False, regex=False)
-                if 'Title' in filtered_df.columns:
-                    title_series = filtered_df['Title'].astype(str).fillna('')
-                    mask = mask | title_series.str.lower().str.contains(q_lower, na=False, regex=False)
-                filtered_df = filtered_df[mask].copy()
+                text_series = filtered_df['Message Text']
+                title_series = filtered_df['Title'] if 'Title' in filtered_df.columns else None
+                parsed = _parse_boolean_search(search_query)
+                if parsed:
+                    mask = _apply_boolean_search_mask(parsed, text_series, title_series)
+                    filtered_df = filtered_df[mask].copy()
+                else:
+                    q_lower = search_query.lower()
+                    text_series = filtered_df['Message Text'].astype(str).fillna('')
+                    mask = text_series.str.lower().str.contains(re.escape(q_lower), na=False, regex=True)
+                    if title_series is not None:
+                        title_series = filtered_df['Title'].astype(str).fillna('')
+                        mask = mask | title_series.str.lower().str.contains(re.escape(q_lower), na=False, regex=True)
+                    filtered_df = filtered_df[mask].copy()
             except Exception as e:
                 logger.warning("Error en búsqueda por texto: %s", e)
 
@@ -840,88 +1017,12 @@ def filter_messages():
     """Filtra los mensajes según los criterios especificados."""
     try:
         filters = request.get_json(silent=True) or {}
-        df = load_data()
-        if df.empty:
-            return jsonify(success=True, messages=[], total_messages=0)
-        sorted_df, err = _apply_message_filters(df, filters)
-        if err is not None:
-            return err
-
-        # Paginación
-        try:
-            default_limit = 24
-            default_offset = 0
-
-            limit = filters.get('limit')
-            offset = filters.get('offset')
-            page = filters.get('page')
-            per_page = filters.get('per_page')
-
-            def parse_int(value, default):
-                try:
-                    return int(value)
-                except (ValueError, TypeError):
-                    return default
-
-            limit = parse_int(limit, None)
-            offset = parse_int(offset, None)
-
-            if limit is None and offset is None:
-                page = parse_int(page, 1)
-                per_page = parse_int(per_page, default_limit)
-
-                page = max(1, page)
-                per_page = max(1, min(per_page, 100))
-
-                limit = per_page
-                offset = (page - 1) * per_page
-            else:
-                if limit is None:
-                    limit = default_limit
-                if offset is None:
-                    offset = default_offset
-
-                limit = max(1, min(limit, 100))
-                offset = max(0, offset)
-
-            start_idx = offset
-            end_idx = start_idx + limit
-
-            # Seleccionar solo los mensajes de la página actual
-            paginated_df = sorted_df.iloc[start_idx:end_idx]
-            print(f"Paginación: offset {offset}, limit {limit}")
-        except Exception as e:
-            print(f"Error en paginación: {str(e)}")
-            return jsonify(success=False, error=f"Error en paginación: {str(e)}"), 400
-
-        # Adjuntar topics para mostrar en tarjetas
-        try:
-            paginated_df = attach_topic_assignments(paginated_df)
-            if 'topic_id' in paginated_df.columns:
-                paginated_df['topic_id'] = pd.to_numeric(paginated_df['topic_id'], errors='coerce').astype('Int64')
-                topic_labels = {item['id']: item['label'] for item in load_topics_meta()}
-                paginated_df['topic_title'] = paginated_df['topic_id'].map(topic_labels)
-        except Exception as e:
-            print(f"Error al adjuntar topics: {e}")
-
-        # Seleccionar columnas y convertir a dict
-        try:
-            required_columns = ['Embed', 'Score', 'Message ID', 'URL', 'Label', 'topic_id', 'topic_title']
-            messages = []
-            for _, row in paginated_df.iterrows():
-                msg = {}
-                for col in required_columns:
-                    if col in row:
-                        msg[col] = row[col] if pd.notna(row[col]) else None
-                    else:
-                        msg[col] = None
-                messages.append(msg)
-            print(f"Total de mensajes filtrados: {len(messages)}")
-        except Exception as e:
-            print(f"Error al preparar mensajes: {str(e)}")
-            return jsonify(success=False, error=f"Error al preparar mensajes: {str(e)}"), 400
-
-        return jsonify(success=True, messages=messages, total_messages=len(sorted_df))
+        limit, offset = _parse_pagination(filters)
+        paginated_df, total_messages = data_store.query_messages(filters, limit=limit, offset=offset)
+        paginated_df = _attach_topic_titles_to_df(paginated_df)
+        messages = _messages_from_dataframe(paginated_df)
+        print(f"Total de mensajes filtrados: {len(messages)}")
+        return jsonify(success=True, messages=messages, total_messages=total_messages)
 
     except Exception as e:
         print(f"Error crítico en /filter_messages: {e}")
@@ -933,20 +1034,10 @@ def download_filtered_messages():
     """Devuelve los mensajes filtrados (mismos criterios que filter_messages) como CSV."""
     try:
         filters = request.get_json(silent=True) or {}
-        df = load_data()
-        if df.empty:
+        sorted_df = data_store.export_filtered_dataframe(filters)
+        if sorted_df.empty:
             return jsonify(success=False, error="No hay datos"), 404
-        sorted_df, err = _apply_message_filters(df, filters)
-        if err is not None:
-            return err
-        try:
-            sorted_df = attach_topic_assignments(sorted_df)
-            if 'topic_id' in sorted_df.columns:
-                sorted_df['topic_id'] = pd.to_numeric(sorted_df['topic_id'], errors='coerce').astype('Int64')
-                topic_labels = {item['id']: item['label'] for item in load_topics_meta()}
-                sorted_df['topic_title'] = sorted_df['topic_id'].map(topic_labels)
-        except Exception as e:
-            logger.warning("Error al adjuntar topics para CSV: %s", e)
+        sorted_df = _attach_topic_titles_to_df(sorted_df)
         export_columns = [
             'Message ID', 'Message Text', 'Title', 'Date Sent', 'Views', 'Score', 'Label', 'URL',
             'Media Type', 'topic_id', 'topic_title'
@@ -1029,32 +1120,8 @@ def login():
 def messages_over_time():
     """Devuelve el número de mensajes por día para el gráfico. Acepta filtros (canal, topics, mediaType, etc.) sin fecha para mostrar evolución del subconjunto."""
     try:
-        df = load_data()
-        if df.empty:
-            return jsonify(success=True, data=[])
-
-        # Aplicar filtros del menú lateral (sin fecha: queremos serie temporal completa del subconjunto)
         filters = request.get_json(silent=True) if request.method == 'POST' else {}
-        if filters:
-            filters_no_date = {k: v for k, v in filters.items() if k not in ('dateStart', 'dateEnd')}
-            sorted_df, err = _apply_message_filters(df, {**filters_no_date, 'dateStart': '', 'dateEnd': ''})
-            if err is not None:
-                return err
-            df = sorted_df
-            if df.empty:
-                return jsonify(success=True, data=[])
-
-        date_col = 'Date Sent' if 'Date Sent' in df.columns else ('Date' if 'Date' in df.columns else None)
-        if not date_col:
-            return jsonify(success=True, data=[])
-
-        df = df.copy()
-        df[date_col] = pd.to_datetime(df[date_col], errors='coerce').dt.tz_localize(None)
-        df = df.dropna(subset=[date_col])
-        df['_date'] = df[date_col].dt.normalize().dt.strftime('%Y-%m-%d')
-        counts = df.groupby('_date').size().reset_index(name='count')
-        counts = counts.sort_values('_date')
-        data = [{'date': row['_date'], 'count': int(row['count'])} for _, row in counts.iterrows()]
+        data = data_store.messages_over_time(filters or {})
         return jsonify(success=True, data=data)
     except Exception as e:
         logger.exception("Error en /messages_over_time")
@@ -1065,6 +1132,10 @@ def messages_over_time():
 def get_messages():
     """Endpoint para obtener los mensajes para el frontend."""
     try:
+        if USE_POSTGRES:
+            messages = data_store.get_messages_list(limit=500)
+            return jsonify(success=True, messages=messages)
+
         df = load_data()
         if df.empty:
             return jsonify(success=True, messages=[])

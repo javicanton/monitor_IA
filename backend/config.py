@@ -1,13 +1,26 @@
 import os
 from datetime import timedelta
 
+# PostgreSQL (AWS RDS compatible): usar DATABASE_URL.
+# Ejemplo: postgresql://user:pass@host:5432/dbname
+# Para desarrollo local: postgresql://localhost/monitor_ia
+DATABASE_URL = os.environ.get('DATABASE_URL')
+
+# Si no hay DATABASE_URL, se usa SQLite (solo para desarrollo sin PostgreSQL)
+if DATABASE_URL:
+    # RDS a veces devuelve URL con protocolo postgres://; SQLAlchemy necesita postgresql://
+    if DATABASE_URL.startswith('postgres://'):
+        DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
+    SQLALCHEMY_DATABASE_URI = DATABASE_URL
+else:
+    SQLALCHEMY_DATABASE_URI = os.environ.get('SQLALCHEMY_DATABASE_URI', 'sqlite:///telegram_app.db')
+
 class Config:
     # Configuración básica de Flask
     SECRET_KEY = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-production')
     
-    # Configuración de la base de datos
-    # Usar SQLite para desarrollo y AWS (sin PostgreSQL)
-    SQLALCHEMY_DATABASE_URI = 'sqlite:///telegram_app.db'
+    # Base de datos: PostgreSQL vía DATABASE_URL o SQLite por defecto
+    SQLALCHEMY_DATABASE_URI = SQLALCHEMY_DATABASE_URI
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # Configuración de JWT
@@ -32,6 +45,11 @@ class Config:
     # Credenciales de AWS S3
     AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID')
     AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
+
+    # DataStore (DuckDB + Parquet)
+    DATASTORE_S3_PARQUET_KEY = os.environ.get('DATASTORE_S3_PARQUET_KEY', 'telegram_messages.parquet')
+    DATASTORE_CACHE_DIR = os.environ.get('DATASTORE_CACHE_DIR', '/app/data/cache')
+    DATASTORE_CACHE_TTL = int(os.environ.get('DATASTORE_CACHE_TTL', 1800))
 
     # Configuración de topics
     TOPIC_POLL_INTERVAL_MIN = int(os.environ.get('TOPIC_POLL_INTERVAL_MIN', 1440))
