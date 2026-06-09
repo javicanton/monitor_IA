@@ -312,9 +312,7 @@ class DataStore:
         params: List = []
 
         if search_ids is not None:
-            if not search_ids:
-                clauses.append("1 = 0")
-            elif not search_via_join:
+            if not search_via_join:
                 placeholders = ", ".join(["?"] * len(search_ids))
                 clauses.append(f"cast(m.\"Message ID\" as BIGINT) IN ({placeholders})")
                 params.extend(search_ids)
@@ -397,6 +395,10 @@ class DataStore:
     def _prepare_query_parts(self, filters: Dict, has_topic_join: bool):
         search_query = self._search_query(filters)
         search_ids = self._search_ids(filters) if search_query else None
+        # FTS no encuentra tokens parciales (p. ej. "clim" vs "clima"); usar LIKE como en producción.
+        use_like_search = bool(search_query and (search_ids is None or len(search_ids) == 0))
+        if use_like_search:
+            search_ids = None
         search_via_join = bool(search_ids and len(search_ids) > _SEARCH_ID_IN_LIMIT)
         from_clause = self._build_from_clause(has_topic_join)
         if search_via_join:
@@ -405,7 +407,7 @@ class DataStore:
             filters,
             search_ids,
             has_topic_join,
-            search_query=search_query if search_ids is None else "",
+            search_query=search_query if use_like_search else "",
             search_via_join=search_via_join,
         )
         return from_clause, where_sql, params, search_ids, search_via_join
