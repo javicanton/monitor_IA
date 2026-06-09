@@ -7,7 +7,8 @@ Este documento fija el **punto exacto** donde la web funciona igual que en produ
 | Referencia | Commit | Notas |
 |------------|--------|--------|
 | Tag `production-baseline-2026-02-17` | `06967fd` | Coincide con `build-id.txt` en producción (`2026-02-17T12:55:59Z`) |
-| Rama de trabajo | `cursor/deploy-baseline-a92b` | Parte de ese commit; aquí se prueba el despliegue antes de publicar |
+| Rama **`production`** | protegida | Despliega en https://app.monitoria.org — ver [BRANCHING.md](BRANCHING.md) |
+| Rama **`cursor/staging-next-a92b`** | puerto 8080 | Desarrollo y pruebas sin tocar producción |
 
 La rama remota `scraper` **contiene** este commit y tiene 5 commits posteriores (mejoras del scraper). Para la UI idéntica a producción, usa **`06967fd`**, no necesariamente la punta de `scraper`.
 
@@ -116,13 +117,11 @@ git checkout production-baseline-2026-02-17
 ./scripts/deploy-local-test.sh --production
 ```
 
-## Flujo recomendado hasta producción
+## Flujo recomendado (ver [BRANCHING.md](BRANCHING.md))
 
-1. Trabajar solo en `cursor/deploy-baseline-a92b` (o ramas `cursor/*-a92b` creadas desde aquí).
-2. Cada cambio: prueba local con `deploy-local-test.sh`.
-3. Push y despliegue en EC2 de **staging** (mismo compose, otro puerto o subdominio) si lo tienes.
-4. Cuando todo pase checklist → merge a rama de despliegue y `up -d` en producción.
-5. **No** mezclar aún login/OAuth ni rama `database` hasta cerrar este baseline.
+1. **Producción** (`production`): solo actualizar vía PR aprobado → `./scripts/deploy-local-test.sh --production`.
+2. **Desarrollo** (`cursor/staging-next-a92b`): cambios nuevos → `./scripts/deploy-staging.sh` (puerto 8080).
+3. No mezclar login/OAuth ni rama `database` en `production` hasta validarlos en staging.
 
 ## Qué viene después (fuera de este baseline)
 
