@@ -1,0 +1,20 @@
+# Overlay: frontend se construye completo en Docker (no requiere carpeta frontend/build en el host).
+# Uso:
+#   docker compose -f docker-compose.yml -f docker-compose.deploy-test.yml up --build -d
+# Puerto por defecto 8080 para no chocar con otros servicios en 80.
+
+version: '3.8'
+
+services:
+  backend:
+    env_file:
+      - .env
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.deploy
+      args:
+        REACT_APP_API_URL: /api
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
