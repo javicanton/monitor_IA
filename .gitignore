@@ -485,6 +485,7 @@ logs/
 # Archivos de datos
 *.json
 *.csv
+!scripts/canales_nuevos_jun2026.csv
 *.xlsx
 backend/data/*.json
 backend/data/*.csv
