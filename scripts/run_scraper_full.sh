@@ -4,44 +4,29 @@
 #
 # Uso:
 #   ./scripts/run_scraper_full.sh
+#   ./scripts/run_scraper_resume.sh   # tras FloodWait (más conservador)
 #   SCRAPER_MAX_MESSAGES=15000 ./scripts/run_scraper_full.sh
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$ROOT"
-
-if [[ ! -f .env ]]; then
-  echo "ERROR: falta .env con DATABASE_URL"
-  exit 1
-fi
-set -a
 # shellcheck disable=SC1091
-source .env
-set +a
-
-if [[ -z "${DATABASE_URL:-}" ]]; then
-  echo "ERROR: DATABASE_URL no está definido en .env"
-  exit 1
-fi
+source "${ROOT}/scripts/_scraper_env.sh"
+scraper_load_env
 
 # Por canal: hasta N mensajes hacia atrás en el tiempo (sin límite de días)
 export SCRAPER_FULL_HISTORY=1
 export SCRAPER_MAX_MESSAGES="${SCRAPER_MAX_MESSAGES:-10000}"
+export SCRAPER_CHANNEL_DELAY="${SCRAPER_CHANNEL_DELAY:-5}"
 
-PYTHON="${ROOT}/.venv/bin/python"
-if [[ ! -x "$PYTHON" ]]; then
-  PYTHON=python3
-fi
-
-LOG_DIR="${ROOT}/logs"
-mkdir -p "$LOG_DIR"
 STAMP="$(date -u +%Y%m%d_%H%M%S)"
 LOG_FILE="${LOG_DIR}/scraper_full_${STAMP}.log"
 
 echo "==> Escrapeo COMPLETO → PostgreSQL"
 echo "    Canales: monitored_channels (activos, no descontinuados)"
 echo "    Máx. mensajes/canal: ${SCRAPER_MAX_MESSAGES}"
+echo "    Pausa entre canales: ${SCRAPER_CHANNEL_DELAY}s"
 echo "    Log: ${LOG_FILE}"
+scraper_print_status
 echo ""
 
 cd backend

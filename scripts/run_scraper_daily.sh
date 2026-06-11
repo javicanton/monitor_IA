@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Actualización diaria: mensajes recientes de todos los canales monitorizados.
-# Pensado para cron (p. ej. 3:00 UTC).
+# Pensado para cron (3:00 UTC). No solapar con backfill en curso.
 #
 # Uso:
 #   ./scripts/run_scraper_daily.sh
@@ -8,37 +8,20 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$ROOT"
-
-if [[ ! -f .env ]]; then
-  echo "ERROR: falta .env con DATABASE_URL"
-  exit 1
-fi
-set -a
 # shellcheck disable=SC1091
-source .env
-set +a
-
-if [[ -z "${DATABASE_URL:-}" ]]; then
-  echo "ERROR: DATABASE_URL no está definido en .env"
-  exit 1
-fi
+source "${ROOT}/scripts/_scraper_env.sh"
+scraper_load_env
+scraper_acquire_lock daily
 
 # Ventana móvil: últimos N días (suficiente margen si el cron falla un día)
 export SCRAPER_DAYS="${SCRAPER_DAYS:-3}"
 export SCRAPER_MAX_MESSAGES="${SCRAPER_MAX_MESSAGES:-500}"
+export SCRAPER_CHANNEL_DELAY="${SCRAPER_CHANNEL_DELAY:-5}"
 
-PYTHON="${ROOT}/.venv/bin/python"
-if [[ ! -x "$PYTHON" ]]; then
-  PYTHON=python3
-fi
-
-LOG_DIR="${ROOT}/logs"
-mkdir -p "$LOG_DIR"
 LOG_FILE="${LOG_DIR}/scraper_daily_$(date -u +%Y%m%d).log"
 
 echo "==> Escrapeo DIARIO → PostgreSQL ($(date -u -Iseconds))" | tee -a "$LOG_FILE"
-echo "    Últimos ${SCRAPER_DAYS} días, máx ${SCRAPER_MAX_MESSAGES} msg/canal" | tee -a "$LOG_FILE"
+echo "    Últimos ${SCRAPER_DAYS} días, máx ${SCRAPER_MAX_MESSAGES} msg/canal, pausa ${SCRAPER_CHANNEL_DELAY}s" | tee -a "$LOG_FILE"
 
 cd backend
 "$PYTHON" scraper.py \
