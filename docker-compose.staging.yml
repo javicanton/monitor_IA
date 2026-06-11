@@ -18,7 +18,7 @@ services:
         condition: service_healthy
     build:
       context: ./frontend
-      dockerfile: Dockerfile.deploy
+      dockerfile: ${FRONTEND_DOCKERFILE:-Dockerfile.deploy}
       args:
         REACT_APP_API_URL: /api
     ports:

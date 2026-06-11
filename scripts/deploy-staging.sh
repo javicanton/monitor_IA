@@ -10,16 +10,26 @@ PROJECT_NAME="${STAGING_PROJECT_NAME:-monitoria-staging}"
 STAGING_PORT="${STAGING_FRONTEND_PORT:-8080}"
 
 down=false
+backend_only=false
+host_frontend=false
 for arg in "$@"; do
   case "$arg" in
     --down) down=true ;;
+    --backend-only) backend_only=true ;;
+    --host-frontend) host_frontend=true ;;
     -h|--help)
-      echo "Uso: $0 [--down]"
+      echo "Uso: $0 [--down] [--backend-only] [--host-frontend]"
       echo "  Despliega staging en puerto ${STAGING_PORT} (proyecto Docker: ${PROJECT_NAME})"
+      echo ""
+      echo "  --backend-only    Solo reconstruye backend (frontend con imagen previa)"
+      echo "  --host-frontend   Compila React en el host y usa Dockerfile.runtime (recomendado en EC2 pequeña)"
       exit 0
       ;;
   esac
 done
+
+export DOCKER_BUILDKIT=1
+export COMPOSE_DOCKER_CLI_BUILD=1
 
 export STAGING_FRONTEND_PORT="$STAGING_PORT"
 export FRONTEND_PORT="$STAGING_PORT"
@@ -53,8 +63,31 @@ if [[ ! -f .env ]]; then
   fi
 fi
 
+if $host_frontend; then
+  echo "==> Build frontend en el host (evita OOM dentro de Docker)..."
+  echo "    Puede tardar 5–15 min en instancias pequeñas; es normal."
+  (
+    cd "$ROOT/frontend"
+    export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=1024}"
+    export GENERATE_SOURCEMAP=false
+    export DISABLE_ESLINT_PLUGIN=true
+    export BROWSERSLIST_IGNORE_OLD_DATA=true
+    export CI=false
+    export REACT_APP_API_URL=/api
+    npm install --omit=dev
+    npm run build
+  )
+  export FRONTEND_DOCKERFILE=Dockerfile.runtime
+fi
+
 echo "==> Build staging (${PROJECT_NAME})..."
-docker compose -p "$PROJECT_NAME" "${COMPOSE_FILES[@]}" build
+if $backend_only; then
+  echo "    (solo backend)"
+  docker compose -p "$PROJECT_NAME" "${COMPOSE_FILES[@]}" build backend
+else
+  echo "    El paso 'npm run build' del frontend puede tardar 10–20 min en EC2; no es un bloqueo si sigue en 'Creating an optimized production build...'"
+  docker compose -p "$PROJECT_NAME" "${COMPOSE_FILES[@]}" build --progress=plain
+fi
 
 echo "==> Arrancando staging en puerto ${STAGING_PORT}..."
 docker compose -p "$PROJECT_NAME" "${COMPOSE_FILES[@]}" up -d
