@@ -67,7 +67,7 @@ python scripts/init_postgres.py
 Opción A — desde JSON en S3 (descargar y importar):
 
 ```bash
-aws s3 cp s3://monitoria-data/telegram_messages.json /tmp/telegram_messages.json
+python3 scripts/download_dataset.py -o /tmp/telegram_messages.json
 python3 scripts/import_dataset.py --path /tmp/telegram_messages.json
 ```
 
