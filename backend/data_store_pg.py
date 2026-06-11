@@ -198,18 +198,22 @@ class DataStorePG:
         return df, total
 
     def get_channels(self) -> List[str]:
-        """Títulos de canal con mensajes (misma semántica que DuckDB: DISTINCT Title)."""
+        """Títulos de canal con mensajes, ordenados por nº de publicaciones (desc)."""
         rows = (
-            db.session.query(Channel.title)
+            db.session.query(
+                Channel.title,
+                func.count(Message.id).label("msg_count"),
+            )
             .join(Message, Message.channel_id == Channel.id)
             .filter(Channel.title.isnot(None))
-            .distinct()
+            .group_by(Channel.id, Channel.title)
+            .order_by(func.count(Message.id).desc(), func.lower(Channel.title))
             .all()
         )
         titles = []
         seen = set()
-        for row in rows:
-            title = (row[0] or "").strip()
+        for title, _msg_count in rows:
+            title = (title or "").strip()
             if not title:
                 continue
             key = title.lower()
@@ -217,7 +221,7 @@ class DataStorePG:
                 continue
             seen.add(key)
             titles.append(title)
-        return sorted(titles, key=str.lower)
+        return titles
 
 
     def get_date_bounds(self) -> Tuple[Optional[str], Optional[str]]:

@@ -365,7 +365,12 @@ class DataStore:
 
     def get_channels(self) -> List[str]:
         from_clause = self._build_from_clause(include_topics=False)
-        sql = f"SELECT DISTINCT m.\"Title\" as title{from_clause} WHERE m.\"Title\" IS NOT NULL AND trim(m.\"Title\") <> '' ORDER BY lower(m.\"Title\")"
+        sql = (
+            f"SELECT m.\"Title\" as title, COUNT(*) as msg_count{from_clause} "
+            f"WHERE m.\"Title\" IS NOT NULL AND trim(m.\"Title\") <> '' "
+            f"GROUP BY m.\"Title\" "
+            f"ORDER BY msg_count DESC, lower(m.\"Title\")"
+        )
         con = self._connect()
         try:
             rows = con.execute(sql).fetchall()
