@@ -55,7 +55,13 @@ def _load_rows_from_csv(path: str) -> list[dict]:
             if len(row) == 1:
                 username = normalize_username(row[0])
                 if username:
-                    rows.append({"username": username, "title": username, "discontinued": False, "status": "active"})
+                    rows.append({
+                        "username": username,
+                        "title": username,
+                        "discontinued": False,
+                        "status": "active",
+                        "_from_extended_csv": False,
+                    })
             else:
                 username = normalize_username(row[0])
                 if not username:
@@ -69,6 +75,7 @@ def _load_rows_from_csv(path: str) -> list[dict]:
                         "title": title,
                         "discontinued": discontinued,
                         "status": status if status in ("active", "error", "disabled") else "active",
+                        "_from_extended_csv": True,
                     }
                 )
     return rows
@@ -85,18 +92,34 @@ def _load_rows_from_s3(s3_key: str) -> list[dict]:
             continue
         username = normalize_username(row[0])
         if username:
-            rows.append({"username": username, "title": username, "discontinued": False, "status": "active"})
+            rows.append({
+                "username": username,
+                "title": username,
+                "discontinued": False,
+                "status": "active",
+                "_from_extended_csv": False,
+            })
     return rows
 
 
-def upsert_monitored(rows: list[dict]) -> dict:
-    inserted = updated = 0
+def upsert_monitored(rows: list[dict], preserve_errors: bool = True) -> dict:
+    inserted = updated = preserved = 0
     now = datetime.utcnow()
     for item in rows:
         username = item["username"]
         row = MonitoredChannel.query.filter_by(username=username).first()
         if row:
             row.title = item.get("title") or row.title or username
+            # CSV simple (solo username): no reactivar canales ya marcados como error/descontinuados
+            if (
+                preserve_errors
+                and row.discontinued
+                and not item.get("_from_extended_csv")
+            ):
+                row.updated_at = now
+                preserved += 1
+                updated += 1
+                continue
             row.discontinued = bool(item.get("discontinued", False))
             row.status = item.get("status") or ("error" if row.discontinued else "active")
             row.updated_at = now
@@ -114,13 +137,18 @@ def upsert_monitored(rows: list[dict]) -> dict:
             )
             inserted += 1
     db.session.commit()
-    return {"inserted": inserted, "updated": updated, "total": len(rows)}
+    return {"inserted": inserted, "updated": updated, "preserved": preserved, "total": len(rows)}
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Importar canales monitorizados a PostgreSQL")
     parser.add_argument("--path", help="Ruta local al CSV")
     parser.add_argument("--s3-key", default="telegram_channels.csv", help="Key S3 del CSV")
+    parser.add_argument(
+        "--reactivate-errors",
+        action="store_true",
+        help="Reactivar canales descontinuados al importar CSV simple (por defecto se conservan)",
+    )
     args = parser.parse_args()
 
     if args.path:
@@ -149,11 +177,15 @@ def main() -> None:
 
     with app.app_context():
         db.create_all()
-        stats = upsert_monitored(rows)
+        stats = upsert_monitored(rows, preserve_errors=not args.reactivate_errors)
         count = MonitoredChannel.query.count()
         active = MonitoredChannel.query.filter_by(status="active", discontinued=False).count()
-        print(f"Importados: {stats['inserted']} nuevos, {stats['updated']} actualizados")
-        print(f"Total monitored_channels: {count} ({active} activos)")
+        discontinued = MonitoredChannel.query.filter_by(discontinued=True).count()
+        print(
+            f"Importados: {stats['inserted']} nuevos, {stats['updated']} actualizados"
+            + (f", {stats['preserved']} descontinuados conservados" if stats.get("preserved") else "")
+        )
+        print(f"Total monitored_channels: {count} ({active} activos, {discontinued} descontinuados)")
 
 
 if __name__ == "__main__":

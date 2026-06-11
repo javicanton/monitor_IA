@@ -64,5 +64,25 @@ Documento de diseño para cuando el sistema de login esté operativo.
 
 ## Descarga de datos
 
-- `GET /api/download_channel_graph` — ZIP con `monitored_channels.csv` y `channel_edges.csv`.
+- `GET /download_channel_graph` — ZIP con `monitored_channels.csv` y `channel_edges.csv`.
 - Botón «Descargar canales» en la UI (junto a «Descargar mensajes»).
+
+### `monitored_channels.csv` (nodos)
+
+Incluye **todos** los canales de la tabla: activos y descontinuados (`discontinued=true`, `status=error`).
+El scraper solo monitoriza filas con `status=active` y `discontinued=false`.
+
+Los canales pasan a descontinuados cuando:
+
+1. El scraper falla al acceder (username inválido, canal borrado, etc.).
+2. Se importan con `discontinued=true` o `status=error` en un CSV extendido (`username,title,discontinued,status`).
+3. Tras un error, una reimportación del CSV simple **no los reactiva** (salvo `--reactivate-errors`).
+
+### `channel_edges.csv` (aristas)
+
+Solo se rellena cuando el scraper corre con `--postgres` y detecta **reenvíos** entre canales.
+Si está vacío, ejecuta al menos una pasada del scraper tras desplegar esta funcionalidad:
+
+```bash
+cd backend && python3 scraper.py --postgres --non-interactive --days 30 --max-messages 500
+```
