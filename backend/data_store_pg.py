@@ -204,7 +204,6 @@ class DataStorePG:
             .join(Message, Message.channel_id == Channel.id)
             .filter(Channel.title.isnot(None))
             .distinct()
-            .order_by(func.lower(Channel.title))
             .all()
         )
         titles = []
@@ -218,7 +217,8 @@ class DataStorePG:
                 continue
             seen.add(key)
             titles.append(title)
-        return titles
+        return sorted(titles, key=str.lower)
+
 
     def get_date_bounds(self) -> Tuple[Optional[str], Optional[str]]:
         """Devuelve (min_date, max_date) como strings YYYY-MM-DD para el date picker."""
