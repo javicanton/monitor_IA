@@ -31,7 +31,12 @@ if $down; then
 fi
 
 if [[ -f .env ]]; then
-  if grep -q '^DATABASE_URL=' .env 2>/dev/null; then
+  # Exportar .env al shell para que compose sustituya variables (sin xargs: rompe contraseñas).
+  set -a
+  # shellcheck disable=SC1091
+  source .env
+  set +a
+  if [[ -n "${DATABASE_URL:-}" ]]; then
     echo "==> Modo datos: PostgreSQL (DATABASE_URL definido)"
   else
     echo "==> Modo datos: Parquet/S3 (sin DATABASE_URL). Ver docs/SQL_MIGRATION.md para escalar."
@@ -58,4 +63,14 @@ echo ""
 echo "Staging listo (producción en :80 no se toca si usa otro proyecto compose)."
 echo "  http://localhost:${STAGING_PORT}/"
 echo "  curl -s http://localhost:${STAGING_PORT}/api/health"
+
+if docker ps --format '{{.Names}}' | grep -q '^monitoria-staging-backend$'; then
+  db_mode="$(docker exec monitoria-staging-backend printenv DATABASE_URL 2>/dev/null | wc -c)"
+  if [[ "${db_mode}" -gt 1 ]]; then
+    echo "  PostgreSQL en contenedor: OK (DATABASE_URL presente)"
+  else
+    echo "  AVISO: DATABASE_URL vacío en el contenedor — revisa .env y vuelve a desplegar"
+  fi
+fi
+
 echo "Parar: $0 --down"

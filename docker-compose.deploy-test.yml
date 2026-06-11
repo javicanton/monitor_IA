@@ -13,7 +13,8 @@ services:
       - AWS_REGION=${AWS_REGION:-eu-north-1}
       - S3_BUCKET=${S3_BUCKET:-monitoria-data}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-tu-clave-secreta-por-defecto}
-      - DATABASE_URL=${DATABASE_URL:-}
+      # DATABASE_URL solo vía env_file (.env); no usar ${DATABASE_URL:-} aquí porque
+      # sobrescribe con cadena vacía si el shell no exportó la variable al hacer compose up.
 
   frontend:
     build:
