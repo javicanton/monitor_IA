@@ -6,9 +6,15 @@ import {
   Typography, 
   Button, 
   Alert,
-  Snackbar 
+  Snackbar,
+  Tooltip,
 } from '@mui/material';
-import { Refresh as RefreshIcon, Download as DownloadIcon } from '@mui/icons-material';
+import {
+  Refresh as RefreshIcon,
+  Download as DownloadIcon,
+  Article as ArticleIcon,
+  Campaign as CampaignIcon,
+} from '@mui/icons-material';
 import MessageCard from './MessageCard';
 import { messagesAPI, channelsAPI } from '../utils/api';
 
@@ -24,12 +30,22 @@ const MessageList = ({ filters = {} }) => {
   const [hasMore, setHasMore] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalMessages, setTotalMessages] = useState(0);
+  const [totalChannels, setTotalChannels] = useState(0);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
   const debounceRef = useRef(null);
   const isFirstLoad = useRef(true);
 
   const MESSAGES_PER_PAGE = 24;
- 
+
+  const fetchChannelCount = useCallback(async () => {
+    try {
+      const channels = await channelsAPI.getChannels();
+      setTotalChannels(channels.length);
+    } catch (err) {
+      console.error('Error al cargar conteo de canales:', err);
+    }
+  }, []);
+
   const fetchMessages = useCallback(async (page = 1, append = false) => {
     try {
       setLoading(true);
@@ -131,8 +147,13 @@ const MessageList = ({ filters = {} }) => {
   };
 
   const handleRefresh = () => {
+    fetchChannelCount();
     fetchMessages(1, false);
   };
+
+  useEffect(() => {
+    fetchChannelCount();
+  }, [fetchChannelCount]);
 
   const handleExportRelevants = async () => {
     try {
@@ -259,11 +280,43 @@ const MessageList = ({ filters = {} }) => {
     <Box sx={{ mt: 4 }}>
       {/* Header con estadísticas y botones */}
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h6" color="textSecondary">
-          {totalMessages > 0
-            ? `${formatPublicationCount(totalMessages)} publicaciones cargadas`
-            : 'Sin publicaciones'}
-        </Typography>
+        <Tooltip
+          title={`${formatPublicationCount(totalMessages)} publicaciones · ${formatPublicationCount(totalChannels)} canales (clic para actualizar)`}
+        >
+          <Button
+            variant="outlined"
+            onClick={handleRefresh}
+            disabled={loading}
+            aria-label={`${totalMessages} publicaciones, ${totalChannels} canales`}
+            sx={{
+              textTransform: 'none',
+              color: 'text.secondary',
+              borderColor: 'divider',
+              px: 2,
+              py: 1,
+            }}
+          >
+            <Box display="flex" alignItems="center" gap={1.5}>
+              <Box display="flex" alignItems="center" gap={0.5} component="span">
+                <ArticleIcon fontSize="small" color="action" aria-hidden />
+                <Typography variant="body1" component="span" fontWeight={500}>
+                  {formatPublicationCount(totalMessages)}
+                </Typography>
+              </Box>
+              <Box
+                component="span"
+                sx={{ width: '1px', height: 20, bgcolor: 'divider' }}
+                aria-hidden
+              />
+              <Box display="flex" alignItems="center" gap={0.5} component="span">
+                <CampaignIcon fontSize="small" color="action" aria-hidden />
+                <Typography variant="body1" component="span" fontWeight={500}>
+                  {formatPublicationCount(totalChannels)}
+                </Typography>
+              </Box>
+            </Box>
+          </Button>
+        </Tooltip>
         
         <Box display="flex" gap={2}>
           <Button
