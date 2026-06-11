@@ -538,7 +538,42 @@ def parse_args():
         action="store_true",
         help="Además de PostgreSQL, generar telegram_messages.csv/json local (legacy)",
     )
+    parser.add_argument(
+        "--full-history",
+        action="store_true",
+        help="Sin filtro de fecha: hasta --max-messages por canal (backfill histórico).",
+    )
     return parser.parse_args()
+
+
+async def collect_channel_messages(
+    client,
+    channel,
+    max_messages: int,
+    days_to_scrape: int,
+    full_history: bool = False,
+) -> List[Message]:
+    """
+    Recoge mensajes de un canal (de más reciente a más antiguo).
+    Con filtro de días: para al llegar a mensajes anteriores al corte.
+    """
+    cutoff = None
+    if not full_history and days_to_scrape and days_to_scrape > 0:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days_to_scrape)
+
+    messages_list: List[Message] = []
+    async for message in client.iter_messages(channel, limit=max_messages):
+        if not message or not message.date:
+            continue
+        msg_date = message.date
+        if msg_date.tzinfo is None:
+            msg_date = msg_date.replace(tzinfo=timezone.utc)
+        else:
+            msg_date = msg_date.astimezone(timezone.utc)
+        if cutoff and msg_date < cutoff:
+            break
+        messages_list.append(message)
+    return messages_list
 
 
 def upsert_channel_rows_to_postgres(
@@ -588,8 +623,14 @@ async def main(args):
         messages_arg=args.max_messages,
         non_interactive=args.non_interactive
     )
-    time_days_ago = datetime.now(timezone.utc) - timedelta(days=days_to_scrape)
-    print(f"6. Configuración: {days_to_scrape} días, {max_messages} mensajes por canal")
+    full_history = bool(
+        args.full_history
+        or os.environ.get("SCRAPER_FULL_HISTORY", "").lower() in ("1", "true", "yes")
+    )
+    if full_history:
+        print(f"6. Configuración: historial completo, hasta {max_messages} mensajes por canal")
+    else:
+        print(f"6. Configuración: últimos {days_to_scrape} días, hasta {max_messages} mensajes por canal")
     
     use_postgres = bool(args.postgres or os.environ.get("DATABASE_URL"))
     pg_app = None
@@ -665,21 +706,17 @@ async def main(args):
             try:
                 print(f"Procesando canal: {channel}")
                 channel_details = await client.get_entity(channel)
-                messages = await client.get_messages(
+                messages_list = await collect_channel_messages(
+                    client,
                     channel,
-                    limit=max_messages,
-                    offset_date=time_days_ago
+                    max_messages=max_messages,
+                    days_to_scrape=days_to_scrape,
+                    full_history=full_history,
                 )
-                
-                if not messages:
+
+                if not messages_list:
                     print(f"No se encontraron mensajes para el canal '{channel}'. Continuando con el siguiente.")
                     continue
-                # Convert messages to list for easier handling
-                messages_list = []
-                if isinstance(messages, Message):
-                    messages_list = [messages]
-                else:
-                    messages_list = list(messages)
 
                 # Group messages by their date
                 grouped_messages: Dict[str, List[Message]] = {}
