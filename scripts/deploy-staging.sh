@@ -88,7 +88,8 @@ if $backend_only; then
   docker compose -p "$PROJECT_NAME" "${COMPOSE_FILES[@]}" build backend
 else
   echo "    El paso 'npm run build' del frontend puede tardar 10–20 min en EC2; no es un bloqueo si sigue en 'Creating an optimized production build...'"
-  docker compose -p "$PROJECT_NAME" "${COMPOSE_FILES[@]}" build --progress=plain
+  # Staging no usa topic_worker (perfil with-worker); evita build pesado de PyTorch/NLTK
+  docker compose -p "$PROJECT_NAME" "${COMPOSE_FILES[@]}" build --progress=plain backend frontend
 fi
 
 echo "==> Arrancando staging en puerto ${STAGING_PORT}..."
