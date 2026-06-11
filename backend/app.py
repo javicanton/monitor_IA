@@ -10,7 +10,9 @@ for _dir in (Path(__file__).resolve().parent.parent, Path(__file__).resolve().pa
 
 from flask import Flask, render_template, request, jsonify, send_file
 from flask_cors import CORS
+from flask_mail import Mail, Message as MailMessage
 from io import BytesIO
+import zipfile
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_sqlalchemy import SQLAlchemy
@@ -19,7 +21,8 @@ from datetime import datetime, timedelta
 import json
 from s3_client import get_s3_client
 from auth import auth_bp, admin_required
-from models import db
+from models import Channel, ChannelEdge, MonitoredChannel, db
+from channel_graph import normalize_username
 from config import Config
 import boto3
 from botocore.exceptions import ClientError
@@ -47,11 +50,13 @@ logger = logging.getLogger(__name__)
 MESSAGES_LIMIT = 48
 S3_BUCKET = os.environ.get('S3_BUCKET', 'monitoria-data')
 S3_KEY = 'telegram_messages.json'
+CHANNEL_SUGGEST_EMAIL = os.environ.get('CHANNEL_SUGGEST_EMAIL', 'monitoria@unir.net')
 
 app = Flask(__name__)
 app.config.from_object(Config)
 
 # Inicializar extensiones
+mail = Mail(app)
 jwt = JWTManager(app)
 CORS(app, resources={
     r"/*": {
@@ -731,6 +736,144 @@ def get_channels():
         return jsonify(success=True, channels=channels)
     except Exception as e:
         print(f"Error en /channels: {e}")
+        return jsonify(success=False, error=str(e)), 500
+
+
+@app.route('/api/channels/suggest', methods=['POST'])
+def suggest_channel():
+    """Propuesta pública de canal (sin login). Envía correo al equipo."""
+    try:
+        data = request.get_json(silent=True) or {}
+        username = normalize_username(data.get('username') or data.get('channel') or '')
+        note = (data.get('note') or data.get('comment') or '').strip()
+        contact_email = (data.get('email') or '').strip()
+
+        if not username:
+            return jsonify(success=False, error='Indica el nombre de usuario del canal (sin @)'), 400
+
+        subject = f'[Monitor IA] Propuesta de canal: @{username}'
+        body_lines = [
+            'Se ha recibido una propuesta para incluir un canal en la monitorización.',
+            '',
+            f'Canal: @{username}',
+            f'URL: https://t.me/{username}',
+        ]
+        if note:
+            body_lines.extend(['', f'Comentario: {note}'])
+        if contact_email:
+            body_lines.extend(['', f'Contacto: {contact_email}'])
+        body_lines.extend(['', f'Fecha: {datetime.utcnow().isoformat()}Z'])
+        body = '\n'.join(body_lines)
+
+        try:
+            msg = MailMessage(
+                subject=subject,
+                recipients=[CHANNEL_SUGGEST_EMAIL],
+                body=body,
+            )
+            if contact_email:
+                msg.reply_to = contact_email
+            mail.send(msg)
+            logger.info('Propuesta de canal enviada: %s → %s', username, CHANNEL_SUGGEST_EMAIL)
+        except Exception as mail_err:
+            logger.exception('No se pudo enviar el correo de propuesta de canal')
+            return jsonify(
+                success=False,
+                error=f'No se pudo enviar el correo. Comprueba la configuración SMTP/SES. ({mail_err})',
+            ), 503
+
+        return jsonify(
+            success=True,
+            message='Propuesta enviada. El equipo la revisará pronto.',
+        )
+    except Exception as e:
+        logger.exception('Error en /api/channels/suggest')
+        return jsonify(success=False, error=str(e)), 500
+
+
+def _build_channel_graph_csvs():
+    """Genera CSV de nodos (monitored_channels) y aristas (channel_edges)."""
+    nodes_buf = BytesIO()
+    edges_buf = BytesIO()
+
+    if USE_POSTGRES:
+        monitored = MonitoredChannel.query.order_by(MonitoredChannel.username).all()
+        nodes_df = pd.DataFrame(
+            [
+                {
+                    'username': row.username,
+                    'title': row.title or row.username,
+                    'status': row.status,
+                    'discontinued': row.discontinued,
+                    'source': row.source,
+                    'last_error': row.last_error or '',
+                    'last_scraped_at': row.last_scraped_at.isoformat() if row.last_scraped_at else '',
+                }
+                for row in monitored
+            ]
+        )
+        edge_rows = []
+        for edge in ChannelEdge.query.all():
+            source_ch = db.session.get(Channel, edge.source_channel_id)
+            target_ch = db.session.get(Channel, edge.target_channel_id)
+            if not source_ch or not target_ch:
+                continue
+            edge_rows.append(
+                {
+                    'source_username': source_ch.username,
+                    'source_title': source_ch.title,
+                    'target_username': target_ch.username,
+                    'target_title': target_ch.title,
+                    'forward_count': edge.forward_count,
+                    'last_seen_at': edge.last_seen_at.isoformat() if edge.last_seen_at else '',
+                }
+            )
+        edges_df = pd.DataFrame(edge_rows)
+    else:
+        nodes_df = pd.DataFrame(columns=[
+            'username', 'title', 'status', 'discontinued', 'source', 'last_error', 'last_scraped_at'
+        ])
+        edges_df = pd.DataFrame(columns=[
+            'source_username', 'source_title', 'target_username', 'target_title',
+            'forward_count', 'last_seen_at',
+        ])
+
+    if nodes_df.empty:
+        nodes_df = pd.DataFrame(columns=[
+            'username', 'title', 'status', 'discontinued', 'source', 'last_error', 'last_scraped_at'
+        ])
+    if edges_df.empty:
+        edges_df = pd.DataFrame(columns=[
+            'source_username', 'source_title', 'target_username', 'target_title',
+            'forward_count', 'last_seen_at',
+        ])
+
+    nodes_df.to_csv(nodes_buf, index=False, encoding='utf-8-sig')
+    edges_df.to_csv(edges_buf, index=False, encoding='utf-8-sig')
+    nodes_buf.seek(0)
+    edges_buf.seek(0)
+    return nodes_buf, edges_buf
+
+
+@app.route('/download_channel_graph', methods=['GET'])
+def download_channel_graph():
+    """Descarga ZIP con nodos (monitored_channels) y aristas (channel_edges)."""
+    try:
+        nodes_buf, edges_buf = _build_channel_graph_csvs()
+        zip_buf = BytesIO()
+        with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr('monitored_channels.csv', nodes_buf.getvalue())
+            zf.writestr('channel_edges.csv', edges_buf.getvalue())
+        zip_buf.seek(0)
+        filename = f'channel_graph_{datetime.now().strftime("%Y%m%d_%H%M")}.zip'
+        return send_file(
+            zip_buf,
+            mimetype='application/zip',
+            as_attachment=True,
+            download_name=filename,
+        )
+    except Exception as e:
+        logger.exception('Error en download_channel_graph')
         return jsonify(success=False, error=str(e)), 500
 
 @app.route('/topics', methods=['GET'])

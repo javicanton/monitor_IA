@@ -26,7 +26,7 @@ from flask import Flask
 from sqlalchemy import text
 
 from config import Config
-from models import Channel, Message, MessageTopic, User, db
+from models import Channel, ChannelEdge, Message, MessageTopic, MonitoredChannel, User, db
 
 INDEX_STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_messages_message_id ON messages (message_id)",
@@ -41,6 +41,10 @@ INDEX_STATEMENTS = [
     CREATE INDEX IF NOT EXISTS idx_messages_fts_spanish
     ON messages USING gin (to_tsvector('spanish', coalesce(message_text, '')))
     """,
+    "CREATE INDEX IF NOT EXISTS idx_monitored_channels_status ON monitored_channels (status)",
+    "CREATE INDEX IF NOT EXISTS idx_monitored_channels_discontinued ON monitored_channels (discontinued)",
+    "CREATE INDEX IF NOT EXISTS idx_channel_edges_source ON channel_edges (source_channel_id)",
+    "CREATE INDEX IF NOT EXISTS idx_channel_edges_target ON channel_edges (target_channel_id)",
 ]
 
 
@@ -50,7 +54,7 @@ def main() -> None:
     db.init_app(app)
 
     with app.app_context():
-        print("Creando tablas (channels, messages, message_topics, user)...")
+        print("Creando tablas (channels, messages, monitored_channels, channel_edges, ...)...")
         db.create_all()
         for statement in INDEX_STATEMENTS:
             db.session.execute(text(statement))
@@ -58,11 +62,14 @@ def main() -> None:
         counts = {
             "channels": Channel.query.count(),
             "messages": Message.query.count(),
+            "monitored_channels": MonitoredChannel.query.count(),
+            "channel_edges": ChannelEdge.query.count(),
             "message_topics": MessageTopic.query.count(),
             "users": User.query.count(),
         }
         print("Listo. Filas actuales:", counts)
         print("Siguiente paso: python scripts/import_dataset.py --path <dataset>")
+        print("Opcional: python scripts/import_monitored_channels.py")
 
 
 if __name__ == "__main__":

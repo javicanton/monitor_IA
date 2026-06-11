@@ -132,6 +132,34 @@ export const channelsAPI = {
       return [];
     }
   },
+
+  // Proponer un canal para monitorizaci?n (sin login)
+  suggestChannel: async ({ username, note, email }) => {
+    try {
+      const response = await api.post('/api/channels/suggest', {
+        username,
+        note,
+        email,
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error al proponer canal:', error);
+      throw error;
+    }
+  },
+
+  // Descargar grafo de canales (ZIP con nodos y aristas)
+  downloadChannelGraph: async () => {
+    try {
+      const response = await api.get('/download_channel_graph', {
+        responseType: 'blob',
+      });
+      return response;
+    } catch (error) {
+      console.error('Error al descargar canales:', error);
+      throw error;
+    }
+  },
 };
 
 // Funciones de API para topics

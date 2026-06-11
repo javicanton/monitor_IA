@@ -242,8 +242,32 @@ def load_channels_from_s3(s3_key):
         print(f"No se pudo cargar {s3_key} desde S3: {e}")
         return []
 
-def get_channels_from_user(channels_file=None, channels_s3_key=None, non_interactive=False):
+def load_channels_from_postgres():
+    """Carga canales activos desde monitored_channels (PostgreSQL)."""
+    if not os.environ.get("DATABASE_URL"):
+        return []
+    try:
+        from pg_upsert import create_app
+        from channel_graph import load_active_monitored_usernames
+
+        app = create_app()
+        with app.app_context():
+            usernames = load_active_monitored_usernames()
+        if usernames:
+            print(f"✓ Canales cargados desde monitored_channels ({len(usernames)})")
+        return usernames
+    except Exception as e:
+        print(f"No se pudieron cargar canales desde PostgreSQL: {e}")
+        return []
+
+
+def get_channels_from_user(channels_file=None, channels_s3_key=None, non_interactive=False, prefer_postgres=False):
     """Solicita los canales al usuario y los guarda en un archivo CSV"""
+    if prefer_postgres or os.environ.get("DATABASE_URL"):
+        db_channels = load_channels_from_postgres()
+        if db_channels:
+            return db_channels
+
     if channels_file:
         bucket, key = _parse_s3_uri(channels_file)
         if key:
@@ -549,7 +573,8 @@ async def main(args):
     channels = get_channels_from_user(
         channels_file=args.channels_file,
         channels_s3_key=args.channels_s3_key,
-        non_interactive=args.non_interactive
+        non_interactive=args.non_interactive,
+        prefer_postgres=bool(args.postgres or os.environ.get("DATABASE_URL")),
     )
     if not channels:
         print("Error: No se pudieron cargar los canales")
@@ -617,6 +642,24 @@ async def main(args):
         
         all_data = []
         pg_totals = {"channels": 0, "inserted": 0, "updated": 0}
+        forward_pairs = []
+        graph_helpers = None
+        if use_postgres and pg_app is not None:
+            from channel_graph import (
+                is_channel_invalid_error,
+                mark_monitored_channel_error,
+                mark_monitored_channel_success,
+                resolve_forward_username,
+                upsert_channel_edges,
+            )
+            graph_helpers = {
+                "is_channel_invalid_error": is_channel_invalid_error,
+                "mark_error": mark_monitored_channel_error,
+                "mark_success": mark_monitored_channel_success,
+                "resolve_forward": resolve_forward_username,
+                "upsert_edges": upsert_channel_edges,
+            }
+
         for channel in channels:
             channel_rows = []
             try:
@@ -702,6 +745,12 @@ async def main(args):
                     # Inicializar Label como vacío
                     data['Label'] = ''
 
+                    if graph_helpers and (message.forward or getattr(message, 'fwd_from', None)):
+                        source_username = await graph_helpers["resolve_forward"](message, client)
+                        target_username = data.get('Username') or channel
+                        if source_username and target_username:
+                            forward_pairs.append((source_username, target_username))
+
                     all_data.append(data)
                     channel_rows.append(data)
                     mensajes_nuevos += 1
@@ -719,17 +768,32 @@ async def main(args):
                         f"✓ Canal '{channel}': {len(channel_rows)} mensajes → "
                         f"+{stats.get('inserted', 0)} nuevos, {stats.get('updated', 0)} actualizados"
                     )
+                    if graph_helpers:
+                        title = getattr(channel_details, 'title', None) or channel
+                        with pg_app.app_context():
+                            graph_helpers["mark_success"](channel, title=title)
                 else:
                     print(
                         f"✓ Canal '{channel}': {mensajes_existentes} mensajes existentes, "
                         f"{mensajes_nuevos} nuevos mensajes añadidos"
                     )
 
-            except ChannelInvalidError:
+            except ChannelInvalidError as e:
                 print(f"✗ Canal '{channel}' inválido o no accesible. Continuando con el siguiente.")
+                if graph_helpers and pg_app is not None:
+                    with pg_app.app_context():
+                        graph_helpers["mark_error"](channel, str(e))
             except Exception as e:
                 print(f"Error al procesar {channel}: {str(e)}")
+                if graph_helpers and pg_app is not None and graph_helpers["is_channel_invalid_error"](e):
+                    with pg_app.app_context():
+                        graph_helpers["mark_error"](channel, str(e))
                 continue
+
+        if use_postgres and forward_pairs and graph_helpers and pg_app is not None:
+            with pg_app.app_context():
+                edge_count = graph_helpers["upsert_edges"](forward_pairs)
+            print(f"✓ Grafo de canales: {edge_count} aristas de reenvío registradas/actualizadas")
 
         if use_postgres and all_data:
             print(

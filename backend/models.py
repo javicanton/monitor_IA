@@ -42,6 +42,41 @@ class Message(db.Model):
     )
 
 
+class MonitoredChannel(db.Model):
+    """Canal incluido en la lista oficial del scraper."""
+    __tablename__ = 'monitored_channels'
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(255), unique=True, nullable=False, index=True)
+    title = db.Column(db.String(500))
+    status = db.Column(db.String(20), nullable=False, default='active', index=True)
+    discontinued = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    source = db.Column(db.String(50), nullable=False, default='csv_import')
+    last_error = db.Column(db.Text)
+    last_scraped_at = db.Column(db.DateTime(timezone=True))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ChannelEdge(db.Model):
+    """Arista del grafo: reenvío desde source hacia target."""
+    __tablename__ = 'channel_edges'
+    id = db.Column(db.Integer, primary_key=True)
+    source_channel_id = db.Column(
+        db.Integer, db.ForeignKey('channels.id', ondelete='CASCADE'), nullable=False, index=True
+    )
+    target_channel_id = db.Column(
+        db.Integer, db.ForeignKey('channels.id', ondelete='CASCADE'), nullable=False, index=True
+    )
+    forward_count = db.Column(db.Integer, nullable=False, default=1)
+    last_seen_at = db.Column(db.DateTime(timezone=True))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    __table_args__ = (
+        db.UniqueConstraint('source_channel_id', 'target_channel_id', name='uq_channel_edge'),
+    )
+    source_channel = db.relationship('Channel', foreign_keys=[source_channel_id])
+    target_channel = db.relationship('Channel', foreign_keys=[target_channel_id])
+
+
 class MessageTopic(db.Model):
     """Asignación de topic a mensaje (compatible con message_topics.csv)."""
     __tablename__ = 'message_topics'

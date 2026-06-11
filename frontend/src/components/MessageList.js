@@ -10,7 +10,10 @@ import {
 } from '@mui/material';
 import { Refresh as RefreshIcon, Download as DownloadIcon } from '@mui/icons-material';
 import MessageCard from './MessageCard';
-import { messagesAPI } from '../utils/api';
+import { messagesAPI, channelsAPI } from '../utils/api';
+
+const formatPublicationCount = (count) =>
+  new Intl.NumberFormat('es-ES').format(count);
 
 const DEBOUNCE_MS = 500;
 
@@ -154,6 +157,39 @@ const MessageList = ({ filters = {} }) => {
     }
   };
 
+  const handleDownloadChannels = async () => {
+    try {
+      const response = await channelsAPI.downloadChannelGraph();
+      const blob = new Blob([response.data], { type: 'application/zip' });
+      const disposition = response.headers['content-disposition'];
+      let filename = 'channel_graph.zip';
+      if (disposition && disposition.includes('filename=')) {
+        const match = disposition.match(/filename[*]?=['"]?(?:UTF-8'')?([^;\n"']+)['"]?/i);
+        if (match) filename = match[1].trim();
+      }
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      setSnackbar({
+        open: true,
+        message: 'Descarga de canales iniciada',
+        severity: 'success'
+      });
+    } catch (err) {
+      console.error('Error al descargar canales:', err);
+      setSnackbar({
+        open: true,
+        message: `Error al descargar canales: ${err.response?.data?.error || err.message}`,
+        severity: 'error'
+      });
+    }
+  };
+
   const handleDownloadMessages = async () => {
     try {
       const response = await messagesAPI.downloadFilteredCSV(filters);
@@ -224,7 +260,9 @@ const MessageList = ({ filters = {} }) => {
       {/* Header con estadísticas y botones */}
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
         <Typography variant="h6" color="textSecondary">
-          {totalMessages > 0 ? `${totalMessages} mensajes encontrados` : 'Sin mensajes'}
+          {totalMessages > 0
+            ? `${formatPublicationCount(totalMessages)} publicaciones cargadas`
+            : 'Sin publicaciones'}
         </Typography>
         
         <Box display="flex" gap={2}>
@@ -243,6 +281,14 @@ const MessageList = ({ filters = {} }) => {
             disabled={loading}
           >
             Descargar mensajes
+          </Button>
+          <Button
+            variant="outlined"
+            onClick={handleDownloadChannels}
+            startIcon={<DownloadIcon />}
+            disabled={loading}
+          >
+            Descargar canales
           </Button>
           <Button
             variant="contained"

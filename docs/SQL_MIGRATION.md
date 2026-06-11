@@ -103,7 +103,24 @@ curl -s -X POST http://localhost:8080/api/filter_messages \
   -H 'Content-Type: application/json' -d '{"page":1}' | head -c 200
 ```
 
-### 8. Scraper periódico → PostgreSQL
+### 8. Canales monitorizados (`monitored_channels`)
+
+Lista oficial del scraper (sustituye al CSV como fuente principal; el CSV en S3 sigue disponible para revisiones manuales):
+
+```bash
+python3 scripts/init_postgres.py
+python3 scripts/import_monitored_channels.py
+# o desde CSV local:
+python3 scripts/import_monitored_channels.py --path backend/telegram_channels.csv
+```
+
+- Columna `discontinued=true` / `status=error` cuando el canal falla en Telegram.
+- Grafo de reenvíos en `channel_edges` (rellenado por el scraper).
+- Descarga desde la UI: «Descargar canales» (ZIP con `monitored_channels.csv` y `channel_edges.csv`).
+
+Ver también `docs/CANALES_PROPUESTAS.md` (propuestas de usuarios con login futuro).
+
+### 9. Scraper periódico → PostgreSQL
 
 Primera vez: autorizar sesión Telethon en la instancia (modo interactivo).
 

@@ -7,7 +7,12 @@ import Button from '@mui/material/Button';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Autocomplete from '@mui/material/Autocomplete';
-import { FilterList as FilterIcon, Clear as ClearIcon } from '@mui/icons-material';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Alert from '@mui/material/Alert';
+import { FilterList as FilterIcon, Clear as ClearIcon, Add as AddIcon } from '@mui/icons-material';
 import { channelsAPI, topicsAPI } from '../utils/api';
 import config from '../config';
 
@@ -39,6 +44,10 @@ function FilterBar({ onFilterChange, onChannelsLoad, currentFilters = {} }) {
     mediaType: [],
     sortBy: 'score'
   });
+  const [suggestOpen, setSuggestOpen] = useState(false);
+  const [suggestForm, setSuggestForm] = useState({ username: '', note: '', email: '' });
+  const [suggestLoading, setSuggestLoading] = useState(false);
+  const [suggestFeedback, setSuggestFeedback] = useState({ type: '', message: '' });
 
   useEffect(() => {
     // Cargar canales al montar el componente
@@ -137,6 +146,50 @@ function FilterBar({ onFilterChange, onChannelsLoad, currentFilters = {} }) {
     fetchTopics();
   };
 
+  const handleOpenSuggest = () => {
+    setSuggestFeedback({ type: '', message: '' });
+    setSuggestOpen(true);
+  };
+
+  const handleCloseSuggest = () => {
+    if (!suggestLoading) {
+      setSuggestOpen(false);
+    }
+  };
+
+  const handleSuggestSubmit = async () => {
+    const username = suggestForm.username.trim().replace(/^@/, '');
+    if (!username) {
+      setSuggestFeedback({ type: 'error', message: 'Indica el nombre de usuario del canal.' });
+      return;
+    }
+    try {
+      setSuggestLoading(true);
+      setSuggestFeedback({ type: '', message: '' });
+      const response = await channelsAPI.suggestChannel({
+        username,
+        note: suggestForm.note.trim(),
+        email: suggestForm.email.trim(),
+      });
+      if (response.success) {
+        setSuggestFeedback({
+          type: 'success',
+          message: response.message || 'Propuesta enviada correctamente.',
+        });
+        setSuggestForm({ username: '', note: '', email: '' });
+      } else {
+        throw new Error(response.error || 'No se pudo enviar la propuesta');
+      }
+    } catch (error) {
+      setSuggestFeedback({
+        type: 'error',
+        message: error.response?.data?.error || error.message || 'Error al enviar la propuesta',
+      });
+    } finally {
+      setSuggestLoading(false);
+    }
+  };
+
   const selectedTopics = topics.filter((topic) => filters.topics.includes(topic.id));
   const selectedTopicLabels =
     selectedTopics.length > 0
@@ -213,6 +266,15 @@ function FilterBar({ onFilterChange, onChannelsLoad, currentFilters = {} }) {
               ? 'Ningún canal seleccionado'
               : `${filters.channel.length} canales seleccionados`}
           </Typography>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<AddIcon />}
+            onClick={handleOpenSuggest}
+            sx={{ mt: 1 }}
+          >
+            Incluir canales
+          </Button>
         </Grid>
 
         {/* Filtro de topics (múltiple con buscador) */}
@@ -410,6 +472,63 @@ function FilterBar({ onFilterChange, onChannelsLoad, currentFilters = {} }) {
           )}
         </Box>
       )}
+
+      <Dialog open={suggestOpen} onClose={handleCloseSuggest} maxWidth="sm" fullWidth>
+        <DialogTitle>Proponer canal para monitorizar</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+            Indica el canal que quieres incluir. Enviaremos la propuesta al equipo de monitorización.
+          </Typography>
+          {suggestFeedback.message && (
+            <Alert severity={suggestFeedback.type === 'success' ? 'success' : 'error'} sx={{ mb: 2 }}>
+              {suggestFeedback.message}
+            </Alert>
+          )}
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Usuario del canal"
+            placeholder="ejemplo: canal_sin_arroba"
+            fullWidth
+            size="small"
+            value={suggestForm.username}
+            onChange={(e) => setSuggestForm({ ...suggestForm, username: e.target.value })}
+            disabled={suggestLoading}
+            sx={{ mb: 2 }}
+          />
+          <TextField
+            margin="dense"
+            label="Comentario (opcional)"
+            placeholder="Motivo o contexto de la propuesta"
+            fullWidth
+            multiline
+            minRows={2}
+            size="small"
+            value={suggestForm.note}
+            onChange={(e) => setSuggestForm({ ...suggestForm, note: e.target.value })}
+            disabled={suggestLoading}
+            sx={{ mb: 2 }}
+          />
+          <TextField
+            margin="dense"
+            label="Tu email (opcional)"
+            type="email"
+            fullWidth
+            size="small"
+            value={suggestForm.email}
+            onChange={(e) => setSuggestForm({ ...suggestForm, email: e.target.value })}
+            disabled={suggestLoading}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseSuggest} disabled={suggestLoading}>
+            Cancelar
+          </Button>
+          <Button variant="contained" onClick={handleSuggestSubmit} disabled={suggestLoading}>
+            {suggestLoading ? 'Enviando...' : 'Enviar'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Paper>
   );
 }
