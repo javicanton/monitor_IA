@@ -55,11 +55,36 @@ def _parse_float(value, default: float = 0.0) -> float:
         return default
 
 
+def _is_missing(value) -> bool:
+    if value is None:
+        return True
+    try:
+        return bool(pd.isna(value))
+    except (TypeError, ValueError):
+        pass
+    if isinstance(value, str):
+        return value.strip().lower() in ("", "nat", "none", "null")
+    return False
+
+
+def _optional_str(value, max_len: Optional[int] = None) -> Optional[str]:
+    if _is_missing(value):
+        return None
+    text = str(value).strip()
+    if not text or text.lower() == "nan":
+        return None
+    if max_len is not None:
+        text = text[:max_len]
+    return text or None
+
+
 def _parse_dt(value):
-    if value is None or (isinstance(value, float) and pd.isna(value)):
+    if _is_missing(value):
         return None
     try:
-        parsed = pd.to_datetime(value, utc=True)
+        parsed = pd.to_datetime(value, utc=True, errors="coerce")
+        if _is_missing(parsed):
+            return None
         if hasattr(parsed, "tzinfo") and parsed.tzinfo is not None:
             return parsed.tz_convert(None).to_pydatetime()
         return parsed.to_pydatetime() if hasattr(parsed, "to_pydatetime") else parsed
@@ -68,7 +93,7 @@ def _parse_dt(value):
 
 
 def _parse_label(value) -> Optional[int]:
-    if value is None or (isinstance(value, float) and pd.isna(value)):
+    if _is_missing(value):
         return None
     if isinstance(value, str) and not value.strip():
         return None
@@ -100,16 +125,16 @@ def _row_fields(row) -> Optional[Tuple[int, int, Dict[str, Any]]]:
         return None
     channel_id = _get_or_create_channel(username, title)
     fields = {
-        "message_text": str(row.get("Message Text", "") or "")[:500000] or None,
+        "message_text": _optional_str(row.get("Message Text"), 500000),
         "date_sent": _parse_dt(row.get("Date Sent")),
         "views": _parse_int(row.get("Views")),
         "forwards": _parse_int(row.get("Forwards")),
         "replies": _parse_int(row.get("Replies")),
-        "url": str(row.get("URL", "") or "")[:2000] or None,
-        "embed": str(row.get("Embed", "") or "")[:50000] or None,
+        "url": _optional_str(row.get("URL"), 2000),
+        "embed": _optional_str(row.get("Embed"), 50000),
         "score": _parse_float(row.get("Score")),
         "label": _parse_label(row.get("Label")),
-        "media_type": str(row.get("Media Type", "") or "")[:100] or None,
+        "media_type": _optional_str(row.get("Media Type"), 100),
         "creation_date": _parse_dt(row.get("Creation Date")),
         "edit_date": _parse_dt(row.get("Edit Date")),
         "average_views": (
