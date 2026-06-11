@@ -198,11 +198,27 @@ class DataStorePG:
         return df, total
 
     def get_channels(self) -> List[str]:
-        rows = db.session.query(Channel.title).distinct().filter(
-            Channel.title.isnot(None),
-            func.trim(Channel.title) != "",
-        ).order_by(func.lower(Channel.title)).all()
-        return [r[0] for r in rows if r and r[0]]
+        """Títulos de canal con mensajes (misma semántica que DuckDB: DISTINCT Title)."""
+        rows = (
+            db.session.query(Channel.title)
+            .join(Message, Message.channel_id == Channel.id)
+            .filter(Channel.title.isnot(None))
+            .distinct()
+            .order_by(func.lower(Channel.title))
+            .all()
+        )
+        titles = []
+        seen = set()
+        for row in rows:
+            title = (row[0] or "").strip()
+            if not title:
+                continue
+            key = title.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            titles.append(title)
+        return titles
 
     def get_date_bounds(self) -> Tuple[Optional[str], Optional[str]]:
         """Devuelve (min_date, max_date) como strings YYYY-MM-DD para el date picker."""
