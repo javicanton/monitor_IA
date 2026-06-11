@@ -72,11 +72,21 @@ SCRAPER_MAX_MESSAGES=500
 - Sesión Telethon autorizada (`~/.telethon/monitorIA.session`)
 - `credentials.txt` o `TELEGRAM_API_ID` / `TELEGRAM_API_HASH`
 
-## Límites de Telegram
+## Límites de Telegram (FloodWait)
 
-- Evita lanzar full + daily a la vez.
-- Si aparece `FloodWait`, el scraper deberá reintentar o esperar; espacia ejecuciones.
-- Canales con error se marcan `discontinued=true` y el scraper los omite en siguientes pasadas.
+Si ves `A wait of N seconds is required (caused by ResolveUsernameRequest)`:
+
+- **No es culpa del canal** (p. ej. `irinamar_z`): Telegram limita cuántos usuarios/canales puedes resolver por hora.
+- Suele pasar tras un **escrapeo masivo** de muchos canales seguidos.
+- El scraper **espera y reintenta** automáticamente (`FloodWaitError`).
+- Pausa entre canales: `SCRAPER_CHANNEL_DELAY=8` (segundos, default 5).
+
+Recomendaciones:
+
+- No relances un full scrape justo después de otro.
+- Usa `tmux` y deja que el script espere (18 h ≈ 65467 s es normal en casos graves).
+- Para muchos canales nuevos: `SCRAPER_CHANNEL_DELAY=10 SCRAPER_MAX_MESSAGES=3000 ./scripts/run_scraper_full.sh`
+- Canales inválidos (no FloodWait) → `discontinued=true` y se omiten en siguientes pasadas.
 
 ## Comprobar resultado
 

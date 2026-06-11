@@ -56,7 +56,7 @@ check_and_install_dependencies()
 # Importar las dependencias después de la instalación
 import pandas as pd
 from telethon import TelegramClient
-from telethon.errors import ChannelInvalidError, ChatAdminRequiredError
+from telethon.errors import ChannelInvalidError, ChatAdminRequiredError, FloodWaitError
 from telethon.tl.types import Message, Channel, User
 from telethon.tl.custom import Message as CustomMessage
 from telethon.tl.types.messages import Messages
@@ -75,6 +75,24 @@ DEFAULT_DAYS = 7
 DEFAULT_MAX_MESSAGES = 500
 DEFAULT_CHANNELS_S3_KEY = os.environ.get('TELEGRAM_CHANNELS_S3_KEY', 's3://monitoria-data/telegram_channels.csv')
 DEFAULT_SESSION_PATH = os.environ.get('TELEGRAM_SESSION_PATH', '~/.telethon/monitorIA.session')
+def _channel_delay_seconds() -> float:
+    try:
+        return max(0.0, float(os.environ.get('SCRAPER_CHANNEL_DELAY', '5')))
+    except (TypeError, ValueError):
+        return 5.0
+
+
+async def _call_with_flood_wait(label: str, coro_factory):
+    """Reintenta tras FloodWait (límite de velocidad de la API de Telegram)."""
+    while True:
+        try:
+            return await coro_factory()
+        except FloodWaitError as e:
+            wait = int(e.seconds) + 5
+            hours = wait / 3600
+            extra = f" (~{hours:.1f} h)" if hours >= 1 else ""
+            print(f"⏳ FloodWait de Telegram ({label}): esperando {wait}s{extra}...")
+            await asyncio.sleep(wait)
 
 def _read_credentials_file(filename):
     try:
@@ -705,13 +723,19 @@ async def main(args):
             channel_rows = []
             try:
                 print(f"Procesando canal: {channel}")
-                channel_details = await client.get_entity(channel)
-                messages_list = await collect_channel_messages(
-                    client,
-                    channel,
-                    max_messages=max_messages,
-                    days_to_scrape=days_to_scrape,
-                    full_history=full_history,
+                channel_details = await _call_with_flood_wait(
+                    f"resolver @{channel}",
+                    lambda ch=channel: client.get_entity(ch),
+                )
+                messages_list = await _call_with_flood_wait(
+                    f"mensajes de @{channel}",
+                    lambda ch=channel: collect_channel_messages(
+                        client,
+                        ch,
+                        max_messages=max_messages,
+                        days_to_scrape=days_to_scrape,
+                        full_history=full_history,
+                    ),
                 )
 
                 if not messages_list:
@@ -815,6 +839,15 @@ async def main(args):
                         f"{mensajes_nuevos} nuevos mensajes añadidos"
                     )
 
+            except FloodWaitError as e:
+                wait = int(e.seconds) + 5
+                print(
+                    f"⏳ FloodWait inesperado en '{channel}': esperando {wait}s "
+                    f"(~{wait / 3600:.1f} h) y reintentando el mismo canal..."
+                )
+                await asyncio.sleep(wait)
+                # Reintentar el mismo canal (no marcar como error ni saltar)
+                channels.insert(channels.index(channel), channel)
             except ChannelInvalidError as e:
                 print(f"✗ Canal '{channel}' inválido o no accesible. Continuando con el siguiente.")
                 if graph_helpers and pg_app is not None:
@@ -826,6 +859,10 @@ async def main(args):
                     with pg_app.app_context():
                         graph_helpers["mark_error"](channel, str(e))
                 continue
+            else:
+                delay = _channel_delay_seconds()
+                if delay > 0:
+                    await asyncio.sleep(delay)
 
         if use_postgres and forward_pairs and graph_helpers and pg_app is not None:
             with pg_app.app_context():
