@@ -25,6 +25,8 @@ class Config:
     SQLALCHEMY_ENGINE_OPTIONS = {
         "pool_pre_ping": True,
         "pool_recycle": 300,
+        "pool_size": int(os.environ.get("SQLALCHEMY_POOL_SIZE", "5")),
+        "max_overflow": int(os.environ.get("SQLALCHEMY_MAX_OVERFLOW", "10")),
     }
     
     # Configuración de JWT

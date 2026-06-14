@@ -146,11 +146,18 @@ def is_channel_invalid_error(exc: Exception) -> bool:
         for token in (
             "channelinvalid",
             "no user has",
+            "nobody is using",
             "username not occupied",
             "username invalid",
+            "username is unacceptable",
             "could not find",
         )
     )
+
+
+def is_telegram_session_error(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return "wrong session id" in text or "security error while unpacking" in text
 
 
 async def resolve_forward_username(message, client) -> Optional[str]:

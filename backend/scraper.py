@@ -859,10 +859,19 @@ async def main(args):
                     with pg_app.app_context():
                         graph_helpers["mark_error"](channel, str(e))
             except Exception as e:
-                print(f"Error al procesar {channel}: {str(e)}")
-                if graph_helpers and pg_app is not None and graph_helpers["is_channel_invalid_error"](e):
-                    with pg_app.app_context():
-                        graph_helpers["mark_error"](channel, str(e))
+                err_text = str(e)
+                print(f"Error al procesar {channel}: {err_text}", flush=True)
+                if graph_helpers and pg_app is not None:
+                    if graph_helpers["is_channel_invalid_error"](e):
+                        with pg_app.app_context():
+                            graph_helpers["mark_error"](channel, err_text)
+                    elif is_telegram_session_error(e):
+                        print(
+                            "✗ Error de sesión Telethon (wrong session ID). "
+                            "Deteniendo scraper: reinicia la sesión y vuelve a lanzar.",
+                            flush=True,
+                        )
+                        break
                 continue
             else:
                 delay = _channel_delay_seconds()
