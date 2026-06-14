@@ -15,7 +15,8 @@ export SCRAPER_FULL_HISTORY=1
 export SCRAPER_MAX_MESSAGES="${SCRAPER_MAX_MESSAGES:-5000}"
 export SCRAPER_CHANNEL_DELAY="${SCRAPER_CHANNEL_DELAY:-10}"
 
-echo "==> Reanudar escrapeo COMPLETO (modo seguro)"
+echo "==> Reanudar escrapeo COMPLETO (modo seguro, máx ${SCRAPER_MAX_MESSAGES} msg/canal)"
+echo "    Para TODO el historial sin límite: ./scripts/run_scraper_unlimited.sh"
 echo "    Pausa entre canales: ${SCRAPER_CHANNEL_DELAY}s"
 echo "    Máx. mensajes/canal: ${SCRAPER_MAX_MESSAGES}"
 echo "    Si hay FloodWait, el scraper esperará y continuará solo."

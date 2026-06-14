@@ -580,7 +580,8 @@ async def collect_channel_messages(
         cutoff = datetime.now(timezone.utc) - timedelta(days=days_to_scrape)
 
     messages_list: List[Message] = []
-    async for message in client.iter_messages(channel, limit=max_messages):
+    msg_limit = None if (max_messages is not None and max_messages <= 0) else max_messages
+    async for message in client.iter_messages(channel, limit=msg_limit):
         if not message or not message.date:
             continue
         msg_date = message.date
@@ -646,7 +647,10 @@ async def main(args):
         or os.environ.get("SCRAPER_FULL_HISTORY", "").lower() in ("1", "true", "yes")
     )
     if full_history:
-        print(f"6. Configuración: historial completo, hasta {max_messages} mensajes por canal")
+        if max_messages is not None and max_messages <= 0:
+            print("6. Configuración: historial completo, SIN límite de mensajes por canal", flush=True)
+        else:
+            print(f"6. Configuración: historial completo, hasta {max_messages} mensajes por canal", flush=True)
     else:
         print(f"6. Configuración: últimos {days_to_scrape} días, hasta {max_messages} mensajes por canal")
     
@@ -719,10 +723,11 @@ async def main(args):
                 "upsert_edges": upsert_channel_edges,
             }
 
-        for channel in channels:
+        total_channels = len(channels)
+        for channel_idx, channel in enumerate(channels, start=1):
             channel_rows = []
             try:
-                print(f"Procesando canal: {channel}")
+                print(f"[{channel_idx}/{total_channels}] Procesando canal: {channel}", flush=True)
                 channel_details = await _call_with_flood_wait(
                     f"resolver @{channel}",
                     lambda ch=channel: client.get_entity(ch),

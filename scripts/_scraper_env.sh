@@ -23,12 +23,14 @@ scraper_load_env() {
     exit 1
   fi
 
-  PYTHON="${ROOT}/.venv/bin/python"
-  if [[ ! -x "$PYTHON" ]]; then
-    PYTHON=python3
-  fi
+    PYTHON="${ROOT}/.venv/bin/python"
+    if [[ ! -x "$PYTHON" ]]; then
+        PYTHON=python3
+    fi
 
-  LOG_DIR="${ROOT}/logs"
+    export PYTHONUNBUFFERED=1
+
+    LOG_DIR="${ROOT}/logs"
   mkdir -p "$LOG_DIR"
 }
 

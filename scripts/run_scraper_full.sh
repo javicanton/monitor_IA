@@ -26,6 +26,7 @@ echo "    Canales: monitored_channels (activos, no descontinuados)"
 echo "    Máx. mensajes/canal: ${SCRAPER_MAX_MESSAGES}"
 echo "    Pausa entre canales: ${SCRAPER_CHANNEL_DELAY}s"
 echo "    Log: ${LOG_FILE}"
+echo "    Seguir en vivo: tail -f ${LOG_FILE}"
 scraper_print_status
 echo ""
 

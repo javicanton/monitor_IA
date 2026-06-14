@@ -16,7 +16,8 @@ python3 scripts/import_monitored_channels.py
 | Script | Cuándo | Qué hace |
 |--------|--------|----------|
 | `run_scraper_full.sh` | Backfill | Hasta 10 000 msg/canal, sin límite de días |
-| `run_scraper_resume.sh` | Tras FloodWait / parada | Igual que full pero conservador (5 000 msg, 10 s entre canales) |
+| `run_scraper_unlimited.sh` | Backfill total | **Sin límite** de mensajes/canal (todo el historial) |
+| `run_scraper_resume.sh` | Tras FloodWait / parada | Hasta 5 000 msg/canal, 10 s entre canales |
 | `run_scraper_daily.sh` | Cada día (cron 03:00 UTC) | Últimos 3 días, hasta 500 msg/canal |
 | `setup_scraper_schedule.sh` | Una vez en EC2 | Instala cron + muestra comandos de retoma |
 | `run_scraper_postgres.sh` | Manual / legacy | Parámetros por `.env` |
