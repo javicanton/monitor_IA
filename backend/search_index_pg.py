@@ -16,9 +16,9 @@ logger = logging.getLogger(__name__)
 
 def search_message_ids_pg(query: str) -> Optional[List[int]]:
     """
-    Busca en message_text y en el título del canal (vía join).
-    Devuelve lista de message_id (Telegram id) que coinciden.
-    Si la query está vacía o hay error, devuelve None (no filtrar por búsqueda).
+    Busca en message_text y en el título del canal (join channels).
+    Devuelve lista de message_id que coinciden, o [] si no hay coincidencias.
+    Devuelve None solo si la búsqueda no pudo ejecutarse (error).
     """
     q = (query or "").strip()
     if not q:

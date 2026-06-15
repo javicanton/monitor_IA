@@ -114,8 +114,11 @@ const MessagesOverTimeChart = ({ filters = {}, onDateRangeChange, selectedDateSt
 
   if (loading) {
     return (
-      <Paper sx={{ p: 2, mb: 3, minHeight: 280, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <Paper sx={{ p: 2, mb: 3, minHeight: 280, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
         <CircularProgress />
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+          Actualizando gráfico de evolución…
+        </Typography>
       </Paper>
     );
   }

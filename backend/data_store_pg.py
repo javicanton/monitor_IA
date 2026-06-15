@@ -60,13 +60,14 @@ class DataStorePG:
             from search_index_pg import search_message_ids_pg
 
             ids = search_message_ids_pg(search_query)
-            if ids:
+            if ids is not None:
                 return ids
         except Exception as exc:
             logger.warning("Búsqueda full-text PostgreSQL no disponible: %s", exc)
         return None
 
     def _apply_text_search(self, q, search_query: str):
+        """Fallback ILIKE: solo texto del mensaje y nombre del canal (no el embed HTML)."""
         terms = [
             term
             for term in search_query.split()
@@ -80,7 +81,6 @@ class DataStorePG:
                 or_(
                     Message.message_text.ilike(pattern),
                     Channel.title.ilike(pattern),
-                    Message.embed.ilike(pattern),
                 )
             )
         return q

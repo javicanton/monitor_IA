@@ -7,6 +7,8 @@ import {
   TextField,
   Button,
   InputAdornment,
+  Typography,
+  CircularProgress,
 } from '@mui/material';
 import { Search as SearchIcon } from '@mui/icons-material';
 import FilterBar from './FilterBar';
@@ -23,6 +25,7 @@ const LOGO_SIZE_SMALL = 88;
 const Dashboard = () => {
   const [filters, setFilters] = useState({});
   const [searchInput, setSearchInput] = useState('');
+  const [searchPending, setSearchPending] = useState(false);
   const [scrollProgress, setScrollProgress] = useState(0);
   const logoRef = useRef(null);
   const [logoTransform, setLogoTransform] = useState({
@@ -66,9 +69,11 @@ const Dashboard = () => {
   const handleFilterChange = (newFilters) => {
     setFilters(newFilters);
     setSearchInput(newFilters.search ?? '');
+    setSearchPending(false);
   };
 
   const handleSearchApply = () => {
+    setSearchPending(true);
     setFilters((prev) => ({ ...prev, search: searchInput.trim() }));
   };
 
@@ -167,7 +172,7 @@ const Dashboard = () => {
                 fullWidth
                 size="small"
                 label="Buscar en mensajes"
-                placeholder="Escribe palabras para buscar en el texto y título..."
+                placeholder="Palabras en el texto del mensaje o nombre del canal"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearchApply()}
@@ -183,17 +188,28 @@ const Dashboard = () => {
               <Button
                 variant="contained"
                 onClick={handleSearchApply}
-                startIcon={<SearchIcon />}
+                startIcon={searchPending ? <CircularProgress size={16} color="inherit" /> : <SearchIcon />}
+                disabled={searchPending}
                 sx={{ flexShrink: 0 }}
               >
-                Buscar
+                {searchPending ? 'Buscando…' : 'Buscar'}
               </Button>
             </Box>
+            <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+              La búsqueda se realiza sobre el texto almacenado del mensaje y el nombre del canal.
+              No busca dentro del widget de Telegram que ves en la tarjeta.
+            </Typography>
+            {filters.search && (
+              <Typography variant="caption" color="primary" display="block" sx={{ mt: 0.5 }}>
+                Búsqueda activa: «{filters.search}»
+              </Typography>
+            )}
           </Paper>
 
           {/* Lista de mensajes */}
           <MessageList 
             filters={filters}
+            onLoadingChange={setSearchPending}
           />
         </Grid>
 

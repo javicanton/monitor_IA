@@ -27,7 +27,21 @@ const formatPublicationCount = (count) => {
 
 const DEBOUNCE_MS = 500;
 
-const MessageList = ({ filters = {} }) => {
+const getLoadingMessage = (filters = {}) => {
+  const search = (filters.search || '').trim();
+  if (search) {
+    return `Buscando «${search}» en el texto del mensaje y el nombre del canal…`;
+  }
+  if (filters.dateStart || filters.dateEnd) {
+    return 'Aplicando filtro de fechas…';
+  }
+  if (filters.channel?.length || filters.excludeChannel?.length || filters.topics?.length) {
+    return 'Aplicando filtros de canal o temas…';
+  }
+  return 'Cargando mensajes…';
+};
+
+const MessageList = ({ filters = {}, onLoadingChange }) => {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -98,6 +112,10 @@ const MessageList = ({ filters = {} }) => {
       setLoading(false);
     }
   }, [filters, showNotRelevant, MESSAGES_PER_PAGE]);
+
+  useEffect(() => {
+    onLoadingChange?.(loading);
+  }, [loading, onLoadingChange]);
 
   useEffect(() => {
     if (isFirstLoad.current) {
@@ -263,8 +281,21 @@ const MessageList = ({ filters = {} }) => {
 
   if (loading && messages.length === 0) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
+      <Box
+        display="flex"
+        flexDirection="column"
+        justifyContent="center"
+        alignItems="center"
+        minHeight="200px"
+        sx={{ mt: 4 }}
+      >
         <CircularProgress />
+        <Typography variant="body1" sx={{ mt: 2 }}>
+          {getLoadingMessage(filters)}
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+          Puede tardar unos segundos con búsquedas o filtros amplios.
+        </Typography>
       </Box>
     );
   }
@@ -291,6 +322,19 @@ const MessageList = ({ filters = {} }) => {
 
   return (
     <Box sx={{ mt: 4 }}>
+      {loading && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          <Box display="flex" alignItems="flex-start" gap={1.5}>
+            <CircularProgress size={18} sx={{ mt: 0.25, flexShrink: 0 }} />
+            <Box>
+              <Typography variant="body2">{getLoadingMessage(filters)}</Typography>
+              <Typography variant="caption" color="text.secondary">
+                Espera un momento; el proceso sigue en curso.
+              </Typography>
+            </Box>
+          </Box>
+        </Alert>
+      )}
       {/* Header con estadísticas y botones */}
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
         <Tooltip

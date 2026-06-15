@@ -462,7 +462,7 @@ function FilterBar({ onFilterChange, onChannelsLoad, currentFilters = {} }) {
               startIcon={<FilterIcon />}
               size="medium"
             >
-              Aplicar Filtros
+              {hasPendingChanges ? 'Aplicar filtros (pendiente)' : 'Aplicar Filtros'}
             </Button>
             
             <Button
