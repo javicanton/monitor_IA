@@ -25,10 +25,12 @@ if git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1; then
 fi
 
 echo "==> Sin merge activo. Sincronizando con origin/desarrollo (descarta commits locales)..."
-read -r -p "¿Descartar commits locales y alinear con origin/desarrollo? [y/N] " ans
-if [[ "${ans,,}" != "y" ]]; then
-  echo "Cancelado."
-  exit 1
+if [[ "${1:-}" != "--yes" && "${1:-}" != "-y" ]]; then
+  read -r -p "¿Descartar commits locales y alinear con origin/desarrollo? [y/N] " ans
+  if [[ "${ans,,}" != "y" ]]; then
+    echo "Cancelado."
+    exit 1
+  fi
 fi
 git fetch origin
 git reset --hard origin/desarrollo
