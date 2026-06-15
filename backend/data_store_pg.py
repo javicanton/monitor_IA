@@ -67,7 +67,15 @@ class DataStorePG:
         return None
 
     def _apply_text_search(self, q, search_query: str):
-        """Fallback ILIKE: texto del mensaje y URL (no nombre del canal ni embed)."""
+        """Fallback ILIKE: texto del mensaje y URL, con soporte AND / OR / NOT."""
+        from search_boolean import apply_boolean_sqlalchemy_filter, has_boolean_operators, parse_boolean_search
+
+        if has_boolean_operators(search_query):
+            parsed = parse_boolean_search(search_query)
+            if parsed:
+                return apply_boolean_sqlalchemy_filter(
+                    q, parsed, Message.message_text, Message.url
+                )
         terms = [
             term
             for term in search_query.split()

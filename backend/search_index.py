@@ -10,6 +10,8 @@ import sqlite3
 import logging
 from typing import List, Optional
 
+from search_boolean import prepare_fts5_match_query
+
 logger = logging.getLogger(__name__)
 
 # Base del backend; el índice vive en instance/telegram_search.db
@@ -209,7 +211,7 @@ def search_message_keys(query: str) -> Optional[List[tuple]]:
     Busca en el índice FTS. Devuelve pares (message_id, channel_username) que coinciden.
     None = no filtrar; [] = sin coincidencias.
     """
-    q = _escape_fts_query(query)
+    q = prepare_fts5_match_query(query)
     if not q:
         return None
 

@@ -29,6 +29,7 @@ from botocore.exceptions import ClientError
 import logging
 from threading import Thread
 from topic_processor import process_topics
+from search_boolean import parse_boolean_search
 from search_index import ensure_index_synced, search_message_ids
 import re
 
@@ -533,7 +534,7 @@ def load_more(offset=0):
             if not search_applied:
                 text_series = filtered_df['Message Text']
                 url_series = filtered_df['URL'] if 'URL' in filtered_df.columns else None
-                parsed = _parse_boolean_search(search_query)
+                parsed = parse_boolean_search(search_query)
                 if parsed:
                     mask = _apply_boolean_search_mask(parsed, text_series, url_series)
                     filtered_df = filtered_df[mask].copy()
@@ -954,56 +955,6 @@ def run_topics():
         print(f"Error en /admin/run_topics: {e}")
         return jsonify(success=False, error=str(e)), 500
 
-def _parse_boolean_search(query: str):
-    """
-    Parsea una consulta con operadores AND, OR, NOT (case insensitive).
-    Devuelve una lista de "grupos OR"; cada grupo es una lista de (op, term) con op en ('AND', 'NOT').
-    Ej: "clima AND aemet" -> [[('AND', 'clima'), ('AND', 'aemet')]]
-    "a OR b AND c" -> [[('AND', 'a')], [('AND', 'b'), ('AND', 'c')]]
-    """
-    if not query or not query.strip():
-        return None
-    tokens = query.strip().split()
-    if not tokens:
-        return None
-    # Dividir por OR (precedencia más baja)
-    or_groups = []
-    current = []
-    for t in tokens:
-        if t.upper() == 'OR':
-            or_groups.append(current)
-            current = []
-        else:
-            current.append(t)
-    if current:
-        or_groups.append(current)
-
-    # Dentro de cada grupo, dividir por AND; cada segmento puede ser "NOT term" o "term"
-    result = []
-    for group in or_groups:
-        and_segments = []
-        i = 0
-        while i < len(group):
-            if group[i].upper() == 'AND':
-                i += 1
-                continue
-            seg = []
-            while i < len(group) and group[i].upper() != 'AND':
-                seg.append(group[i])
-                i += 1
-            if not seg:
-                continue
-            if seg[0].upper() == 'NOT':
-                term = ' '.join(seg[1:]).strip() if len(seg) > 1 else ''
-                if term:
-                    and_segments.append(('NOT', term))
-            else:
-                and_segments.append(('AND', ' '.join(seg).strip()))
-        if and_segments:
-            result.append(and_segments)
-    return result if result else None
-
-
 def _apply_boolean_search_mask(parsed, text_series, url_series=None):
     """
     Aplica la consulta booleana parseada al texto del mensaje y, opcionalmente, a la URL.
@@ -1069,7 +1020,7 @@ def _apply_message_filters(df, filters):
             try:
                 text_series = filtered_df['Message Text']
                 url_series = filtered_df['URL'] if 'URL' in filtered_df.columns else None
-                parsed = _parse_boolean_search(search_query)
+                parsed = parse_boolean_search(search_query)
                 if parsed:
                     mask = _apply_boolean_search_mask(parsed, text_series, url_series)
                     filtered_df = filtered_df[mask].copy()
