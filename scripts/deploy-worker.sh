@@ -38,8 +38,19 @@ EOF
   esac
 done
 
-export DOCKER_BUILDKIT=1
-export COMPOSE_DOCKER_CLI_BUILD=1
+_setup_buildkit() {
+  if docker buildx version >/dev/null 2>&1; then
+    export DOCKER_BUILDKIT=1
+    export COMPOSE_DOCKER_CLI_BUILD=1
+    echo "==> BuildKit: activado (buildx disponible)"
+  else
+    unset DOCKER_BUILDKIT COMPOSE_DOCKER_CLI_BUILD
+    export DOCKER_BUILDKIT=0
+    echo "==> BuildKit: desactivado (buildx no instalado; build clásico)"
+  fi
+}
+
+_setup_buildkit
 export TOPICS_DAYS_WINDOW="$DAYS"
 
 if [[ -f .env ]]; then
