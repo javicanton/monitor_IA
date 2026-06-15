@@ -74,7 +74,25 @@ _validate_database_url() {
 
 _validate_database_url
 
-COMPOSE=(docker compose -f docker-compose.worker.yml)
+_detect_compose() {
+  if docker compose version >/dev/null 2>&1; then
+    COMPOSE_BIN=(docker compose)
+    COMPOSE_PROGRESS=(--progress=plain)
+    return 0
+  fi
+  if command -v docker-compose >/dev/null 2>&1; then
+    COMPOSE_BIN=(docker-compose)
+    COMPOSE_PROGRESS=()
+    echo "==> Usando docker-compose (v1); si falla, instala el plugin: docker compose"
+    return 0
+  fi
+  echo "ERROR: no se encontró 'docker compose' ni 'docker-compose'."
+  echo "  Ubuntu: sudo apt install docker-compose-plugin   # o: docker-compose"
+  exit 1
+}
+
+_detect_compose
+COMPOSE=("${COMPOSE_BIN[@]}" -f docker-compose.worker.yml)
 
 if $DOWN; then
   "${COMPOSE[@]}" down
@@ -83,7 +101,7 @@ if $DOWN; then
 fi
 
 echo "==> Build topic_worker (pytopicgram + PyTorch CPU; puede tardar varios minutos)..."
-"${COMPOSE[@]}" build --progress=plain topic_worker
+"${COMPOSE[@]}" build "${COMPOSE_PROGRESS[@]}" topic_worker
 
 if $ONCE; then
   echo "==> Ejecución única (--once), ventana ${DAYS} días..."
