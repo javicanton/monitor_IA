@@ -1282,7 +1282,7 @@ def login():
 
 @app.route('/messages_over_time', methods=['GET', 'POST'])
 def messages_over_time():
-    """Devuelve el número de mensajes por día para el gráfico. Acepta filtros (canal, topics, mediaType, etc.) sin fecha para mostrar evolución del subconjunto."""
+    """Devuelve el número de mensajes por día para el gráfico. Acepta los mismos filtros que el listado (incluido rango de fechas)."""
     try:
         filters = request.get_json(silent=True) if request.method == 'POST' else {}
         data = data_store.messages_over_time(filters or {})

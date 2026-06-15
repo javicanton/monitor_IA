@@ -391,7 +391,7 @@ class DataStore:
             con.close()
 
     def messages_over_time(self, filters: Dict) -> List[Dict]:
-        filters = {k: v for k, v in (filters or {}).items() if k not in ("dateStart", "dateEnd")}
+        filters = dict(filters or {})
         search_ids = self._search_ids(filters)
         has_topic_join = self._has_topic_join(filters)
         from_clause = self._build_from_clause(has_topic_join)
@@ -460,6 +460,15 @@ class DataStore:
             dates = dates.dt.tz_convert(None)
         filtered = filtered.assign(_day=dates.dt.normalize())
         filtered = filtered.dropna(subset=["_day"])
+        if filtered.empty:
+            return []
+
+        date_start = filters.get("dateStart")
+        date_end = filters.get("dateEnd")
+        if date_start:
+            filtered = filtered[filtered["_day"] >= pd.to_datetime(date_start).normalize()]
+        if date_end:
+            filtered = filtered[filtered["_day"] <= pd.to_datetime(date_end).normalize()]
         if filtered.empty:
             return []
 

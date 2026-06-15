@@ -38,16 +38,9 @@ function rangeForPreset(days) {
   return { start: toYmd(start), end: toYmd(end) };
 }
 
-/** Filtros para la serie (sin fecha: el backend ignora fecha en /messages_over_time). */
-function filtersForSeries(filters) {
-  if (!filters || typeof filters !== 'object') return {};
-  const { dateStart, dateEnd, ...rest } = filters;
-  return rest;
-}
-
 /**
  * Gráfico de evolución del número de mensajes por día.
- * Respeta filtros del menú (canal, temas, tipo de contenido). Permite rango por brush, dos campos fecha inicio/fin o clic en un día.
+ * Respeta filtros del menú (canal, temas, tipo de contenido, fechas). Permite rango por brush, campos fecha o clic en un día.
  */
 const MessagesOverTimeChart = ({ filters = {}, onDateRangeChange, selectedDateStart, selectedDateEnd }) => {
   const [data, setData] = useState([]);
@@ -55,7 +48,7 @@ const MessagesOverTimeChart = ({ filters = {}, onDateRangeChange, selectedDateSt
   const [error, setError] = useState(null);
   const [dateStartInput, setDateStartInput] = useState('');
   const [dateEndInput, setDateEndInput] = useState('');
-  const seriesKey = useMemo(() => JSON.stringify(filtersForSeries(filters)), [filters]);
+  const seriesKey = useMemo(() => JSON.stringify(filters), [filters]);
 
   useEffect(() => {
     setDateStartInput(selectedDateStart || '');
@@ -146,11 +139,9 @@ const MessagesOverTimeChart = ({ filters = {}, onDateRangeChange, selectedDateSt
   const start = selectedDateStart || '';
   const end = selectedDateEnd || '';
   const hasRange = start && end;
-  let countInRange = 0;
-  if (hasRange && data.length) {
-    const inRange = data.filter((d) => d.date >= start && d.date <= end);
-    countInRange = inRange.reduce((acc, d) => acc + (d.count || 0), 0);
-  }
+  const countInRange = hasRange
+    ? data.reduce((acc, d) => acc + (d.count || 0), 0)
+    : 0;
   const titleText = hasRange
     ? `${countInRange.toLocaleString('es-ES')} mensajes entre ${formatDateLabel(start)} y ${formatDateLabel(end)}`
     : 'Evolución de mensajes — selecciona un rango en el gráfico o indica fecha inicio y fin';

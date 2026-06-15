@@ -247,7 +247,7 @@ class DataStorePG:
         )
 
     def messages_over_time(self, filters: Dict) -> List[Dict]:
-        filters = {k: v for k, v in (filters or {}).items() if k not in ("dateStart", "dateEnd")}
+        filters = dict(filters or {})
         search_query = self._search_query(filters)
         search_ids = self._search_ids(filters) if search_query else None
         use_like_search = bool(search_query and search_ids is None)
