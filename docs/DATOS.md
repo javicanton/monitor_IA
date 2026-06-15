@@ -10,16 +10,19 @@
 
 Guía completa de migración a SQL: **`docs/SQL_MIGRATION.md`**
 
-## Staging / desarrollo en EC2
+## Staging / desarrollo en EC2 (puerto **8080**)
+
+**No uses** `deploy-local-test.sh` para staging: ese script actualiza solo producción (puerto 80 / `app.monitoria.org`).
 
 ```bash
 cd ~/monitor_IA
 git checkout desarrollo
-git pull
-cp .env.example .env   # editar DATABASE_URL si usas RDS
-./scripts/deploy-staging.sh
+git pull origin desarrollo
+./scripts/deploy-staging.sh --host-frontend   # recomendado en EC2
 curl -s http://localhost:8080/api/health
 ```
+
+La UI debe mostrar **v 1.0** (variable `REACT_APP_APP_VERSION` en el build).
 
 ### Con PostgreSQL (recomendado)
 

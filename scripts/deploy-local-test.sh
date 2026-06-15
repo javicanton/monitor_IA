@@ -27,6 +27,8 @@ export FRONTEND_PORT
 if $PRODUCTION; then
   export REACT_APP_APP_VERSION="${REACT_APP_APP_VERSION:-1.0}"
   echo "==> Versión UI: ${REACT_APP_APP_VERSION}"
+  echo "==> NOTA: Este script despliega en el puerto ${FRONTEND_PORT} (producción)."
+  echo "    Staging en :8080 requiere rama desarrollo y ./scripts/deploy-staging.sh"
 else
   export REACT_APP_APP_VERSION="${REACT_APP_APP_VERSION:-1.0}"
 fi
