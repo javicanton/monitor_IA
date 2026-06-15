@@ -14,6 +14,9 @@ for arg in "$@"; do
     -h|--help)
       echo "Uso: $0 [--production]"
       echo "  --production  expone el frontend en el puerto 80"
+      echo ""
+      echo "  No construye topic_worker (análisis de temas). Para activarlo:"
+      echo "  docker compose --profile topics build topic_worker && docker compose --profile topics up -d topic_worker"
       exit 0
       ;;
   esac
@@ -38,8 +41,8 @@ if [[ ! -f .env ]]; then
   fi
 fi
 
-echo "==> Build imágenes (backend + frontend)..."
-docker compose -f docker-compose.yml -f docker-compose.deploy-test.yml build
+echo "==> Build imágenes (backend + frontend; topic_worker opcional con perfil topics)..."
+docker compose -f docker-compose.yml -f docker-compose.deploy-test.yml build backend frontend
 
 echo "==> Arrancando servicios en puerto ${FRONTEND_PORT}..."
 docker compose -f docker-compose.yml -f docker-compose.deploy-test.yml up -d
