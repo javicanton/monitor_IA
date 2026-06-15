@@ -3,8 +3,6 @@
 #   docker compose -f docker-compose.yml -f docker-compose.deploy-test.yml up --build -d
 # Puerto por defecto 8080 para no chocar con otros servicios en 80.
 
-version: '3.8'
-
 services:
   backend:
     env_file:

@@ -1,8 +1,6 @@
 # Staging en paralelo a producción (mismo host, otro puerto y otro proyecto Compose).
 # Uso: ./scripts/deploy-staging.sh
 
-version: '3.8'
-
 services:
   backend:
     container_name: monitoria-staging-backend
