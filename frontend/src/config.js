@@ -30,6 +30,7 @@ const config = {
     dateStart: '',
     dateEnd: '',
     channel: [],
+    excludeChannel: [],
     scoreMin: '',
     scoreMax: '',
     mediaType: [],

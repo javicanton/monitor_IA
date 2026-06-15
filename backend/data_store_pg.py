@@ -104,6 +104,13 @@ class DataStorePG:
                 q = q.filter(Channel.title.in_(channel))
             else:
                 q = q.filter(Channel.title == channel)
+        else:
+            exclude_channel = filters.get("excludeChannel")
+            if exclude_channel:
+                if isinstance(exclude_channel, list):
+                    q = q.filter(~Channel.title.in_(exclude_channel))
+                else:
+                    q = q.filter(Channel.title != exclude_channel)
         # Channel ya está en el join en el caller; no volver a hacer join
 
         topic_filter = filters.get("topics") or filters.get("topic")

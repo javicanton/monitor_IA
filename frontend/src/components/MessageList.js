@@ -17,9 +17,13 @@ import {
 } from '@mui/icons-material';
 import MessageCard from './MessageCard';
 import { messagesAPI, channelsAPI } from '../utils/api';
+import config from '../config';
 
-const formatPublicationCount = (count) =>
-  new Intl.NumberFormat('es-ES').format(count);
+const formatPublicationCount = (count) => {
+  const n = Number(count);
+  if (!Number.isFinite(n)) return '0';
+  return new Intl.NumberFormat('es-ES').format(n);
+};
 
 const DEBOUNCE_MS = 500;
 
@@ -66,7 +70,7 @@ const MessageList = ({ filters = {} }) => {
           setMessages(newMessages);
         }
         
-        setTotalMessages(response.total_messages || 0);
+        setTotalMessages(Number(response.total_messages) || 0);
         setCurrentPage(page);
         setHasMore(newMessages.length === MESSAGES_PER_PAGE);
         
@@ -121,13 +125,17 @@ const MessageList = ({ filters = {} }) => {
       const response = await messagesAPI.labelMessage(messageId, label);
       
       if (response.success) {
-        // Actualizar el mensaje en el estado local
-        setMessages(prev => 
-          prev.map(msg => 
-            msg['Message ID'] === messageId ? { ...msg, Label: label } : msg
-          )
-        );
-        
+        if (label === config.LABELS.NOT_RELEVANT) {
+          setMessages((prev) => prev.filter((msg) => msg['Message ID'] !== messageId));
+          setTotalMessages((prev) => Math.max(0, prev - 1));
+        } else {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg['Message ID'] === messageId ? { ...msg, Label: label } : msg
+            )
+          );
+        }
+
         setSnackbar({
           open: true,
           message: 'Mensaje etiquetado correctamente',
@@ -319,14 +327,6 @@ const MessageList = ({ filters = {} }) => {
         </Tooltip>
         
         <Box display="flex" gap={2}>
-          <Button
-            variant="outlined"
-            onClick={handleRefresh}
-            startIcon={<RefreshIcon />}
-            disabled={loading}
-          >
-            Actualizar
-          </Button>
           <Button
             variant="outlined"
             onClick={handleDownloadMessages}

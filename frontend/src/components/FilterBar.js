@@ -26,6 +26,7 @@ function FilterBar({ onFilterChange, onChannelsLoad, currentFilters = {} }) {
     dateStart: '',
     dateEnd: '',
     channel: [],
+    excludeChannel: [],
     topics: [],
     scoreMin: '',
     scoreMax: '',
@@ -38,6 +39,7 @@ function FilterBar({ onFilterChange, onChannelsLoad, currentFilters = {} }) {
     dateStart: '',
     dateEnd: '',
     channel: [],
+    excludeChannel: [],
     topics: [],
     scoreMin: '',
     scoreMax: '',
@@ -126,6 +128,7 @@ function FilterBar({ onFilterChange, onChannelsLoad, currentFilters = {} }) {
       dateStart: '',
       dateEnd: '',
       channel: [],
+      excludeChannel: [],
       topics: [],
       scoreMin: '',
       scoreMax: '',
@@ -208,7 +211,7 @@ function FilterBar({ onFilterChange, onChannelsLoad, currentFilters = {} }) {
       <Box display="flex" alignItems="center" mb={2}>
         <FilterIcon sx={{ mr: 1 }} />
         <Typography variant="h6" component="h2">
-          Filtros de Búsqueda
+          Filtros
         </Typography>
       </Box>
 
@@ -275,6 +278,49 @@ function FilterBar({ onFilterChange, onChannelsLoad, currentFilters = {} }) {
           >
             Incluir canales
           </Button>
+        </Grid>
+
+        {/* Excluir canales (todos menos los seleccionados) */}
+        <Grid item xs={12}>
+          <Autocomplete
+            multiple
+            options={channels}
+            value={filters.excludeChannel}
+            onChange={(_, value) => {
+              const newFilters = { ...filters, excludeChannel: value };
+              setFilters(newFilters);
+              setHasPendingChanges(JSON.stringify(newFilters) !== JSON.stringify(appliedFilters));
+            }}
+            filterSelectedOptions
+            disabled={loading}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Excluir canales"
+                placeholder="Canales a omitir..."
+                size="small"
+              />
+            )}
+          />
+          <Box display="flex" gap={1} mt={1} flexWrap="wrap">
+            <Button
+              variant="text"
+              size="small"
+              onClick={() => {
+                const newFilters = { ...filters, excludeChannel: [] };
+                setFilters(newFilters);
+                setHasPendingChanges(JSON.stringify(newFilters) !== JSON.stringify(appliedFilters));
+              }}
+              disabled={loading || filters.excludeChannel.length === 0}
+            >
+              Limpiar exclusiones
+            </Button>
+          </Box>
+          <Typography variant="caption" color="textSecondary" display="block" mt={0.5}>
+            {filters.excludeChannel.length === 0
+              ? 'Sin exclusiones (todos los canales)'
+              : `${filters.excludeChannel.length} canales excluidos`}
+          </Typography>
         </Grid>
 
         {/* Filtro de topics (múltiple con buscador) */}
@@ -457,6 +503,7 @@ function FilterBar({ onFilterChange, onChannelsLoad, currentFilters = {} }) {
             {currentFilters.search && ` Búsqueda: "${currentFilters.search}"`}
             {(currentFilters.dateStart || currentFilters.dateEnd) && ` Fecha: ${currentFilters.dateStart || '...'} - ${currentFilters.dateEnd || '...'}`}
             {filters.channel.length > 0 && ` Canales: ${filters.channel.join(', ')}`}
+            {filters.excludeChannel.length > 0 && ` Excluidos: ${filters.excludeChannel.join(', ')}`}
             {filters.topics.length > 0 && ` Temas: ${selectedTopicLabels.join(', ')}`}
             {filters.sortBy !== 'score' && ` Orden: ${filters.sortBy}`}
             {filters.mediaType.length > 0 &&

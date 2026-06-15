@@ -569,6 +569,17 @@ def load_more(offset=0):
             except Exception as e:
                 print(f"Error en filtro de canal: {str(e)}")
                 pass
+        else:
+            exclude_channel = filters.get('excludeChannel')
+            if exclude_channel and 'Title' in filtered_df.columns:
+                try:
+                    if isinstance(exclude_channel, list):
+                        filtered_df = filtered_df[~filtered_df['Title'].isin(exclude_channel)]
+                    else:
+                        filtered_df = filtered_df[filtered_df['Title'] != exclude_channel]
+                except Exception as e:
+                    print(f"Error en filtro de exclusión de canal: {str(e)}")
+                    pass
 
         # Filtro de Topics (uno o varios)
         topic_filter = filters.get('topics') or filters.get('topic')
@@ -1085,6 +1096,16 @@ def _apply_message_filters(df, filters):
                 filtered_df = filtered_df[filtered_df['Title'] == channel]
         except Exception as e:
             return (None, (jsonify(success=False, error=f"Error en filtro de canal: {str(e)}"), 400))
+    else:
+        exclude_channel = filters.get('excludeChannel')
+        if exclude_channel and 'Title' in filtered_df.columns:
+            try:
+                if isinstance(exclude_channel, list):
+                    filtered_df = filtered_df[~filtered_df['Title'].isin(exclude_channel)]
+                else:
+                    filtered_df = filtered_df[filtered_df['Title'] != exclude_channel]
+            except Exception as e:
+                return (None, (jsonify(success=False, error=f"Error en filtro de exclusión de canal: {str(e)}"), 400))
 
     # Filtro de Topics
     topic_filter = filters.get('topics') or filters.get('topic')

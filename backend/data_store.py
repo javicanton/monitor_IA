@@ -270,6 +270,16 @@ class DataStore:
             else:
                 clauses.append("m.\"Title\" = ?")
                 params.append(channel)
+        else:
+            exclude_channel = filters.get("excludeChannel")
+            if exclude_channel:
+                if isinstance(exclude_channel, list):
+                    placeholders = ", ".join(["?"] * len(exclude_channel))
+                    clauses.append(f"m.\"Title\" NOT IN ({placeholders})")
+                    params.extend(exclude_channel)
+                else:
+                    clauses.append("m.\"Title\" <> ?")
+                    params.append(exclude_channel)
 
         topic_filter = filters.get("topics") or filters.get("topic")
         topic_ids = self._normalize_topic_filter(topic_filter)
@@ -432,6 +442,12 @@ class DataStore:
             titles = channel if isinstance(channel, list) else [channel]
             if "Title" in filtered.columns:
                 filtered = filtered[filtered["Title"].isin(titles)]
+        else:
+            exclude_channel = filters.get("excludeChannel")
+            if exclude_channel:
+                titles = exclude_channel if isinstance(exclude_channel, list) else [exclude_channel]
+                if "Title" in filtered.columns:
+                    filtered = filtered[~filtered["Title"].isin(titles)]
 
         date_col = next((c for c in ("Date Sent", "Date", "Creation Date") if c in filtered.columns), None)
         if not date_col:
