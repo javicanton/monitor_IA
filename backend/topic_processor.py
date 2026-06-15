@@ -273,12 +273,9 @@ def _save_topics_metadata(s3_client, model):
 
 def _load_existing_assignments(s3_client):
     try:
-        return s3_client.load_csv_from_s3(Config.TOPICS_ASSIGNMENTS_KEY)
-    except ClientError as e:
-        code = e.response.get("Error", {}).get("Code")
-        if code in {"NoSuchKey", "404"}:
-            return pd.DataFrame()
-        raise
+        return s3_client.load_csv_from_s3(Config.TOPICS_ASSIGNMENTS_KEY, missing_ok=True)
+    except ClientError:
+        return pd.DataFrame()
     except Exception:
         return pd.DataFrame()
 

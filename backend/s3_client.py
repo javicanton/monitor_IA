@@ -89,15 +89,19 @@ class S3Client:
             logger.error(f"Error al obtener contenido del archivo {s3_key}: {e}")
             raise
 
-    def load_csv_from_s3(self, s3_key):
+    def load_csv_from_s3(self, s3_key, missing_ok=False):
         """Carga un archivo CSV desde S3 como DataFrame de pandas."""
         try:
             response = self.s3_client.get_object(Bucket=self.bucket_name, Key=s3_key)
             df = pd.read_csv(io.BytesIO(response['Body'].read()))
             logger.info(f"CSV cargado desde S3: {s3_key}, filas: {len(df)}")
             return df
-            
+
         except ClientError as e:
+            code = e.response.get("Error", {}).get("Code")
+            if missing_ok and code in {"NoSuchKey", "404"}:
+                logger.info("CSV no encontrado en S3 (normal en primera ejecución): %s", s3_key)
+                return pd.DataFrame()
             logger.error(f"Error al cargar CSV {s3_key}: {e}")
             raise
         except Exception as e:
