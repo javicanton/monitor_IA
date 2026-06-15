@@ -34,6 +34,7 @@ export COMPOSE_DOCKER_CLI_BUILD=1
 export STAGING_FRONTEND_PORT="$STAGING_PORT"
 export FRONTEND_PORT="$STAGING_PORT"
 export REACT_APP_APP_VERSION="${REACT_APP_APP_VERSION:-1.0}"
+echo "==> Versión UI staging: ${REACT_APP_APP_VERSION} (puerto ${STAGING_PORT})"
 
 if $down; then
   docker compose -p "$PROJECT_NAME" "${COMPOSE_FILES[@]}" down
