@@ -305,6 +305,8 @@ class DataStore:
         if label_value not in (None, ""):
             clauses.append("coalesce(try_cast(m.\"Label\" as BIGINT), -1) = ?")
             params.append(int(label_value))
+        elif filters.get("excludeNotRelevant") in (True, "true", "1", 1):
+            clauses.append("(m.\"Label\" IS NULL OR coalesce(try_cast(m.\"Label\" as BIGINT), -1) <> 0)")
 
         media_type = filters.get("mediaType")
         if media_type:

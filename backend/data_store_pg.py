@@ -140,6 +140,8 @@ class DataStorePG:
                 q = q.filter(Message.label == int(label_val))
             except (TypeError, ValueError):
                 pass
+        elif filters.get("excludeNotRelevant") in (True, "true", "1", 1):
+            q = q.filter(or_(Message.label.is_(None), Message.label != 0))
         media_type = filters.get("mediaType")
         if media_type:
             types = [media_type] if isinstance(media_type, str) else media_type

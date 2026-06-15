@@ -35,6 +35,7 @@ const MessageList = ({ filters = {} }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalMessages, setTotalMessages] = useState(0);
   const [totalChannels, setTotalChannels] = useState(0);
+  const [showNotRelevant, setShowNotRelevant] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
   const debounceRef = useRef(null);
   const isFirstLoad = useRef(true);
@@ -57,6 +58,7 @@ const MessageList = ({ filters = {} }) => {
 
       const response = await messagesAPI.getMessages({
         ...filters,
+        excludeNotRelevant: !showNotRelevant,
         page,
         per_page: MESSAGES_PER_PAGE
       });
@@ -95,7 +97,7 @@ const MessageList = ({ filters = {} }) => {
     } finally {
       setLoading(false);
     }
-  }, [filters, MESSAGES_PER_PAGE]);
+  }, [filters, showNotRelevant, MESSAGES_PER_PAGE]);
 
   useEffect(() => {
     if (isFirstLoad.current) {
@@ -125,7 +127,7 @@ const MessageList = ({ filters = {} }) => {
       const response = await messagesAPI.labelMessage(messageId, label);
       
       if (response.success) {
-        if (label === config.LABELS.NOT_RELEVANT) {
+        if (label === config.LABELS.NOT_RELEVANT && !showNotRelevant) {
           setMessages((prev) => prev.filter((msg) => msg['Message ID'] !== messageId));
           setTotalMessages((prev) => Math.max(0, prev - 1));
         } else {
@@ -221,7 +223,10 @@ const MessageList = ({ filters = {} }) => {
 
   const handleDownloadMessages = async () => {
     try {
-      const response = await messagesAPI.downloadFilteredCSV(filters);
+      const response = await messagesAPI.downloadFilteredCSV({
+        ...filters,
+        excludeNotRelevant: !showNotRelevant,
+      });
       const blob = new Blob([response.data], { type: 'text/csv;charset=utf-8;' });
       const disposition = response.headers['content-disposition'];
       let filename = 'mensajes_filtrados.csv';
@@ -342,6 +347,13 @@ const MessageList = ({ filters = {} }) => {
             disabled={loading}
           >
             Descargar canales
+          </Button>
+          <Button
+            variant="outlined"
+            onClick={() => setShowNotRelevant((prev) => !prev)}
+            disabled={loading}
+          >
+            {showNotRelevant ? 'Ocultar no relevantes' : 'Mostrar no relevantes'}
           </Button>
           <Button
             variant="contained"
