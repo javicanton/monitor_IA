@@ -94,7 +94,25 @@ else
 fi
 
 echo "==> Arrancando staging en puerto ${STAGING_PORT}..."
-docker compose -p "$PROJECT_NAME" "${COMPOSE_FILES[@]}" up -d
+if ! docker compose -p "$PROJECT_NAME" "${COMPOSE_FILES[@]}" up -d; then
+  echo ""
+  echo "ERROR: falló el arranque. Logs del backend:"
+  docker logs monitoria-staging-backend --tail 80 2>/dev/null || true
+  exit 1
+fi
+
+sleep 3
+if ! docker inspect --format='{{.State.Health.Status}}' monitoria-staging-backend 2>/dev/null | grep -q healthy; then
+  status="$(docker inspect --format='{{.State.Health.Status}}' monitoria-staging-backend 2>/dev/null || echo unknown)"
+  if [[ "$status" != "healthy" ]]; then
+    echo ""
+    echo "AVISO: backend en estado '$status'. Últimos logs:"
+    docker logs monitoria-staging-backend --tail 80 2>/dev/null || true
+    echo ""
+    echo "Comprueba DATABASE_URL en el contenedor:"
+    echo "  docker exec monitoria-staging-backend printenv DATABASE_URL | head -c 60; echo ..."
+  fi
+fi
 
 echo ""
 echo "Staging listo (producción en :80 no se toca si usa otro proyecto compose)."

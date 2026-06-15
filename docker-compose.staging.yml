@@ -5,6 +5,12 @@ services:
   backend:
     container_name: monitoria-staging-backend
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:5001/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
     environment:
       - TOPICS_META_KEY=${TOPICS_META_KEY:-topics/staging/topics.json}
       - TOPICS_ASSIGNMENTS_KEY=${TOPICS_ASSIGNMENTS_KEY:-topics/staging/message_topics.csv}

@@ -77,9 +77,12 @@ db.init_app(app)
 # Registrar blueprints
 app.register_blueprint(auth_bp, url_prefix='/api/auth')
 
-# Crear tablas de base de datos
+# Crear tablas de base de datos (no bloquear arranque si RDS tarda o falla)
 with app.app_context():
-    db.create_all()
+    try:
+        db.create_all()
+    except Exception as exc:
+        logger.warning("db.create_all no completó al arrancar (la API /health sigue activa): %s", exc)
 
 # Caché en memoria solo cuando no se usa PostgreSQL (path DuckDB/JSON)
 _DATA_CACHE = None
