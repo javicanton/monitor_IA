@@ -45,7 +45,7 @@ curl -s https://app.monitoria.org/build-id.txt
 # Debe coincidir con frontend/public/build-id.txt tras npm run build en este commit
 ```
 
-Versión en UI: **staging** `0.4 (en desarrollo)`, **producción** `1.0 (estable)` — vía `REACT_APP_APP_VERSION` en el build Docker.
+Versión en UI: **1.0** en staging y producción (vía `REACT_APP_APP_VERSION` en el build Docker).
 
 ## Prueba de despliegue local (Docker)
 

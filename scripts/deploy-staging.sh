@@ -33,7 +33,7 @@ export COMPOSE_DOCKER_CLI_BUILD=1
 
 export STAGING_FRONTEND_PORT="$STAGING_PORT"
 export FRONTEND_PORT="$STAGING_PORT"
-export REACT_APP_APP_VERSION="${REACT_APP_APP_VERSION:-0.4 (en desarrollo)}"
+export REACT_APP_APP_VERSION="${REACT_APP_APP_VERSION:-1.0}"
 
 if $down; then
   docker compose -p "$PROJECT_NAME" "${COMPOSE_FILES[@]}" down
@@ -75,7 +75,7 @@ if $host_frontend; then
     export BROWSERSLIST_IGNORE_OLD_DATA=true
     export CI=false
     export REACT_APP_API_URL=/api
-    export REACT_APP_APP_VERSION="${REACT_APP_APP_VERSION:-0.4 (en desarrollo)}"
+    export REACT_APP_APP_VERSION="${REACT_APP_APP_VERSION:-1.0}"
     npm install --omit=dev
     npm run build
   )

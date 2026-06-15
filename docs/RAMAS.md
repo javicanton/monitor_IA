@@ -1,11 +1,11 @@
-# Ramas del proyecto
+# Ramas del proyecto (v1.0)
 
-Dos ramas con nombres sencillos:
+Solo dos ramas activas:
 
 | Rama | Para qué sirve |
 |------|----------------|
-| **`funcional`** | La herramienta **como está ahora** y se puede mostrar (app.monitoria.org). No desarrollar aquí. |
-| **`desarrollo`** | **Nuevas funcionalidades** (login, SQL, etc.). Se prueba aquí antes de pasar a `funcional`. |
+| **`funcional`** | Producción en https://app.monitoria.org (puerto 80). Versión **1.0**. |
+| **`desarrollo`** | Pruebas en puerto 8080 (`./scripts/deploy-staging.sh`). Misma versión **1.0** hasta el próximo release. |
 
 ## Uso diario
 
@@ -67,8 +67,6 @@ Parar la prueba:
 ./scripts/deploy-staging.sh --down
 ```
 
-## Ramas antiguas (ignorar)
+## Ramas antiguas (eliminadas o archivadas)
 
-`production`, `cursor/deploy-baseline-a92b`, `cursor/staging-next-a92b` y `main` quedan sustituidas por **`funcional`** y **`desarrollo`**.
-
-La rama remota `develop` (con OAuth) es un experimento anterior; no usarla salvo que quieras recuperar algo concreto de ahí.
+`main`, `production`, `develop`, `scraper`, `database`, `login` y ramas `cursor/*` ya no se usan. Trabaja solo en **`desarrollo`** y publica en **`funcional`**.

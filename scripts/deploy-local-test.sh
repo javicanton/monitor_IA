@@ -22,10 +22,10 @@ done
 export FRONTEND_PORT
 
 if $PRODUCTION; then
-  export REACT_APP_APP_VERSION="${REACT_APP_APP_VERSION:-1.0 (estable)}"
+  export REACT_APP_APP_VERSION="${REACT_APP_APP_VERSION:-1.0}"
   echo "==> Versión UI: ${REACT_APP_APP_VERSION}"
 else
-  export REACT_APP_APP_VERSION="${REACT_APP_APP_VERSION:-0.4 (en desarrollo)}"
+  export REACT_APP_APP_VERSION="${REACT_APP_APP_VERSION:-1.0}"
 fi
 
 if [[ ! -f .env ]]; then

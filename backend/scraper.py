@@ -710,6 +710,7 @@ async def main(args):
         if use_postgres and pg_app is not None:
             from channel_graph import (
                 is_channel_invalid_error,
+                is_telegram_session_error,
                 mark_monitored_channel_error,
                 mark_monitored_channel_success,
                 resolve_forward_username,
