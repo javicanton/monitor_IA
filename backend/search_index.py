@@ -35,7 +35,7 @@ def _get_connection() -> sqlite3.Connection:
     return conn
 
 
-FTS_SCHEMA_VERSION = '2'
+FTS_SCHEMA_VERSION = '3'
 
 
 def _ensure_fts_table(conn: sqlite3.Connection) -> None:
@@ -54,6 +54,7 @@ def _ensure_fts_table(conn: sqlite3.Connection) -> None:
     conn.execute(f"""
         CREATE VIRTUAL TABLE IF NOT EXISTS {FTS_TABLE} USING fts5(
             message_id UNINDEXED,
+            channel_username UNINDEXED,
             message_text,
             url,
             tokenize='unicode61'
@@ -89,13 +90,13 @@ def _escape_fts_query(raw: str) -> str:
 def rebuild_index_from_dataframe(df) -> int:
     """
     Reconstruye el índice FTS desde un DataFrame.
-    El DataFrame debe tener columnas 'Message ID', 'Message Text' y opcionalmente 'URL'.
+    El DataFrame debe tener columnas 'Message ID', 'Message Text', 'Username' y opcionalmente 'URL'.
     Devuelve el número de filas indexadas.
     """
     import pandas as pd
     if df is None or df.empty:
         return 0
-    required = ['Message ID', 'Message Text']
+    required = ['Message ID', 'Message Text', 'Username']
     for col in required:
         if col not in df.columns:
             logger.warning("search_index: DataFrame sin columna '%s', no se indexa", col)
@@ -109,7 +110,10 @@ def rebuild_index_from_dataframe(df) -> int:
 
         df = df.copy()
         df['Message Text'] = df['Message Text'].astype(str).fillna('')
+        df['Username'] = df['Username'].astype(str).fillna('')
         df['URL'] = df['URL'].astype(str).fillna('') if 'URL' in df.columns else ''
+        if 'URL' not in df.columns:
+            df['URL'] = ''
 
         def _safe_message_id(val):
             """Acepta int, float o string numérico (p. ej. desde JSON)."""
@@ -130,11 +134,12 @@ def rebuild_index_from_dataframe(df) -> int:
                     continue
                 rows.append((
                     mid,
+                    (row.get('Username') or '')[:255],
                     (row['Message Text'] or '')[:1_000_000],
-                    (row.get('URL') or '')[:10_000]
+                    (row.get('URL') or '')[:10_000],
                 ))
             conn.executemany(
-                f'INSERT INTO {FTS_TABLE}(message_id, message_text, url) VALUES (?, ?, ?)',
+                f'INSERT INTO {FTS_TABLE}(message_id, channel_username, message_text, url) VALUES (?, ?, ?, ?)',
                 rows
             )
             total += len(rows)
@@ -170,6 +175,7 @@ def ensure_index_synced_from_parquet(parquet_path: str, fingerprint: str = "") -
         df = duck.execute(
             f"SELECT cast(\"Message ID\" as BIGINT) as \"Message ID\", "
             f"coalesce(\"Message Text\", '') as \"Message Text\", "
+            f"coalesce(\"Username\", '') as \"Username\", "
             f"coalesce(\"URL\", '') as \"URL\" "
             f"FROM read_parquet('{quoted}')"
         ).fetchdf()
@@ -198,10 +204,10 @@ def get_indexed_count() -> int:
         conn.close()
 
 
-def search_message_ids(query: str) -> Optional[List[int]]:
+def search_message_keys(query: str) -> Optional[List[tuple]]:
     """
-    Busca en el índice FTS y devuelve la lista de Message ID que coinciden.
-    Si la query está vacía o hay error, devuelve None (significa: no filtrar por búsqueda).
+    Busca en el índice FTS. Devuelve pares (message_id, channel_username) que coinciden.
+    None = no filtrar; [] = sin coincidencias.
     """
     q = _escape_fts_query(query)
     if not q:
@@ -210,15 +216,14 @@ def search_message_ids(query: str) -> Optional[List[int]]:
     conn = _get_connection()
     try:
         _ensure_fts_table(conn)
-        # FTS5 MATCH: admite AND, OR, NOT (ej: "clima AND aemet"); espacio = AND implícito
         try:
             cur = conn.execute(
-                f'SELECT message_id FROM {FTS_TABLE} WHERE {FTS_TABLE} MATCH ?',
+                f'SELECT message_id, channel_username FROM {FTS_TABLE} WHERE {FTS_TABLE} MATCH ?',
                 (q,)
             )
-            ids = [row[0] for row in cur.fetchall()]
-            logger.info("search_index: búsqueda '%s' -> %d resultados", q[:50], len(ids))
-            return ids
+            keys = [(row[0], row[1] or '') for row in cur.fetchall()]
+            logger.info("search_index: búsqueda '%s' -> %d resultados", q[:50], len(keys))
+            return keys
         except sqlite3.OperationalError as e:
             if 'syntax error' in str(e).lower() or 'malformed' in str(e).lower():
                 logger.warning("search_index: query inválida '%s', %s", q[:50], e)
@@ -226,6 +231,11 @@ def search_message_ids(query: str) -> Optional[List[int]]:
             raise
     finally:
         conn.close()
+
+
+def search_message_ids(query: str) -> Optional[List[tuple]]:
+    """Alias: devuelve (message_id, channel_username), no solo message_id."""
+    return search_message_keys(query)
 
 
 def ensure_index_synced(df) -> bool:

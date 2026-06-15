@@ -520,7 +520,13 @@ def load_more(offset=0):
                 ensure_index_synced(df)
                 ids = search_message_ids(search_query)
                 if ids is not None:
-                    filtered_df = df[df['Message ID'].isin(ids)].copy()
+                    key_set = {(int(k[0]), str(k[1])) for k in ids}
+                    filtered_df = df[
+                        df.apply(
+                            lambda r: (int(r['Message ID']), str(r.get('Username', ''))) in key_set,
+                            axis=1,
+                        )
+                    ].copy()
                     search_applied = True
             except Exception:
                 pass
@@ -1049,7 +1055,13 @@ def _apply_message_filters(df, filters):
             ensure_index_synced(df)
             ids = search_message_ids(search_query)
             if ids is not None:
-                filtered_df = df[df['Message ID'].isin(ids)].copy()
+                key_set = {(int(k[0]), str(k[1])) for k in ids}
+                filtered_df = df[
+                    df.apply(
+                        lambda r: (int(r['Message ID']), str(r.get('Username', ''))) in key_set,
+                        axis=1,
+                    )
+                ].copy()
                 search_applied = True
         except Exception as e:
             logger.warning("FTS no disponible (%s); usando búsqueda por texto en pandas", e)

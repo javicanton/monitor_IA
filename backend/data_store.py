@@ -257,9 +257,11 @@ class DataStore:
             if not search_ids:
                 clauses.append("1 = 0")
             else:
-                placeholders = ", ".join(["?"] * len(search_ids))
-                clauses.append(f"cast(m.\"Message ID\" as BIGINT) IN ({placeholders})")
-                params.extend(search_ids)
+                parts = []
+                for mid, username in search_ids:
+                    parts.append('(cast(m."Message ID" as BIGINT) = ? AND m."Username" = ?)')
+                    params.extend([int(mid), str(username)])
+                clauses.append("(" + " OR ".join(parts) + ")")
 
         channel = filters.get("channel")
         if channel:
@@ -534,6 +536,7 @@ class DataStore:
             return con.execute(
                 f"SELECT cast(\"Message ID\" as BIGINT) as \"Message ID\", "
                 f"coalesce(\"Message Text\", '') as \"Message Text\", "
+                f"coalesce(\"Username\", '') as \"Username\", "
                 f"coalesce(\"URL\", '') as \"URL\" "
                 f"FROM read_parquet('{quoted}')"
             ).fetchdf()

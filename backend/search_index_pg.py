@@ -14,23 +14,19 @@ from models import Message, db
 logger = logging.getLogger(__name__)
 
 
-def search_message_ids_pg(query: str) -> Optional[List[int]]:
+def search_message_row_ids_pg(query: str) -> Optional[List[int]]:
     """
     Busca en message_text y en la URL del mensaje.
-    Devuelve lista de message_id que coinciden, o [] si no hay coincidencias.
-    Devuelve None solo si la búsqueda no pudo ejecutarse (error).
+    Devuelve la clave interna messages.id de cada fila que coincide.
+    Usar messages.id (no message_id de Telegram): el mismo número puede repetirse en otro canal.
     """
     q = (query or "").strip()
     if not q:
         return None
     try:
-        # Escapar comillas simples para evitar SQL injection
-        safe = q.replace("'", "''")
-        # plainto_tsquery convierte la frase en tokens AND; config 'spanish' para mejor stemming
-        ts_query = f"plainto_tsquery('spanish', :q)"
         sql = text(
             """
-            SELECT m.message_id
+            SELECT m.id
             FROM messages m
             WHERE to_tsvector('spanish', coalesce(m.message_text, '') || ' ' || coalesce(m.url, ''))
                   @@ plainto_tsquery('spanish', :q)
@@ -39,8 +35,12 @@ def search_message_ids_pg(query: str) -> Optional[List[int]]:
         result = db.session.execute(sql, {"q": q})
         rows = result.fetchall()
         ids = [r[0] for r in rows if r and r[0] is not None]
-        logger.info("search_index_pg: búsqueda '%s' -> %d resultados", q[:50], len(ids))
+        logger.info("search_index_pg: búsqueda '%s' -> %d filas", q[:50], len(ids))
         return ids
     except Exception as exc:
         logger.warning("search_index_pg: error en búsqueda '%s': %s", q[:50], exc)
         return None
+
+
+# Alias legacy
+search_message_ids_pg = search_message_row_ids_pg

@@ -57,9 +57,9 @@ class DataStorePG:
         if not search_query:
             return None
         try:
-            from search_index_pg import search_message_ids_pg
+            from search_index_pg import search_message_row_ids_pg
 
-            ids = search_message_ids_pg(search_query)
+            ids = search_message_row_ids_pg(search_query)
             if ids is not None:
                 return ids
         except Exception as exc:
@@ -95,7 +95,7 @@ class DataStorePG:
     ):
         search_query = self._search_query(filters)
         if search_ids is not None:
-            q = q.filter(Message.message_id.in_(search_ids))
+            q = q.filter(Message.id.in_(search_ids))
         elif use_like_search and search_query:
             q = self._apply_text_search(q, search_query)
         channel = filters.get("channel")
