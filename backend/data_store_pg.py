@@ -127,8 +127,6 @@ class DataStorePG:
             if not join_topics:
                 q = q.outerjoin(MessageTopic, Message.id == MessageTopic.message_id)
             q = q.filter(MessageTopic.topic_id.in_(topic_ids))
-        elif join_topics:
-            q = q.outerjoin(MessageTopic, Message.id == MessageTopic.message_id)
 
         score_min = filters.get("scoreMin")
         if score_min not in (None, ""):
