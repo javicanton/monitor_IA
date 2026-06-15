@@ -76,6 +76,10 @@ class Config:
         TOPICS_SAMPLE_RATIO = float(_TOPICS_SAMPLE_RATIO_RAW) if _TOPICS_SAMPLE_RATIO_RAW else None
     except (TypeError, ValueError):
         TOPICS_SAMPLE_RATIO = None
+    # Ventana temporal: solo mensajes de los últimos N días (0 = sin límite). Pruebas: 7.
+    TOPICS_DAYS_WINDOW = int(os.environ.get('TOPICS_DAYS_WINDOW', 0))
+    # Si es true, ignora el estado incremental y reprocesa toda la ventana.
+    TOPICS_RESET_STATE = os.environ.get('TOPICS_RESET_STATE', '').lower() in ('1', 'true', 'yes')
     
     # Configuración de CORS
     CORS_HEADERS = 'Content-Type'

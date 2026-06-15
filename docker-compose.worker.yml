@@ -1,13 +1,28 @@
+# Worker pytopicgram en instancia EC2 separada (sin frontend/backend).
+# Uso: ./scripts/deploy-worker.sh [--once] [--days 7]
+
 services:
   topic_worker:
     build:
       context: ./backend
       dockerfile: Dockerfile.worker
+    container_name: monitoria-topic-worker
     command: ["python", "topic_worker.py"]
+    env_file:
+      - .env
     environment:
       - S3_BUCKET=${S3_BUCKET:-monitoria-data}
       - AWS_REGION=${AWS_REGION:-eu-north-1}
+      - DATABASE_URL=${DATABASE_URL:-}
       - TOPIC_POLL_INTERVAL_MIN=${TOPIC_POLL_INTERVAL_MIN:-1440}
       - TOPICS_NUM_TOPICS=${TOPICS_NUM_TOPICS:-50}
       - TOPICS_SAMPLE_RATIO=${TOPICS_SAMPLE_RATIO:-0.3}
+      - TOPICS_DAYS_WINDOW=${TOPICS_DAYS_WINDOW:-7}
+      - TOPICS_RESET_STATE=${TOPICS_RESET_STATE:-1}
+      - TOPICS_S3_PREFIX=${TOPICS_S3_PREFIX:-topics/staging/}
+      - TOPICS_MODEL_KEY=${TOPICS_MODEL_KEY:-topics/staging/model.pkl}
+      - TOPICS_STATE_KEY=${TOPICS_STATE_KEY:-topics/staging/state.json}
+      - TOPICS_META_KEY=${TOPICS_META_KEY:-topics/staging/topics.json}
+      - TOPICS_ASSIGNMENTS_KEY=${TOPICS_ASSIGNMENTS_KEY:-topics/staging/message_topics.csv}
+      - TOPICS_OPENAI_KEY=${TOPICS_OPENAI_KEY:-}
     restart: unless-stopped

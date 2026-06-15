@@ -5,6 +5,10 @@ services:
   backend:
     container_name: monitoria-staging-backend
     restart: unless-stopped
+    environment:
+      - TOPICS_META_KEY=${TOPICS_META_KEY:-topics/staging/topics.json}
+      - TOPICS_ASSIGNMENTS_KEY=${TOPICS_ASSIGNMENTS_KEY:-topics/staging/message_topics.csv}
+      - TOPICS_TITLES_KEY=${TOPICS_TITLES_KEY:-topics/staging/topic_titles.json}
     volumes:
       - staging-backend-cache:/app/data/cache
       - staging-backend-instance:/app/instance

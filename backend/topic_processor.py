@@ -5,7 +5,7 @@ import os
 import tempfile
 import subprocess
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pandas as pd
 from botocore.exceptions import ClientError
@@ -24,6 +24,72 @@ def _safe_datetime(value):
         return pd.to_datetime(value).to_pydatetime()
     except Exception:
         return None
+
+
+def _message_date_column(df):
+    for col in ["Date Sent", "Date", "date_sent"]:
+        if col in df.columns:
+            return col
+    return None
+
+
+def _filter_by_days(df, days_window):
+    if not days_window or days_window <= 0 or df.empty:
+        return df
+    date_col = _message_date_column(df)
+    if not date_col:
+        logger.warning("TOPICS_DAYS_WINDOW activo pero no hay columna de fecha; sin filtrar")
+        return df
+    cutoff = datetime.utcnow() - timedelta(days=days_window)
+    dates = pd.to_datetime(df[date_col], errors="coerce", utc=True)
+    cutoff_ts = pd.Timestamp(cutoff, tz="UTC")
+    filtered = df[dates >= cutoff_ts]
+    logger.info(
+        "Ventana de %d días: %d -> %d mensajes",
+        days_window,
+        len(df),
+        len(filtered),
+    )
+    return filtered
+
+
+def _load_messages_from_postgres(days_window=None):
+    from sqlalchemy import func
+
+    from models import Message
+    from pg_upsert import create_app
+
+    app = create_app()
+    with app.app_context():
+        from models import db
+
+        date_expr = func.coalesce(Message.date_sent, Message.creation_date)
+        q = db.session.query(
+            Message.id.label("pg_id"),
+            Message.message_id.label("telegram_id"),
+            Message.message_text.label("message_text"),
+            date_expr.label("date_sent"),
+        ).filter(Message.message_text.isnot(None))
+
+        if days_window and days_window > 0:
+            cutoff = datetime.utcnow() - timedelta(days=days_window)
+            q = q.filter(date_expr >= cutoff)
+
+        rows = q.all()
+        if not rows:
+            return pd.DataFrame()
+
+        records = []
+        for row in rows:
+            records.append(
+                {
+                    "_pg_id": row.pg_id,
+                    "Message ID": row.telegram_id,
+                    "Message Text": row.message_text,
+                    "Date Sent": row.date_sent,
+                }
+            )
+        return pd.DataFrame(records)
 
 
 def _load_messages_df(s3_client):
@@ -221,12 +287,57 @@ def _upload_assignments(s3_client, assignments_df):
     s3_client.upload_dataframe(assignments_df, Config.TOPICS_ASSIGNMENTS_KEY, format="csv")
 
 
-def process_topics():
+def _save_assignments_to_postgres(target_df, topics):
+    """Persiste asignaciones en message_topics (PostgreSQL)."""
+    if "_pg_id" not in target_df.columns:
+        logger.warning("Sin columna _pg_id; no se escriben topics en PostgreSQL")
+        return 0
+
+    from models import MessageTopic
+    from pg_upsert import create_app
+
+    app = create_app()
+    written = 0
+    with app.app_context():
+        from models import db
+
+        pg_ids = target_df["_pg_id"].tolist()
+        MessageTopic.query.filter(MessageTopic.message_id.in_(pg_ids)).delete(
+            synchronize_session=False
+        )
+
+        for pg_id, topic_id in zip(pg_ids, topics):
+            try:
+                topic_id = int(topic_id)
+            except (TypeError, ValueError):
+                continue
+            if topic_id < 0:
+                continue
+            db.session.add(MessageTopic(message_id=int(pg_id), topic_id=topic_id))
+            written += 1
+
+        db.session.commit()
+    logger.info("Asignaciones guardadas en PostgreSQL: %d filas", written)
+    return written
+
+
+def process_topics(days_window=None):
     if importlib.util.find_spec("pytopicgram") is None:
         logger.error("pytopicgram no disponible en este contenedor")
         return {"status": "error", "error": "pytopicgram_not_installed"}
-    s3_client = get_s3_client()
-    df = _load_messages_df(s3_client)
+
+    days_window = days_window if days_window is not None else Config.TOPICS_DAYS_WINDOW
+    use_postgres = bool(os.environ.get("DATABASE_URL"))
+
+    if use_postgres:
+        logger.info("Cargando mensajes desde PostgreSQL (ventana: %s días)", days_window or "sin límite")
+        df = _load_messages_from_postgres(days_window)
+        s3_client = get_s3_client()
+    else:
+        s3_client = get_s3_client()
+        df = _load_messages_df(s3_client)
+        df = _filter_by_days(df, days_window)
+
     if df.empty:
         logger.info("No hay mensajes para procesar")
         return {"status": "empty"}
@@ -235,8 +346,8 @@ def process_topics():
     df = df.assign(_topic_text=docs_series)
     df = df[df["_topic_text"].str.len() > 0]
 
-    state = _load_state(s3_client)
-    new_df = _filter_new_messages(df, state)
+    state = {} if Config.TOPICS_RESET_STATE else _load_state(s3_client)
+    new_df = df if Config.TOPICS_RESET_STATE else _filter_new_messages(df, state)
 
     if new_df.empty:
         logger.info("No hay mensajes nuevos")
@@ -296,6 +407,8 @@ def process_topics():
 
         assignments = assignments.drop_duplicates(subset=["Message ID"], keep="last")
         _upload_assignments(s3_client, assignments)
+        if use_postgres:
+            _save_assignments_to_postgres(target_df, topics)
         _save_topics_metadata(s3_client, model)
         _save_state(s3_client, _state_from_df(df))
 
@@ -303,6 +416,8 @@ def process_topics():
         "status": "ok",
         "new_messages": int(len(new_df)),
         "retrained": bool(assign_full_dataset),
+        "days_window": days_window or None,
+        "postgres": use_postgres,
     }
 
 

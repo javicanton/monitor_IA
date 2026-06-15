@@ -180,8 +180,7 @@ class DataStorePG:
         search_query = self._search_query(filters)
         search_ids = self._search_ids(filters) if search_query else None
         use_like_search = bool(search_query and search_ids is None)
-        topic_filter = filters.get("topics") or filters.get("topic")
-        join_topics = bool(topic_filter)
+        join_topics = True
 
         q = db.session.query(
             Message.embed,
@@ -189,10 +188,9 @@ class DataStorePG:
             Message.message_id,
             Message.url,
             Message.label,
-            MessageTopic.topic_id if join_topics else cast(None, db.Integer).label("topic_id"),
+            MessageTopic.topic_id.label("topic_id"),
         )
-        if join_topics:
-            q = q.outerjoin(MessageTopic, Message.id == MessageTopic.message_id)
+        q = q.outerjoin(MessageTopic, Message.id == MessageTopic.message_id)
         q = q.join(Channel, Message.channel_id == Channel.id)
         q = self._apply_filters(q, filters, search_ids, join_topics, use_like_search=use_like_search)
         count_q = q.with_entities(func.count(distinct(Message.id)))
@@ -275,8 +273,7 @@ class DataStorePG:
         return [{"date": str(r.day), "count": r.count} for r in rows]
 
     def export_filtered_dataframe(self, filters: Dict) -> pd.DataFrame:
-        topic_filter = filters.get("topics") or filters.get("topic")
-        join_topics = bool(topic_filter)
+        join_topics = True
         search_query = self._search_query(filters)
         search_ids = self._search_ids(filters) if search_query else None
         use_like_search = bool(search_query and search_ids is None)
@@ -292,10 +289,9 @@ class DataStorePG:
             Message.url,
             Message.media_type,
             Message.average_views,
-            MessageTopic.topic_id if join_topics else cast(None, db.Integer).label("topic_id"),
+            MessageTopic.topic_id.label("topic_id"),
         )
-        if join_topics:
-            q = q.outerjoin(MessageTopic, Message.id == MessageTopic.message_id)
+        q = q.outerjoin(MessageTopic, Message.id == MessageTopic.message_id)
         q = q.join(Channel, Message.channel_id == Channel.id)
         q = self._apply_filters(q, filters, search_ids, join_topics, use_like_search=use_like_search)
         q = self._order_by(q, filters)
