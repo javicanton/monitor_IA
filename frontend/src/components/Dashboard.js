@@ -172,7 +172,7 @@ const Dashboard = () => {
                 fullWidth
                 size="small"
                 label="Buscar en mensajes"
-                placeholder="Palabras en el texto del mensaje o nombre del canal"
+                placeholder="Palabras en el texto del mensaje o en el enlace"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearchApply()}
@@ -196,8 +196,8 @@ const Dashboard = () => {
               </Button>
             </Box>
             <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
-              La búsqueda se realiza sobre el texto almacenado del mensaje y el nombre del canal.
-              No busca dentro del widget de Telegram que ves en la tarjeta.
+              La búsqueda se realiza sobre el texto almacenado del mensaje y su enlace (URL).
+              No incluye el nombre del canal ni el widget de Telegram visible en la tarjeta.
             </Typography>
             {filters.search && (
               <Typography variant="caption" color="primary" display="block" sx={{ mt: 0.5 }}>

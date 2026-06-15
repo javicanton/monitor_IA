@@ -30,7 +30,7 @@ const DEBOUNCE_MS = 500;
 const getLoadingMessage = (filters = {}) => {
   const search = (filters.search || '').trim();
   if (search) {
-    return `Buscando «${search}» en el texto del mensaje y el nombre del canal…`;
+    return `Buscando «${search}» en el texto del mensaje y el enlace…`;
   }
   if (filters.dateStart || filters.dateEnd) {
     return 'Aplicando filtro de fechas…';

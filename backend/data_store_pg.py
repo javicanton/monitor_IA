@@ -67,7 +67,7 @@ class DataStorePG:
         return None
 
     def _apply_text_search(self, q, search_query: str):
-        """Fallback ILIKE: solo texto del mensaje y nombre del canal (no el embed HTML)."""
+        """Fallback ILIKE: texto del mensaje y URL (no nombre del canal ni embed)."""
         terms = [
             term
             for term in search_query.split()
@@ -80,7 +80,7 @@ class DataStorePG:
             q = q.filter(
                 or_(
                     Message.message_text.ilike(pattern),
-                    Channel.title.ilike(pattern),
+                    Message.url.ilike(pattern),
                 )
             )
         return q

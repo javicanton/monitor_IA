@@ -526,18 +526,18 @@ def load_more(offset=0):
                 pass
             if not search_applied:
                 text_series = filtered_df['Message Text']
-                title_series = filtered_df['Title'] if 'Title' in filtered_df.columns else None
+                url_series = filtered_df['URL'] if 'URL' in filtered_df.columns else None
                 parsed = _parse_boolean_search(search_query)
                 if parsed:
-                    mask = _apply_boolean_search_mask(parsed, text_series, title_series)
+                    mask = _apply_boolean_search_mask(parsed, text_series, url_series)
                     filtered_df = filtered_df[mask].copy()
                 else:
                     q_lower = search_query.lower()
                     text_series = filtered_df['Message Text'].astype(str).fillna('')
                     mask = text_series.str.lower().str.contains(re.escape(q_lower), na=False, regex=True)
-                    if title_series is not None:
-                        title_series = filtered_df['Title'].astype(str).fillna('')
-                        mask = mask | title_series.str.lower().str.contains(re.escape(q_lower), na=False, regex=True)
+                    if url_series is not None:
+                        url_series = filtered_df['URL'].astype(str).fillna('')
+                        mask = mask | url_series.str.lower().str.contains(re.escape(q_lower), na=False, regex=True)
                     filtered_df = filtered_df[mask].copy()
 
         # Filtro de Fecha (Rango)
@@ -998,9 +998,9 @@ def _parse_boolean_search(query: str):
     return result if result else None
 
 
-def _apply_boolean_search_mask(parsed, text_series, title_series=None):
+def _apply_boolean_search_mask(parsed, text_series, url_series=None):
     """
-    Aplica la consulta booleana parseada a las series de texto/título.
+    Aplica la consulta booleana parseada al texto del mensaje y, opcionalmente, a la URL.
     Devuelve una máscara pandas (True = fila cumple la búsqueda).
     """
     if not parsed:
@@ -1014,9 +1014,9 @@ def _apply_boolean_search_mask(parsed, text_series, title_series=None):
             term_lower = term.lower()
             term_escaped = re.escape(term_lower)
             m_text = text_series.astype(str).fillna('').str.lower().str.contains(term_escaped, na=False, regex=True)
-            if title_series is not None and len(title_series) == len(text_series):
-                m_title = title_series.astype(str).fillna('').str.lower().str.contains(term_escaped, na=False, regex=True)
-                term_mask = m_text | m_title
+            if url_series is not None and len(url_series) == len(text_series):
+                m_url = url_series.astype(str).fillna('').str.lower().str.contains(term_escaped, na=False, regex=True)
+                term_mask = m_text | m_url
             else:
                 term_mask = m_text
             if op == 'NOT':
@@ -1056,18 +1056,18 @@ def _apply_message_filters(df, filters):
         if not search_applied:
             try:
                 text_series = filtered_df['Message Text']
-                title_series = filtered_df['Title'] if 'Title' in filtered_df.columns else None
+                url_series = filtered_df['URL'] if 'URL' in filtered_df.columns else None
                 parsed = _parse_boolean_search(search_query)
                 if parsed:
-                    mask = _apply_boolean_search_mask(parsed, text_series, title_series)
+                    mask = _apply_boolean_search_mask(parsed, text_series, url_series)
                     filtered_df = filtered_df[mask].copy()
                 else:
                     q_lower = search_query.lower()
                     text_series = filtered_df['Message Text'].astype(str).fillna('')
                     mask = text_series.str.lower().str.contains(re.escape(q_lower), na=False, regex=True)
-                    if title_series is not None:
-                        title_series = filtered_df['Title'].astype(str).fillna('')
-                        mask = mask | title_series.str.lower().str.contains(re.escape(q_lower), na=False, regex=True)
+                    if url_series is not None:
+                        url_series = filtered_df['URL'].astype(str).fillna('')
+                        mask = mask | url_series.str.lower().str.contains(re.escape(q_lower), na=False, regex=True)
                     filtered_df = filtered_df[mask].copy()
             except Exception as e:
                 logger.warning("Error en búsqueda por texto: %s", e)

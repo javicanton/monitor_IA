@@ -35,20 +35,28 @@ def _get_connection() -> sqlite3.Connection:
     return conn
 
 
+FTS_SCHEMA_VERSION = '2'
+
+
 def _ensure_fts_table(conn: sqlite3.Connection) -> None:
-    """Crea la tabla virtual FTS5 si no existe."""
-    conn.execute(f"""
-        CREATE VIRTUAL TABLE IF NOT EXISTS {FTS_TABLE} USING fts5(
-            message_id UNINDEXED,
-            message_text,
-            title,
-            tokenize='unicode61'
-        )
-    """)
+    """Crea la tabla virtual FTS5 si no existe (message_text + url, sin título de canal)."""
     conn.execute(f"""
         CREATE TABLE IF NOT EXISTS {META_TABLE} (
             key TEXT PRIMARY KEY,
             value TEXT
+        )
+    """)
+    conn.commit()
+    version = _get_meta(conn, 'fts_schema_version')
+    if version != FTS_SCHEMA_VERSION:
+        conn.execute(f'DROP TABLE IF EXISTS {FTS_TABLE}')
+        _set_meta(conn, 'fts_schema_version', FTS_SCHEMA_VERSION)
+    conn.execute(f"""
+        CREATE VIRTUAL TABLE IF NOT EXISTS {FTS_TABLE} USING fts5(
+            message_id UNINDEXED,
+            message_text,
+            url,
+            tokenize='unicode61'
         )
     """)
     conn.commit()
@@ -81,7 +89,7 @@ def _escape_fts_query(raw: str) -> str:
 def rebuild_index_from_dataframe(df) -> int:
     """
     Reconstruye el índice FTS desde un DataFrame.
-    El DataFrame debe tener columnas 'Message ID', 'Message Text' y opcionalmente 'Title'.
+    El DataFrame debe tener columnas 'Message ID', 'Message Text' y opcionalmente 'URL'.
     Devuelve el número de filas indexadas.
     """
     import pandas as pd
@@ -101,7 +109,7 @@ def rebuild_index_from_dataframe(df) -> int:
 
         df = df.copy()
         df['Message Text'] = df['Message Text'].astype(str).fillna('')
-        df['Title'] = df['Title'].astype(str).fillna('') if 'Title' in df.columns else ''
+        df['URL'] = df['URL'].astype(str).fillna('') if 'URL' in df.columns else ''
 
         def _safe_message_id(val):
             """Acepta int, float o string numérico (p. ej. desde JSON)."""
@@ -123,10 +131,10 @@ def rebuild_index_from_dataframe(df) -> int:
                 rows.append((
                     mid,
                     (row['Message Text'] or '')[:1_000_000],
-                    (row['Title'] or '')[:10_000]
+                    (row.get('URL') or '')[:10_000]
                 ))
             conn.executemany(
-                f'INSERT INTO {FTS_TABLE}(message_id, message_text, title) VALUES (?, ?, ?)',
+                f'INSERT INTO {FTS_TABLE}(message_id, message_text, url) VALUES (?, ?, ?)',
                 rows
             )
             total += len(rows)
@@ -162,7 +170,7 @@ def ensure_index_synced_from_parquet(parquet_path: str, fingerprint: str = "") -
         df = duck.execute(
             f"SELECT cast(\"Message ID\" as BIGINT) as \"Message ID\", "
             f"coalesce(\"Message Text\", '') as \"Message Text\", "
-            f"coalesce(\"Title\", '') as \"Title\" "
+            f"coalesce(\"URL\", '') as \"URL\" "
             f"FROM read_parquet('{quoted}')"
         ).fetchdf()
     finally:

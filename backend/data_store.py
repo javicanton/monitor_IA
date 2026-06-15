@@ -534,7 +534,7 @@ class DataStore:
             return con.execute(
                 f"SELECT cast(\"Message ID\" as BIGINT) as \"Message ID\", "
                 f"coalesce(\"Message Text\", '') as \"Message Text\", "
-                f"coalesce(\"Title\", '') as \"Title\" "
+                f"coalesce(\"URL\", '') as \"URL\" "
                 f"FROM read_parquet('{quoted}')"
             ).fetchdf()
         finally:

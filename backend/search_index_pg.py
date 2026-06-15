@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 def search_message_ids_pg(query: str) -> Optional[List[int]]:
     """
-    Busca en message_text y en el título del canal (join channels).
+    Busca en message_text y en la URL del mensaje.
     Devuelve lista de message_id que coinciden, o [] si no hay coincidencias.
     Devuelve None solo si la búsqueda no pudo ejecutarse (error).
     """
@@ -32,8 +32,7 @@ def search_message_ids_pg(query: str) -> Optional[List[int]]:
             """
             SELECT m.message_id
             FROM messages m
-            JOIN channels c ON c.id = m.channel_id
-            WHERE to_tsvector('spanish', coalesce(m.message_text, '') || ' ' || coalesce(c.title, ''))
+            WHERE to_tsvector('spanish', coalesce(m.message_text, '') || ' ' || coalesce(m.url, ''))
                   @@ plainto_tsquery('spanish', :q)
             """
         )
