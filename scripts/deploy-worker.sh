@@ -48,6 +48,32 @@ if [[ -f .env ]]; then
   set +a
 fi
 
+_validate_database_url() {
+  if [[ -z "${DATABASE_URL:-}" ]]; then
+    echo "ERROR: DATABASE_URL no está definido en .env"
+    echo ""
+    echo "En la instancia Monitor IA (staging), obtén la URL real:"
+    echo "  grep DATABASE_URL ~/monitor_IA/.env"
+    echo "  # o: docker exec monitoria-staging-backend printenv DATABASE_URL"
+    echo ""
+    echo "Pégala en este servidor (worker), descomentada, con host RDS (no localhost)."
+    exit 1
+  fi
+  if [[ "$DATABASE_URL" == *"@localhost"* ]] || [[ "$DATABASE_URL" == *"@127.0.0.1"* ]]; then
+    echo "ERROR: DATABASE_URL apunta a localhost; en el worker debe ser el host RDS."
+    echo "  Actual: ${DATABASE_URL/@*/@***}"
+    echo ""
+    echo "Copia la URL de Monitor IA (termina en .rds.amazonaws.com)."
+    exit 1
+  fi
+  if [[ "$DATABASE_URL" != *"sslmode="* ]]; then
+    echo "AVISO: RDS suele requerir ?sslmode=require al final de DATABASE_URL"
+  fi
+  echo "==> DATABASE_URL: ${DATABASE_URL/@*/@***} (${#DATABASE_URL} chars)"
+}
+
+_validate_database_url
+
 COMPOSE=(docker compose -f docker-compose.worker.yml)
 
 if $DOWN; then
