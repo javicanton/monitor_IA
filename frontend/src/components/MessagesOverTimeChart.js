@@ -18,6 +18,26 @@ function formatDateLabel(ymd) {
   return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' });
 }
 
+function toYmd(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+const PRESET_RANGES = [
+  { key: 'week', label: 'Última semana', days: 7 },
+  { key: 'month', label: 'Último mes', days: 30 },
+  { key: 'year', label: 'Último año', days: 365 },
+];
+
+function rangeForPreset(days) {
+  const end = new Date();
+  const start = new Date();
+  start.setDate(end.getDate() - (days - 1));
+  return { start: toYmd(start), end: toYmd(end) };
+}
+
 /** Filtros para la serie (sin fecha: el backend ignora fecha en /messages_over_time). */
 function filtersForSeries(filters) {
   if (!filters || typeof filters !== 'object') return {};
@@ -169,6 +189,18 @@ const MessagesOverTimeChart = ({ filters = {}, onDateRangeChange, selectedDateSt
     onDateRangeChange('', '');
   };
 
+  const handlePresetRange = (days) => {
+    const { start, end } = rangeForPreset(days);
+    setDateStartInput(start);
+    setDateEndInput(end);
+    applyDateRange(start, end);
+  };
+
+  const activePresetKey = PRESET_RANGES.find(({ days }) => {
+    const { start, end } = rangeForPreset(days);
+    return start === (selectedDateStart || '') && end === (selectedDateEnd || '');
+  })?.key;
+
   const handleDayClick = (point) => {
     if (point?.date && typeof onDateRangeChange === 'function') {
       onDateRangeChange(point.date, point.date);
@@ -215,6 +247,18 @@ const MessagesOverTimeChart = ({ filters = {}, onDateRangeChange, selectedDateSt
           InputLabelProps={{ shrink: true }}
           sx={{ width: 180 }}
         />
+        <Box display="flex" flexWrap="wrap" gap={1} alignItems="center">
+          {PRESET_RANGES.map(({ key, label, days }) => (
+            <Button
+              key={key}
+              size="small"
+              variant={activePresetKey === key ? 'contained' : 'outlined'}
+              onClick={() => handlePresetRange(days)}
+            >
+              {label}
+            </Button>
+          ))}
+        </Box>
         {(dateStartInput || dateEndInput || hasRange) && (
           <Button size="small" onClick={handleClearDateRange}>
             Limpiar filtro de fecha
