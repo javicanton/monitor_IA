@@ -10,7 +10,7 @@ from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 from flask import current_app
-from sqlalchemy import and_, case, cast, func, or_, text, distinct
+from sqlalchemy import and_, case, cast, func, or_, select, text, distinct
 from sqlalchemy.orm import joinedload
 
 from models import Channel, Message, MessageTopic, db
@@ -43,6 +43,17 @@ def _date_expr(model=Message):
     return func.coalesce(
         model.date_sent,
         model.creation_date,
+    )
+
+
+def _topic_id_scalar():
+    """Subconsulta correlacionada: evita JOIN en COUNT de listados grandes."""
+    return (
+        select(MessageTopic.topic_id)
+        .where(MessageTopic.message_id == Message.id)
+        .correlate(Message)
+        .limit(1)
+        .scalar_subquery()
     )
 
 
@@ -178,7 +189,8 @@ class DataStorePG:
         search_query = self._search_query(filters)
         search_ids = self._search_ids(filters) if search_query else None
         use_like_search = bool(search_query and search_ids is None)
-        join_topics = True
+        topic_filter = filters.get("topics") or filters.get("topic")
+        join_topics = bool(topic_filter)
 
         q = db.session.query(
             Message.embed,
@@ -186,13 +198,23 @@ class DataStorePG:
             Message.message_id,
             Message.url,
             Message.label,
-            MessageTopic.topic_id.label("topic_id"),
-        )
-        q = q.outerjoin(MessageTopic, Message.id == MessageTopic.message_id)
-        q = q.join(Channel, Message.channel_id == Channel.id)
+            _topic_id_scalar().label("topic_id"),
+        ).join(Channel, Message.channel_id == Channel.id)
+        if join_topics:
+            q = q.outerjoin(MessageTopic, Message.id == MessageTopic.message_id)
         q = self._apply_filters(q, filters, search_ids, join_topics, use_like_search=use_like_search)
-        count_q = q.with_entities(func.count(distinct(Message.id)))
-        total = count_q.scalar() or 0
+
+        count_q = db.session.query(Message.id).join(Channel, Message.channel_id == Channel.id)
+        if join_topics:
+            count_q = count_q.outerjoin(MessageTopic, Message.id == MessageTopic.message_id)
+        count_q = self._apply_filters(
+            count_q, filters, search_ids, join_topics, use_like_search=use_like_search
+        )
+        if join_topics:
+            total = count_q.with_entities(func.count(distinct(Message.id))).scalar() or 0
+        else:
+            total = count_q.count()
+
         q = self._order_by(q, filters)
         q = q.offset(offset).limit(limit)
         rows = q.all()
@@ -271,7 +293,8 @@ class DataStorePG:
         return [{"date": str(r.day), "count": r.count} for r in rows]
 
     def export_filtered_dataframe(self, filters: Dict) -> pd.DataFrame:
-        join_topics = True
+        topic_filter = filters.get("topics") or filters.get("topic")
+        join_topics = bool(topic_filter)
         search_query = self._search_query(filters)
         search_ids = self._search_ids(filters) if search_query else None
         use_like_search = bool(search_query and search_ids is None)
@@ -287,10 +310,10 @@ class DataStorePG:
             Message.url,
             Message.media_type,
             Message.average_views,
-            MessageTopic.topic_id.label("topic_id"),
-        )
-        q = q.outerjoin(MessageTopic, Message.id == MessageTopic.message_id)
-        q = q.join(Channel, Message.channel_id == Channel.id)
+            _topic_id_scalar().label("topic_id"),
+        ).join(Channel, Message.channel_id == Channel.id)
+        if join_topics:
+            q = q.outerjoin(MessageTopic, Message.id == MessageTopic.message_id)
         q = self._apply_filters(q, filters, search_ids, join_topics, use_like_search=use_like_search)
         q = self._order_by(q, filters)
         rows = q.all()
