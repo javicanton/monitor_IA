@@ -5,6 +5,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+COMPOSE_FILE="docker-compose.worker.yml"
 ONCE=false
 DAYS="${TOPICS_DAYS_WINDOW:-7}"
 DOWN=false
@@ -72,40 +73,53 @@ _validate_database_url() {
   echo "==> DATABASE_URL: ${DATABASE_URL/@*/@***} (${#DATABASE_URL} chars)"
 }
 
-_validate_database_url
-
-_detect_compose() {
-  if docker compose version >/dev/null 2>&1; then
-    COMPOSE_BIN=(docker compose)
-    COMPOSE_PROGRESS=(--progress=plain)
-    return 0
-  fi
+_setup_compose() {
+  COMPOSE_MODE=""
   if command -v docker-compose >/dev/null 2>&1; then
-    COMPOSE_BIN=(docker-compose)
-    COMPOSE_PROGRESS=()
-    echo "==> Usando docker-compose (v1); si falla, instala el plugin: docker compose"
+    if docker-compose -f "$COMPOSE_FILE" config -q >/dev/null 2>&1; then
+      COMPOSE_MODE=v1
+      compose() { docker-compose -f "$COMPOSE_FILE" "$@"; }
+      echo "==> Docker Compose: docker-compose (v1)"
+      return 0
+    fi
+  fi
+  if docker compose -f "$COMPOSE_FILE" config -q >/dev/null 2>&1; then
+    COMPOSE_MODE=v2
+    compose() { docker compose -f "$COMPOSE_FILE" "$@"; }
+    echo "==> Docker Compose: docker compose (v2)"
     return 0
   fi
-  echo "ERROR: no se encontró 'docker compose' ni 'docker-compose'."
-  echo "  Ubuntu: sudo apt install docker-compose-plugin   # o: docker-compose"
+  echo "ERROR: no funciona ni 'docker-compose' ni 'docker compose' con ${COMPOSE_FILE}."
+  echo ""
+  echo "Comprueba en esta instancia:"
+  echo "  docker-compose --version"
+  echo "  docker compose version"
+  echo ""
+  echo "Instalar (Ubuntu):"
+  echo "  sudo apt update && sudo apt install -y docker-compose"
+  echo "  # o: sudo apt install -y docker-compose-plugin"
   exit 1
 }
 
-_detect_compose
-COMPOSE=("${COMPOSE_BIN[@]}" -f docker-compose.worker.yml)
+_validate_database_url
+_setup_compose
 
 if $DOWN; then
-  "${COMPOSE[@]}" down
+  compose down
   echo "Worker de topics detenido."
   exit 0
 fi
 
 echo "==> Build topic_worker (pytopicgram + PyTorch CPU; puede tardar varios minutos)..."
-"${COMPOSE[@]}" build "${COMPOSE_PROGRESS[@]}" topic_worker
+if [[ "$COMPOSE_MODE" == v2 ]]; then
+  compose build --progress=plain topic_worker
+else
+  compose build topic_worker
+fi
 
 if $ONCE; then
   echo "==> Ejecución única (--once), ventana ${DAYS} días..."
-  "${COMPOSE[@]}" run --rm \
+  compose run --rm \
     -e TOPICS_DAYS_WINDOW="$DAYS" \
     topic_worker python topic_worker.py --once --days "$DAYS"
   echo "Listo. Revisa logs y S3 (${TOPICS_S3_PREFIX:-topics/staging/})."
@@ -113,7 +127,7 @@ if $ONCE; then
 fi
 
 echo "==> Arrancando worker en bucle (intervalo ${TOPIC_POLL_INTERVAL_MIN:-1440} min)..."
-"${COMPOSE[@]}" up -d topic_worker
+compose up -d topic_worker
 echo ""
 echo "Worker activo. Logs:"
 echo "  docker logs -f monitoria-topic-worker"
