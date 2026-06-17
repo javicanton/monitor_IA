@@ -16,6 +16,32 @@ logger = logging.getLogger(__name__)
 
 _VECTOR = "to_tsvector('spanish', coalesce(m.message_text, '') || ' ' || coalesce(m.url, ''))"
 
+_INDEX_NAME = "messages_fts_spanish_gin_idx"
+
+
+def ensure_pg_fts_index() -> None:
+    """
+    Asegura un índice GIN para la búsqueda full-text.
+    Sin este índice, la búsqueda puede hacer seq-scan y causar timeouts (504) en staging.
+    """
+    from models import db
+
+    try:
+        # Evitar usar CONCURRENTLY (requiere autocommit y no es IF NOT EXISTS en todas las versiones).
+        db.session.execute(
+            text(
+                f"""
+                CREATE INDEX IF NOT EXISTS {_INDEX_NAME}
+                ON messages
+                USING GIN (to_tsvector('spanish', coalesce(message_text, '') || ' ' || coalesce(url, '')));
+                """
+            )
+        )
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        logger.warning("No se pudo asegurar el índice FTS (%s): %s", _INDEX_NAME, exc)
+
 
 def search_message_row_ids_pg(query: str) -> Optional[List[int]]:
     """

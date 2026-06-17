@@ -63,6 +63,30 @@ class DataStorePG:
     def _search_query(self, filters: Dict) -> str:
         return (filters.get("search") or filters.get("q") or "").strip()
 
+    def _apply_pg_fts_search(self, q, search_query: str):
+        """
+        Aplica full-text search (PostgreSQL) directamente sobre la query principal.
+        Evita traer listas grandes de IDs a Python (que puede provocar timeouts/504).
+        """
+        from search_boolean import has_boolean_operators, parse_boolean_search, parsed_to_tsquery
+
+        raw = (search_query or "").strip()
+        if not raw:
+            return q
+
+        # Nota: aquí referenciamos la tabla real `messages` (no alias `m`).
+        vector = "to_tsvector('spanish', coalesce(messages.message_text, '') || ' ' || coalesce(messages.url, ''))"
+        try:
+            if has_boolean_operators(raw):
+                parsed = parse_boolean_search(raw)
+                tsq = parsed_to_tsquery(parsed) if parsed else None
+                if tsq:
+                    return q.filter(text(f"{vector} @@ to_tsquery('spanish', :tsq)")).params(tsq=tsq)
+            return q.filter(text(f"{vector} @@ plainto_tsquery('spanish', :fts_q)")).params(fts_q=raw)
+        except Exception as exc:
+            logger.warning("FTS PostgreSQL falló; usando ILIKE (%s)", exc)
+            return self._apply_text_search(q, raw)
+
     def _search_ids(self, filters: Dict) -> Optional[List[int]]:
         search_query = self._search_query(filters)
         if not search_query:
@@ -115,8 +139,9 @@ class DataStorePG:
         search_query = self._search_query(filters)
         if search_ids is not None:
             q = q.filter(Message.id.in_(search_ids))
-        elif use_like_search and search_query:
-            q = self._apply_text_search(q, search_query)
+        elif search_query:
+            # Preferir FTS (PostgreSQL) por rendimiento; fallback a ILIKE si se fuerza.
+            q = self._apply_text_search(q, search_query) if use_like_search else self._apply_pg_fts_search(q, search_query)
         channel = filters.get("channel")
         if channel:
             if isinstance(channel, list):
@@ -186,9 +211,8 @@ class DataStorePG:
     def query_messages(self, filters: Dict, limit: int, offset: int) -> Tuple[pd.DataFrame, int]:
         limit = min(max(1, limit), MAX_PAGE_SIZE)
         offset = max(0, offset)
-        search_query = self._search_query(filters)
-        search_ids = self._search_ids(filters) if search_query else None
-        use_like_search = bool(search_query and search_ids is None)
+        search_ids = None
+        use_like_search = False
         topic_filter = filters.get("topics") or filters.get("topic")
         join_topics = bool(topic_filter)
 
@@ -274,9 +298,8 @@ class DataStorePG:
 
     def messages_over_time(self, filters: Dict) -> List[Dict]:
         filters = dict(filters or {})
-        search_query = self._search_query(filters)
-        search_ids = self._search_ids(filters) if search_query else None
-        use_like_search = bool(search_query and search_ids is None)
+        search_ids = None
+        use_like_search = False
         topic_filter = filters.get("topics") or filters.get("topic")
         join_topics = bool(topic_filter)
 
@@ -295,9 +318,8 @@ class DataStorePG:
     def export_filtered_dataframe(self, filters: Dict) -> pd.DataFrame:
         topic_filter = filters.get("topics") or filters.get("topic")
         join_topics = bool(topic_filter)
-        search_query = self._search_query(filters)
-        search_ids = self._search_ids(filters) if search_query else None
-        use_like_search = bool(search_query and search_ids is None)
+        search_ids = None
+        use_like_search = False
 
         q = db.session.query(
             Message.message_id,

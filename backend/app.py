@@ -83,6 +83,13 @@ with app.app_context():
         db.create_all()
     except Exception as exc:
         logger.warning("db.create_all no completó al arrancar (la API /health sigue activa): %s", exc)
+    try:
+        if USE_POSTGRES:
+            from search_index_pg import ensure_pg_fts_index
+
+            ensure_pg_fts_index()
+    except Exception as exc:
+        logger.warning("No se pudo inicializar índice FTS de PostgreSQL: %s", exc)
 
 # Caché en memoria solo cuando no se usa PostgreSQL (path DuckDB/JSON)
 _DATA_CACHE = None
