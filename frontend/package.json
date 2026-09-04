@@ -12,6 +12,7 @@
     "@testing-library/react": "^13.4.0",
     "@testing-library/user-event": "^13.5.0",
     "axios": "^1.4.0",
+    "date-fns": "^4.4.0",
     "dayjs": "^1.11.19",
     "react": "^18.2.0",
     "react-datepicker": "^9.1.0",
@@ -47,5 +48,10 @@
   },
   "devDependencies": {
     "baseline-browser-mapping": "^2.9.17"
+  },
+  "jest": {
+    "transformIgnorePatterns": [
+      "node_modules/(?!date-fns|react-datepicker)/"
+    ]
   }
 }
