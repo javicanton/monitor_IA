@@ -7,23 +7,14 @@ import {
   Button, 
   Alert,
   Snackbar,
-  Tooltip,
 } from '@mui/material';
 import {
   Refresh as RefreshIcon,
   Download as DownloadIcon,
-  Article as ArticleIcon,
-  Campaign as CampaignIcon,
 } from '@mui/icons-material';
 import MessageCard from './MessageCard';
 import { messagesAPI, channelsAPI } from '../utils/api';
 import config from '../config';
-
-const formatPublicationCount = (count) => {
-  const n = Number(count);
-  if (!Number.isFinite(n)) return '0';
-  return new Intl.NumberFormat('es-ES').format(n);
-};
 
 const DEBOUNCE_MS = 500;
 
@@ -41,7 +32,7 @@ const getLoadingMessage = (filters = {}) => {
   return 'Cargando mensajes…';
 };
 
-const MessageList = ({ filters = {}, onLoadingChange }) => {
+const MessageList = ({ filters = {}, onLoadingChange, onStatsChange }) => {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -174,14 +165,23 @@ const MessageList = ({ filters = {}, onLoadingChange }) => {
     }
   };
 
-  const handleRefresh = () => {
+  const handleRefresh = useCallback(() => {
     fetchChannelCount();
     fetchMessages(1, false);
-  };
+  }, [fetchChannelCount, fetchMessages]);
 
   useEffect(() => {
     fetchChannelCount();
   }, [fetchChannelCount]);
+
+  useEffect(() => {
+    onStatsChange?.({
+      totalMessages,
+      totalChannels,
+      loading,
+      onRefresh: handleRefresh,
+    });
+  }, [totalMessages, totalChannels, loading, onStatsChange, handleRefresh]);
 
   const handleExportRelevants = async () => {
     try {
@@ -321,7 +321,7 @@ const MessageList = ({ filters = {}, onLoadingChange }) => {
   }
 
   return (
-    <Box sx={{ mt: 4 }}>
+    <Box>
       {loading && (
         <Alert severity="info" sx={{ mb: 2 }}>
           <Box display="flex" alignItems="flex-start" gap={1.5}>
@@ -335,79 +335,53 @@ const MessageList = ({ filters = {}, onLoadingChange }) => {
           </Box>
         </Alert>
       )}
-      {/* Header con estadísticas y botones */}
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Tooltip
-          title={`${formatPublicationCount(totalMessages)} publicaciones · ${formatPublicationCount(totalChannels)} canales (clic para actualizar)`}
-        >
+      {/* Acciones debajo del buscador y del recuento: una sola fila */}
+      <Box
+        display="grid"
+        gridTemplateColumns="repeat(4, minmax(0, 1fr))"
+        gap={1}
+        alignItems="stretch"
+        mb={3}
+      >
           <Button
             variant="outlined"
-            onClick={handleRefresh}
-            disabled={loading}
-            aria-label={`${totalMessages} publicaciones, ${totalChannels} canales`}
-            sx={{
-              textTransform: 'none',
-              color: 'text.secondary',
-              borderColor: 'divider',
-              px: 2,
-              py: 1,
-            }}
-          >
-            <Box display="flex" alignItems="center" gap={1.5}>
-              <Box display="flex" alignItems="center" gap={0.5} component="span">
-                <ArticleIcon fontSize="small" color="action" aria-hidden />
-                <Typography variant="body1" component="span" fontWeight={500}>
-                  {formatPublicationCount(totalMessages)}
-                </Typography>
-              </Box>
-              <Box
-                component="span"
-                sx={{ width: '1px', height: 20, bgcolor: 'divider' }}
-                aria-hidden
-              />
-              <Box display="flex" alignItems="center" gap={0.5} component="span">
-                <CampaignIcon fontSize="small" color="action" aria-hidden />
-                <Typography variant="body1" component="span" fontWeight={500}>
-                  {formatPublicationCount(totalChannels)}
-                </Typography>
-              </Box>
-            </Box>
-          </Button>
-        </Tooltip>
-        
-        <Box display="flex" gap={2}>
-          <Button
-            variant="outlined"
+            size="small"
             onClick={handleDownloadMessages}
             startIcon={<DownloadIcon />}
             disabled={loading}
+            sx={{ whiteSpace: 'nowrap', minWidth: 0 }}
           >
             Descargar mensajes
           </Button>
           <Button
             variant="outlined"
+            size="small"
             onClick={handleDownloadChannels}
             startIcon={<DownloadIcon />}
             disabled={loading}
+            sx={{ whiteSpace: 'nowrap', minWidth: 0 }}
           >
             Descargar canales
           </Button>
           <Button
             variant="outlined"
+            size="small"
             onClick={() => setShowNotRelevant((prev) => !prev)}
             disabled={loading}
+            sx={{ whiteSpace: 'nowrap', minWidth: 0 }}
           >
             {showNotRelevant ? 'Ocultar no relevantes' : 'Mostrar no relevantes'}
           </Button>
           <Button
             variant="contained"
             color="secondary"
+            size="small"
             onClick={handleExportRelevants}
             disabled={loading}
+            sx={{ whiteSpace: 'nowrap', minWidth: 0 }}
           >
             Exportar Relevantes
           </Button>
-        </Box>
       </Box>
 
       {/* Lista de mensajes */}
