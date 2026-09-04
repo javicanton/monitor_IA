@@ -335,36 +335,50 @@ const MessageList = ({ filters = {}, onLoadingChange, onStatsChange }) => {
           </Box>
         </Alert>
       )}
-      {/* Acciones debajo del buscador y del recuento */}
-      <Box display="flex" gap={2} flexWrap="wrap" alignItems="center" mb={3}>
+      {/* Acciones debajo del buscador y del recuento: una sola fila */}
+      <Box
+        display="grid"
+        gridTemplateColumns="repeat(4, minmax(0, 1fr))"
+        gap={1}
+        alignItems="stretch"
+        mb={3}
+      >
           <Button
             variant="outlined"
+            size="small"
             onClick={handleDownloadMessages}
             startIcon={<DownloadIcon />}
             disabled={loading}
+            sx={{ whiteSpace: 'nowrap', minWidth: 0 }}
           >
             Descargar mensajes
           </Button>
           <Button
             variant="outlined"
+            size="small"
             onClick={handleDownloadChannels}
             startIcon={<DownloadIcon />}
             disabled={loading}
+            sx={{ whiteSpace: 'nowrap', minWidth: 0 }}
           >
             Descargar canales
           </Button>
           <Button
             variant="outlined"
+            size="small"
             onClick={() => setShowNotRelevant((prev) => !prev)}
             disabled={loading}
+            sx={{ whiteSpace: 'nowrap', minWidth: 0 }}
           >
             {showNotRelevant ? 'Ocultar no relevantes' : 'Mostrar no relevantes'}
           </Button>
           <Button
             variant="contained"
             color="secondary"
+            size="small"
             onClick={handleExportRelevants}
             disabled={loading}
+            sx={{ whiteSpace: 'nowrap', minWidth: 0 }}
           >
             Exportar Relevantes
           </Button>
