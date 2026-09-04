@@ -60,6 +60,32 @@ function filtersForSeries(filters) {
   return rest;
 }
 
+function brushIndexesFromDates(data, start, end) {
+  if (!data.length) return { startIndex: 0, endIndex: 0 };
+  const lastIdx = data.length - 1;
+  if (!start && !end) return { startIndex: 0, endIndex: lastIdx };
+  let startIndex = 0;
+  let endIndex = lastIdx;
+  if (start) {
+    const found = data.findIndex((d) => d.date >= start);
+    startIndex = found < 0 ? 0 : found;
+  }
+  if (end) {
+    for (let i = lastIdx; i >= 0; i -= 1) {
+      if (data[i].date <= end) {
+        endIndex = i;
+        break;
+      }
+    }
+  }
+  if (startIndex > endIndex) {
+    const tmp = startIndex;
+    startIndex = endIndex;
+    endIndex = tmp;
+  }
+  return { startIndex, endIndex };
+}
+
 function parseBrushIndexes(rangeOrStart, endIndexArg) {
   if (endIndexArg !== undefined && typeof rangeOrStart === 'number') {
     return { startIndex: rangeOrStart, endIndex: endIndexArg };
@@ -118,6 +144,9 @@ const MessagesOverTimeChart = ({ filters = {}, onDateRangeChange, selectedDateSt
   const skipBrushRef = useRef(true);
   const pendingBrushRef = useRef(null);
   const brushTimerRef = useRef(null);
+  const draggingBrushRef = useRef(false);
+  const [brushKey, setBrushKey] = useState(0);
+  const [brushIndexes, setBrushIndexes] = useState({ startIndex: 0, endIndex: 0 });
   const selectedRef = useRef({ start: selectedDateStart || '', end: selectedDateEnd || '' });
   selectedRef.current = { start: selectedDateStart || '', end: selectedDateEnd || '' };
 
@@ -125,6 +154,11 @@ const MessagesOverTimeChart = ({ filters = {}, onDateRangeChange, selectedDateSt
     setRangeStart(parseYmd(selectedDateStart));
     setRangeEnd(parseYmd(selectedDateEnd));
   }, [selectedDateStart, selectedDateEnd]);
+
+  useEffect(() => {
+    if (draggingBrushRef.current) return;
+    setBrushIndexes(brushIndexesFromDates(data, selectedDateStart, selectedDateEnd));
+  }, [data, selectedDateStart, selectedDateEnd]);
 
   useEffect(() => {
     let cancelled = false;
@@ -180,6 +214,7 @@ const MessagesOverTimeChart = ({ filters = {}, onDateRangeChange, selectedDateSt
     }
     const pending = pendingBrushRef.current;
     pendingBrushRef.current = null;
+    draggingBrushRef.current = false;
     if (!pending) return;
     applyDateRange(pending.start, pending.end);
   }, [applyDateRange]);
@@ -208,6 +243,8 @@ const MessagesOverTimeChart = ({ filters = {}, onDateRangeChange, selectedDateSt
     const lastIdx = data.length - 1;
     const startIndex = Math.min(Math.max(0, indexes.startIndex), lastIdx);
     const endIndex = Math.min(Math.max(0, indexes.endIndex), lastIdx);
+    draggingBrushRef.current = true;
+    setBrushIndexes({ startIndex, endIndex });
     const isFullRange = startIndex <= 0 && endIndex >= lastIdx;
     pendingBrushRef.current = isFullRange
       ? { start: '', end: '' }
@@ -227,9 +264,18 @@ const MessagesOverTimeChart = ({ filters = {}, onDateRangeChange, selectedDateSt
   };
 
   const handleClearDateRange = () => {
+    draggingBrushRef.current = false;
+    pendingBrushRef.current = null;
+    if (brushTimerRef.current) {
+      clearTimeout(brushTimerRef.current);
+      brushTimerRef.current = null;
+    }
+    skipBrushRef.current = true;
     setRangeStart(null);
     setRangeEnd(null);
     setCalendarOpen(false);
+    setBrushIndexes(brushIndexesFromDates(data, '', ''));
+    setBrushKey((key) => key + 1);
     applyDateRange('', '');
   };
 
@@ -412,9 +458,12 @@ const MessagesOverTimeChart = ({ filters = {}, onDateRangeChange, selectedDateSt
               activeDot={renderActiveDot}
             />
             <Brush
+              key={brushKey}
               dataKey="date"
               height={28}
               stroke="#1976d2"
+              startIndex={brushIndexes.startIndex}
+              endIndex={brushIndexes.endIndex}
               tickFormatter={(v) => new Date(v + 'T12:00:00').toLocaleDateString('es-ES', { month: 'short', year: '2-digit' })}
               onChange={handleBrushChange}
             />

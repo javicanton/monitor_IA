@@ -139,3 +139,22 @@ test('no vuelve a pedir la serie cuando solo cambian las fechas', async () => {
   expect(messagesAPI.getMessagesOverTime).toHaveBeenCalledTimes(1);
   expect(screen.queryByText(/Cargando gráfico de evolución/i)).not.toBeInTheDocument();
 });
+
+test('limpiar el filtro restaura el título inicial del gráfico', async () => {
+  const onDateRangeChange = jest.fn();
+  render(
+    <MessagesOverTimeChart
+      filters={{}}
+      onDateRangeChange={onDateRangeChange}
+      selectedDateStart="2026-08-02"
+      selectedDateEnd="2026-08-04"
+    />
+  );
+
+  await waitFor(() => {
+    expect(screen.getByText(/mensajes entre/i)).toBeInTheDocument();
+  });
+
+  await userEvent.click(screen.getByRole('button', { name: 'Limpiar filtro de fecha' }));
+  expect(onDateRangeChange).toHaveBeenCalledWith('', '');
+});
