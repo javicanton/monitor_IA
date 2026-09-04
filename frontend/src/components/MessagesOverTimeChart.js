@@ -146,7 +146,12 @@ const MessagesOverTimeChart = ({ filters = {}, onDateRangeChange, selectedDateSt
   const brushTimerRef = useRef(null);
   const draggingBrushRef = useRef(false);
   const [brushKey, setBrushKey] = useState(0);
-  const [brushIndexes, setBrushIndexes] = useState({ startIndex: 0, endIndex: 0 });
+  const derivedBrushIndexes = useMemo(
+    () => brushIndexesFromDates(data, selectedDateStart, selectedDateEnd),
+    [data, selectedDateStart, selectedDateEnd]
+  );
+  const [overrideBrushIndexes, setOverrideBrushIndexes] = useState(null);
+  const brushIndexes = overrideBrushIndexes ?? derivedBrushIndexes;
   const selectedRef = useRef({ start: selectedDateStart || '', end: selectedDateEnd || '' });
   selectedRef.current = { start: selectedDateStart || '', end: selectedDateEnd || '' };
 
@@ -156,9 +161,8 @@ const MessagesOverTimeChart = ({ filters = {}, onDateRangeChange, selectedDateSt
   }, [selectedDateStart, selectedDateEnd]);
 
   useEffect(() => {
-    if (draggingBrushRef.current) return;
-    setBrushIndexes(brushIndexesFromDates(data, selectedDateStart, selectedDateEnd));
-  }, [data, selectedDateStart, selectedDateEnd]);
+    setOverrideBrushIndexes(null);
+  }, [selectedDateStart, selectedDateEnd]);
 
   useEffect(() => {
     let cancelled = false;
@@ -244,7 +248,7 @@ const MessagesOverTimeChart = ({ filters = {}, onDateRangeChange, selectedDateSt
     const startIndex = Math.min(Math.max(0, indexes.startIndex), lastIdx);
     const endIndex = Math.min(Math.max(0, indexes.endIndex), lastIdx);
     draggingBrushRef.current = true;
-    setBrushIndexes({ startIndex, endIndex });
+    setOverrideBrushIndexes({ startIndex, endIndex });
     const isFullRange = startIndex <= 0 && endIndex >= lastIdx;
     pendingBrushRef.current = isFullRange
       ? { start: '', end: '' }
@@ -274,7 +278,7 @@ const MessagesOverTimeChart = ({ filters = {}, onDateRangeChange, selectedDateSt
     setRangeStart(null);
     setRangeEnd(null);
     setCalendarOpen(false);
-    setBrushIndexes(brushIndexesFromDates(data, '', ''));
+    setOverrideBrushIndexes(brushIndexesFromDates(data, '', ''));
     setBrushKey((key) => key + 1);
     applyDateRange('', '');
   };
@@ -377,6 +381,7 @@ const MessagesOverTimeChart = ({ filters = {}, onDateRangeChange, selectedDateSt
       </Typography>
       <Box display="flex" flexWrap="wrap" alignItems="center" gap={2} sx={{ mb: 2 }}>
         <DatePicker
+          key={`dates-${brushKey}`}
           selectsRange
           startDate={rangeStart}
           endDate={rangeEnd}
@@ -418,7 +423,12 @@ const MessagesOverTimeChart = ({ filters = {}, onDateRangeChange, selectedDateSt
           </Button>
         )}
       </Box>
-      <Box sx={{ width: '100%', minWidth: 0, height: 280, minHeight: 280 }}>
+      <Box
+        sx={{ width: '100%', minWidth: 0, height: 280, minHeight: 280 }}
+        data-testid="chart-brush"
+        data-start-index={brushIndexes.startIndex}
+        data-end-index={brushIndexes.endIndex}
+      >
         <ResponsiveContainer width="100%" height={280} minWidth={0} minHeight={280}>
           <AreaChart
             data={data}

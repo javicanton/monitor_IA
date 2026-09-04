@@ -142,7 +142,7 @@ test('no vuelve a pedir la serie cuando solo cambian las fechas', async () => {
 
 test('limpiar el filtro restaura el título inicial del gráfico', async () => {
   const onDateRangeChange = jest.fn();
-  render(
+  const { rerender } = render(
     <MessagesOverTimeChart
       filters={{}}
       onDateRangeChange={onDateRangeChange}
@@ -153,8 +153,29 @@ test('limpiar el filtro restaura el título inicial del gráfico', async () => {
 
   await waitFor(() => {
     expect(screen.getByText(/mensajes entre/i)).toBeInTheDocument();
+    expect(screen.getByTestId('chart-brush')).toHaveAttribute('data-start-index', '1');
+    expect(screen.getByTestId('chart-brush')).toHaveAttribute('data-end-index', '3');
   });
 
   await userEvent.click(screen.getByRole('button', { name: 'Limpiar filtro de fecha' }));
   expect(onDateRangeChange).toHaveBeenCalledWith('', '');
+  expect(screen.getByLabelText('Rango de fechas')).toHaveValue('');
+  expect(screen.getByTestId('chart-brush')).toHaveAttribute('data-start-index', '0');
+  expect(screen.getByTestId('chart-brush')).toHaveAttribute('data-end-index', '4');
+
+  rerender(
+    <MessagesOverTimeChart
+      filters={{}}
+      onDateRangeChange={onDateRangeChange}
+      selectedDateStart=""
+      selectedDateEnd=""
+    />
+  );
+
+  await waitFor(() => {
+    expect(screen.getByText(/Evolución de mensajes/i)).toBeInTheDocument();
+  });
+  expect(screen.queryByRole('button', { name: 'Limpiar filtro de fecha' })).not.toBeInTheDocument();
+  expect(screen.getByTestId('chart-brush')).toHaveAttribute('data-start-index', '0');
+  expect(screen.getByTestId('chart-brush')).toHaveAttribute('data-end-index', '4');
 });
