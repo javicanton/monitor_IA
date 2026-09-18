@@ -13,4 +13,5 @@ botocore>=1.31.0
 werkzeug>=2.3.0
 flask-mail>=0.9.0
 bcrypt>=4.0.0
-psycopg2-binary>=2.9.0 
+psycopg2-binary>=2.9.0
+itsdangerous>=2.1.0

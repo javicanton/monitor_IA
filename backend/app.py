@@ -20,7 +20,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import json
 from s3_client import get_s3_client
-from auth import auth_bp, admin_required
+from auth import auth_bp, admin_required, allowed_email_required
 from models import Channel, ChannelEdge, MonitoredChannel, db
 from channel_graph import normalize_username
 from config import Config
@@ -75,7 +75,11 @@ CORS(app, resources={
 db.init_app(app)
 
 # Registrar blueprints
-app.register_blueprint(auth_bp, url_prefix='/api/auth')
+# Prefijo /auth: con nginx, /api/auth/* → backend /auth/*
+# En local (API_URL=http://localhost:5001) el frontend llama /auth/* directamente.
+app.register_blueprint(auth_bp, url_prefix='/auth')
+# Compatibilidad con clientes que aún usan /api/auth/*
+app.register_blueprint(auth_bp, url_prefix='/api/auth', name='auth_api_compat')
 
 # Crear tablas de base de datos (no bloquear arranque si RDS tarda o falla)
 with app.app_context():
@@ -480,6 +484,7 @@ def index():
     return render_template('index.html', messages=messages, channels=channels, min_date=min_date, max_date=max_date)
 
 @app.route('/load_more/<int:offset>', methods=['GET'])
+@allowed_email_required
 def load_more(offset=0):
     """Carga más mensajes a partir de un offset dado."""
     try:
@@ -696,6 +701,7 @@ def load_more(offset=0):
         return ('', 204)
 
 @app.route('/label', methods=['POST'])
+@allowed_email_required
 def label_message():
     """Etiqueta un mensaje con un valor específico."""
     try:
@@ -722,6 +728,7 @@ def label_message():
         return jsonify(success=False, error=f"Error inesperado en el servidor: {str(e)}"), 500
 
 @app.route('/export_relevants', methods=['GET'])
+@allowed_email_required
 def export_relevants():
     """Exporta los mensajes etiquetados como relevantes a un nuevo archivo CSV."""
     try:
@@ -757,6 +764,7 @@ def export_relevants():
         return jsonify(success=False, error=f"Error inesperado en el servidor: {str(e)}"), 500
 
 @app.route('/channels', methods=['GET'])
+@allowed_email_required
 def get_channels():
     """Devuelve la lista de canales disponibles."""
     try:
@@ -884,6 +892,7 @@ def _build_channel_graph_csvs():
 
 
 @app.route('/download_channel_graph', methods=['GET'])
+@allowed_email_required
 def download_channel_graph():
     """Descarga ZIP con nodos (monitored_channels) y aristas (channel_edges)."""
     try:
@@ -905,6 +914,7 @@ def download_channel_graph():
         return jsonify(success=False, error=str(e)), 500
 
 @app.route('/topics', methods=['GET'])
+@allowed_email_required
 def get_topics():
     """Devuelve la lista de topics disponibles."""
     try:
@@ -1150,6 +1160,7 @@ def _apply_message_filters(df, filters):
 
 
 @app.route('/filter_messages', methods=['POST'])
+@allowed_email_required
 def filter_messages():
     """Filtra los mensajes según los criterios especificados."""
     try:
@@ -1167,6 +1178,7 @@ def filter_messages():
 
 
 @app.route('/download_filtered_messages', methods=['POST'])
+@allowed_email_required
 def download_filtered_messages():
     """Devuelve los mensajes filtrados (mismos criterios que filter_messages) como CSV."""
     try:
@@ -1221,39 +1233,18 @@ def render_partial():
 
 @app.route('/register', methods=['POST'])
 def register():
-    data = request.get_json()
-    username = data.get('username')
-    password = data.get('password')
-    
-    if not username or not password:
-        return jsonify({'error': 'Faltan campos requeridos'}), 400
-        
-    if username in users_db:
-        return jsonify({'error': 'El usuario ya existe'}), 400
-        
-    users_db[username] = {
-        'password': generate_password_hash(password)
-    }
-    
-    return jsonify({'message': 'Usuario registrado exitosamente'}), 201
+    return jsonify({
+        'error': 'El registro público está desactivado. Usa el acceso por magic link en /auth/login-request.'
+    }), 403
 
 @app.route('/login', methods=['POST'])
 def login():
-    data = request.get_json()
-    username = data.get('username')
-    password = data.get('password')
-    
-    if not username or not password:
-        return jsonify({'error': 'Faltan campos requeridos'}), 400
-        
-    user = users_db.get(username)
-    if not user or not check_password_hash(user['password'], password):
-        return jsonify({'error': 'Credenciales inválidas'}), 401
-        
-    access_token = create_access_token(identity=username)
-    return jsonify({'access_token': access_token}), 200
+    return jsonify({
+        'error': 'Usa POST /auth/login-request para solicitar un magic link.'
+    }), 410
 
 @app.route('/messages_over_time', methods=['GET', 'POST'])
+@allowed_email_required
 def messages_over_time():
     """Devuelve el número de mensajes por día para el gráfico. Acepta los mismos filtros que el listado (incluido rango de fechas)."""
     try:
@@ -1266,6 +1257,7 @@ def messages_over_time():
 
 
 @app.route('/api/messages', methods=['GET'])
+@allowed_email_required
 def get_messages():
     """Endpoint para obtener los mensajes para el frontend."""
     try:

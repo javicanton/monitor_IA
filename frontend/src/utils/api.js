@@ -16,7 +16,7 @@ const api = axios.create({
 // Interceptor para agregar token de autenticación
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('access_token');
+    const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -32,10 +32,11 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Token expirado o inválido
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('user');
-      window.location.href = '/login';
+      localStorage.removeItem('token');
+      if (!window.location.pathname.startsWith('/login')
+          && !window.location.pathname.startsWith('/auth/verify')) {
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }
@@ -180,37 +181,24 @@ export const topicsAPI = {
 
 // Funciones de API para autenticación
 export const authAPI = {
-  // Login
-  login: async (credentials) => {
-    try {
-      const response = await api.post('/auth/login', credentials);
-      return response.data;
-    } catch (error) {
-      console.error('Error en login:', error);
-      throw error;
-    }
+  requestMagicLink: async (email) => {
+    const response = await api.post('/auth/login-request', { email });
+    return response.data;
   },
 
-  // Registro
-  register: async (userData) => {
-    try {
-      const response = await api.post('/auth/register', userData);
-      return response.data;
-    } catch (error) {
-      console.error('Error en registro:', error);
-      throw error;
-    }
+  verifyMagicLink: async (token) => {
+    const response = await api.get(`/auth/verify-magic-link/${encodeURIComponent(token)}`);
+    return response.data;
   },
 
-  // Verificar token
-  verifyToken: async () => {
-    try {
-      const response = await api.get('/auth/verify');
-      return response.data;
-    } catch (error) {
-      console.error('Error al verificar token:', error);
-      throw error;
-    }
+  me: async () => {
+    const response = await api.get('/auth/me');
+    return response.data;
+  },
+
+  logout: async () => {
+    const response = await api.post('/auth/logout');
+    return response.data;
   },
 };
 
