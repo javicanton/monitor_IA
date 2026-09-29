@@ -1,4 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Container, 
   Box, 
@@ -17,12 +18,15 @@ import ScoreExplanation from './ScoreExplanation';
 import MessagesOverTimeChart from './MessagesOverTimeChart';
 import ChartErrorBoundary from './ChartErrorBoundary';
 import logo from '../assets/Logo_MonitorIA ajustado.png';
+import { useAuth } from '../auth/AuthContext';
 
 const SCROLL_THRESHOLD = 180;
 const LOGO_SIZE = { xs: 210, sm: 270, md: 330 };
 const LOGO_SIZE_SMALL = 88;
 
 const Dashboard = () => {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [filters, setFilters] = useState({});
   const [searchInput, setSearchInput] = useState('');
   const [searchPending, setSearchPending] = useState(false);
@@ -33,6 +37,11 @@ const Dashboard = () => {
     shiftY: 0,
     scaleTarget: 1
   });
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login', { replace: true });
+  };
 
   useEffect(() => {
     const handleScroll = () => {
@@ -93,6 +102,32 @@ const Dashboard = () => {
 
   return (
     <Container maxWidth="xl" sx={{ py: 4, overflow: 'visible' }}>
+      <Box
+        sx={{
+          position: 'fixed',
+          top: 16,
+          right: 16,
+          zIndex: 1300,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          bgcolor: 'background.paper',
+          px: 1.5,
+          py: 0.5,
+          borderRadius: 1,
+          boxShadow: 1,
+        }}
+      >
+        {user?.email && (
+          <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'none', sm: 'block' } }}>
+            {user.email}
+          </Typography>
+        )}
+        <Button size="small" onClick={handleLogout}>
+          Salir
+        </Button>
+      </Box>
+
       <Box
         sx={{
           position: 'fixed',

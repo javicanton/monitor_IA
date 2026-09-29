@@ -133,19 +133,26 @@ La aplicación se abrirá en `http://localhost:3000`
 
 ## 🔐 Autenticación
 
-### Usuario por defecto
-- **Email**: admin@monitoria.org
-- **Contraseña**: admin123
-- **Rol**: Administrador
+Acceso por **magic link** a correos de una allowlist. Detalle: [`docs/AUTH.md`](docs/AUTH.md).
 
-⚠️ **IMPORTANTE**: Cambia la contraseña del administrador después del primer login.
+### Configurar correos autorizados
 
-### Endpoints de autenticación
-- `POST /api/auth/register` - Registro de usuarios
-- `POST /api/auth/login` - Login de usuarios
-- `GET /api/auth/me` - Obtener usuario actual (requiere token)
-- `POST /api/auth/forgot-password` - Recuperar contraseña
-- `POST /api/auth/reset-password/<token>` - Restablecer contraseña
+Edita `backend/allowed_emails.txt` o define:
+
+```env
+ALLOWED_EMAILS=admin@monitoria.org:admin,usuario@unir.net
+AUTH_FRONTEND_URL=http://localhost:3000
+AUTH_DEV_RETURN_LINK=1   # desarrollo: el enlace viene en la respuesta JSON
+```
+
+### Endpoints
+
+- `POST /auth/login-request` — solicitar magic link
+- `GET /auth/verify-magic-link/<token>` — canjear enlace por JWT
+- `GET /auth/me` — usuario actual (requiere token)
+- `POST /auth/logout` — cerrar sesión
+
+Con el proxy nginx, el frontend usa el prefijo `/api/auth/...`.
 
 ## 🧪 Pruebas
 
@@ -156,10 +163,10 @@ python test_s3_connection.py
 
 ### Probar autenticación
 ```bash
-# Usar el usuario administrador por defecto
-curl -X POST http://localhost:5001/api/auth/login \
+# Solicitar magic link (con AUTH_DEV_RETURN_LINK=1 el JSON incluye el enlace)
+curl -X POST http://localhost:5001/auth/login-request \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin@monitoria.org","password":"admin123"}'
+  -d '{"email":"admin@monitoria.org"}'
 ```
 
 ## 📊 Estructura de Datos en S3

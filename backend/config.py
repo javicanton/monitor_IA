@@ -31,10 +31,15 @@ class Config:
     
     # Configuración de JWT
     JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', 'your-jwt-secret-key-change-in-production')
-    JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=1)
+    JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=int(os.environ.get('JWT_ACCESS_TOKEN_HOURS', '12')))
     JWT_TOKEN_LOCATION = ['headers']
     JWT_HEADER_NAME = 'Authorization'
     JWT_HEADER_TYPE = 'Bearer'
+
+    # Auth / magic link
+    # ALLOWED_EMAILS=admin@monitoria.org:admin,user@example.com
+    # AUTH_FRONTEND_URL=https://app.monitoria.org
+    # AUTH_DEV_RETURN_LINK=1  # solo desarrollo: incluye el enlace en la respuesta JSON
     
     # Configuración de correo electrónico (usando SES de AWS)
     MAIL_SERVER = os.environ.get('MAIL_SERVER', 'email-smtp.eu-north-1.amazonaws.com')
