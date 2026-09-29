@@ -16,6 +16,10 @@ const config = {
   // Configuración de la aplicación
   APP_NAME: 'Telegram Analytics App',
   APP_VERSION: process.env.REACT_APP_APP_VERSION || '1.0',
+
+  // Formulario externo para pedir acceso (Tally, Google Forms, etc.)
+  // Build arg / env: REACT_APP_ACCESS_REQUEST_URL=https://tally.so/r/...
+  ACCESS_REQUEST_URL: process.env.REACT_APP_ACCESS_REQUEST_URL || '',
   
   // Configuración de paginación
   MESSAGES_PER_PAGE: 24,

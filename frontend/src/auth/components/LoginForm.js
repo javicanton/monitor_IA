@@ -9,6 +9,7 @@ import {
   Box,
   Alert,
   Link,
+  Divider,
 } from '@mui/material';
 import { useAuth } from '../AuthContext';
 import OAuthButtons from './OAuthButtons';
@@ -23,6 +24,7 @@ const LoginForm = () => {
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
   const { user, requestMagicLink } = useAuth();
+  const accessRequestUrl = config.ACCESS_REQUEST_URL;
 
   if (user) {
     return <Navigate to="/" replace />;
@@ -118,6 +120,33 @@ const LoginForm = () => {
               {loading ? 'Enviando…' : sent ? 'Reenviar enlace' : 'Enviar enlace de acceso'}
             </Button>
           </form>
+
+          <Divider sx={{ my: 3 }} />
+
+          <Box sx={{ textAlign: 'center' }}>
+            <Typography variant="body2" color="text.secondary" gutterBottom>
+              ¿No tienes una cuenta?
+            </Typography>
+            {accessRequestUrl ? (
+              <Link
+                href={accessRequestUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                underline="hover"
+                variant="body2"
+                sx={{ fontWeight: 600 }}
+              >
+                Regístrate y pide acceso
+              </Link>
+            ) : (
+              <Typography variant="body2" color="text.secondary">
+                Solicita acceso a{' '}
+                <Link href="mailto:monitoria@unir.net" underline="hover">
+                  monitoria@unir.net
+                </Link>
+              </Typography>
+            )}
+          </Box>
 
           <OAuthButtons />
         </Paper>
