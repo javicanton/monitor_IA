@@ -75,6 +75,15 @@ La respuesta de `login-request` incluirá `dev_magic_link` para abrir el enlace 
 - Login: `frontend/src/auth/components/LoginForm.js`
 - Verificación: `/auth/verify?token=...`
 - Botones Google/GitHub: visibles como “próximamente” hasta `REACT_APP_OAUTH_ENABLED=true`
+- Menú de usuario: nombre + avatar (iniciales) + plan (`Free` / `Member` derivado del rol por ahora)
+- Pedir acceso: enlace «Regístrate y pide acceso» → `REACT_APP_ACCESS_REQUEST_URL` (Tally / Google Form). Si no se define, fallback a `mailto:monitoria@unir.net`.
+
+En el build del frontend (staging/producción):
+
+```bash
+export REACT_APP_ACCESS_REQUEST_URL='https://tally.so/r/xxxx'
+# o pasar como build-arg en docker compose
+```
 
 ## Fase 2 (OAuth)
 

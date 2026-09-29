@@ -77,6 +77,7 @@ if $host_frontend; then
     export CI=false
     export REACT_APP_API_URL=/api
     export REACT_APP_APP_VERSION="${REACT_APP_APP_VERSION:-1.0}"
+    export REACT_APP_ACCESS_REQUEST_URL="${REACT_APP_ACCESS_REQUEST_URL:-}"
     npm install --omit=dev
     npm run build
   )
