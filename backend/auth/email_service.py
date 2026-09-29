@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import logging
 import os
 
@@ -25,12 +26,22 @@ def send_magic_link_email(to_email: str, magic_link_url: str) -> bool:
     en logs (útil en desarrollo) y no lanza error.
     """
     subject = 'Tu enlace de acceso a MonitorIA'
+    safe_url = html.escape(magic_link_url, quote=True)
     body = (
         'Hola,\n\n'
-        'Usa este enlace para iniciar sesión en MonitorIA '
-        '(caduca en 15 minutos y solo se puede usar una vez):\n\n'
+        'Para iniciar sesión en MonitorIA, abre el enlace «Link de acceso» '
+        'en este correo (caduca en 15 minutos y solo se puede usar una vez).\n\n'
+        'Si tu cliente de correo no muestra el enlace, copia y pega esta URL '
+        'en el navegador:\n'
         f'{magic_link_url}\n\n'
         'Si no solicitaste este acceso, ignora este mensaje.\n'
+    )
+    html_body = (
+        '<p>Hola,</p>'
+        '<p>Usa el siguiente enlace para iniciar sesión en MonitorIA '
+        '(caduca en 15 minutos y solo se puede usar una vez):</p>'
+        f'<p><a href="{safe_url}">Link de acceso</a></p>'
+        '<p>Si no solicitaste este acceso, ignora este mensaje.</p>'
     )
 
     if not _mail_configured():
@@ -50,6 +61,7 @@ def send_magic_link_email(to_email: str, magic_link_url: str) -> bool:
             subject=subject,
             recipients=[to_email],
             body=body,
+            html=html_body,
             sender=current_app.config.get('MAIL_DEFAULT_SENDER'),
         )
         mail.send(msg)
