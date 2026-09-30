@@ -6,9 +6,11 @@ import tempfile
 import subprocess
 import sys
 from datetime import datetime, timedelta
+from hashlib import md5
 
 import pandas as pd
 from botocore.exceptions import ClientError
+from sqlalchemy import func, text
 
 from config import Config
 from s3_client import get_s3_client
@@ -53,43 +55,106 @@ def _filter_by_days(df, days_window):
     return filtered
 
 
-def _load_messages_from_postgres(days_window=None):
-    from sqlalchemy import func
+def _seed_to_float(seed):
+    digest = md5(str(seed or "monitoria").encode("utf-8")).hexdigest()
+    # setseed espera float en [-1, 1]
+    return (int(digest[:8], 16) / 0xFFFFFFFF) * 2 - 1
 
-    from models import Message
+
+def _rows_to_dataframe(rows):
+    if not rows:
+        return pd.DataFrame()
+    records = []
+    for row in rows:
+        records.append(
+            {
+                "_pg_id": row.pg_id,
+                "Message ID": row.telegram_id,
+                "Message Text": row.message_text,
+                "Date Sent": row.date_sent,
+            }
+        )
+    return pd.DataFrame(records)
+
+
+def _postgres_base_query(days_window=None, min_text_len=None):
+    from models import Message, db
+
+    min_text_len = Config.TOPICS_MIN_TEXT_LEN if min_text_len is None else min_text_len
+    date_expr = func.coalesce(Message.date_sent, Message.creation_date)
+    q = (
+        db.session.query(
+            Message.id.label("pg_id"),
+            Message.message_id.label("telegram_id"),
+            Message.message_text.label("message_text"),
+            date_expr.label("date_sent"),
+        )
+        .filter(Message.message_text.isnot(None))
+        .filter(func.length(func.trim(Message.message_text)) >= int(min_text_len))
+    )
+    if days_window and days_window > 0:
+        cutoff = datetime.utcnow() - timedelta(days=days_window)
+        q = q.filter(date_expr >= cutoff)
+    return q
+
+
+def _load_messages_from_postgres(
+    days_window=None,
+    sample_size=None,
+    min_text_len=None,
+    seed=None,
+):
+    """Carga mensajes desde RDS. Con sample_size, muestreo aleatorio en SQL (no carga todo)."""
     from pg_upsert import create_app
 
     app = create_app()
     with app.app_context():
         from models import db
 
-        date_expr = func.coalesce(Message.date_sent, Message.creation_date)
-        q = db.session.query(
-            Message.id.label("pg_id"),
-            Message.message_id.label("telegram_id"),
-            Message.message_text.label("message_text"),
-            date_expr.label("date_sent"),
-        ).filter(Message.message_text.isnot(None))
-
-        if days_window and days_window > 0:
-            cutoff = datetime.utcnow() - timedelta(days=days_window)
-            q = q.filter(date_expr >= cutoff)
-
-        rows = q.all()
-        if not rows:
-            return pd.DataFrame()
-
-        records = []
-        for row in rows:
-            records.append(
-                {
-                    "_pg_id": row.pg_id,
-                    "Message ID": row.telegram_id,
-                    "Message Text": row.message_text,
-                    "Date Sent": row.date_sent,
-                }
+        q = _postgres_base_query(days_window=days_window, min_text_len=min_text_len)
+        if sample_size and sample_size > 0:
+            seed_val = _seed_to_float(seed if seed is not None else Config.TOPICS_SAMPLE_SEED)
+            db.session.execute(text("SELECT setseed(:s)"), {"s": seed_val})
+            q = q.order_by(func.random()).limit(int(sample_size))
+            logger.info(
+                "Muestreo SQL: sample_size=%s seed=%s min_text_len=%s",
+                sample_size,
+                seed if seed is not None else Config.TOPICS_SAMPLE_SEED,
+                min_text_len if min_text_len is not None else Config.TOPICS_MIN_TEXT_LEN,
             )
-        return pd.DataFrame(records)
+        rows = q.all()
+        df = _rows_to_dataframe(rows)
+        logger.info("Mensajes cargados desde PostgreSQL: %d", len(df))
+        return df
+
+
+def _iter_message_batches_from_postgres(
+    after_pg_id=0,
+    batch_size=None,
+    days_window=None,
+    min_text_len=None,
+):
+    """Genera lotes ordenados por messages.id para asignación al histórico."""
+    from models import Message
+    from pg_upsert import create_app
+
+    batch_size = batch_size or Config.TOPICS_ASSIGN_BATCH_SIZE
+    app = create_app()
+    last_id = int(after_pg_id or 0)
+    while True:
+        with app.app_context():
+            q = _postgres_base_query(days_window=days_window, min_text_len=min_text_len)
+            q = (
+                q.filter(Message.id > last_id)
+                .order_by(Message.id.asc())
+                .limit(int(batch_size))
+            )
+            rows = q.all()
+            if not rows:
+                return
+            df = _rows_to_dataframe(rows)
+            last_id = int(df["_pg_id"].max())
+        yield df, last_id
 
 
 def _load_messages_df(s3_client):
@@ -112,12 +177,16 @@ def _extract_text_column(df):
     return None
 
 
-def _prepare_docs(df):
+def _prepare_docs(df, min_text_len=None):
     text_col = _extract_text_column(df)
     if not text_col:
         return pd.Series([], dtype=str), text_col
 
+    min_text_len = Config.TOPICS_MIN_TEXT_LEN if min_text_len is None else min_text_len
     series = df[text_col].fillna("").astype(str).str.strip()
+    # Quitar textos que son casi solo URL
+    series = series.where(~series.str.match(r"^https?://\S+$", na=False), "")
+    series = series.where(series.str.len() >= int(min_text_len), "")
     return series, text_col
 
 
@@ -139,6 +208,29 @@ def _save_state(s3_client, state):
     s3_client.s3_client.put_object(
         Bucket=Config.S3_BUCKET,
         Key=Config.TOPICS_STATE_KEY,
+        Body=payload.encode("utf-8"),
+        ContentType="application/json",
+    )
+
+
+def _load_assign_progress(s3_client):
+    try:
+        content = s3_client.get_file_content(Config.TOPICS_ASSIGN_PROGRESS_KEY)
+        return json.loads(content)
+    except ClientError as e:
+        code = e.response.get("Error", {}).get("Code")
+        if code in {"NoSuchKey", "404"}:
+            return {}
+        raise
+    except Exception:
+        return {}
+
+
+def _save_assign_progress(s3_client, progress):
+    payload = json.dumps(progress, ensure_ascii=True)
+    s3_client.s3_client.put_object(
+        Bucket=Config.S3_BUCKET,
+        Key=Config.TOPICS_ASSIGN_PROGRESS_KEY,
         Body=payload.encode("utf-8"),
         ContentType="application/json",
     )
@@ -200,7 +292,7 @@ def _upload_model(s3_client, local_path):
     s3_client.upload_file(local_path, Config.TOPICS_MODEL_KEY)
 
 
-def _train_model_with_pytopicgram(docs, model_path):
+def _train_model_with_pytopicgram(docs, model_path, apply_sample_ratio=True):
     with tempfile.TemporaryDirectory() as tmpdir:
         input_csv = os.path.join(tmpdir, "messages.csv")
         df = pd.DataFrame({"message_text": docs})
@@ -225,10 +317,15 @@ def _train_model_with_pytopicgram(docs, model_path):
             cmd.extend(["--openai_key", Config.TOPICS_OPENAI_KEY])
             cmd.extend(["--n_docs_openai", str(Config.TOPICS_OPENAI_DOCS)])
 
-        if Config.TOPICS_SAMPLE_RATIO and 0 < Config.TOPICS_SAMPLE_RATIO < 1:
+        # Si ya muestreámos en SQL, no volver a muestrear en pytopicgram
+        if (
+            apply_sample_ratio
+            and Config.TOPICS_SAMPLE_RATIO
+            and 0 < Config.TOPICS_SAMPLE_RATIO < 1
+        ):
             cmd.extend(["--sample_ratio", str(Config.TOPICS_SAMPLE_RATIO)])
 
-        logger.info("Entrenando modelo con pytopicgram")
+        logger.info("Entrenando modelo con pytopicgram (%d docs)", len(docs))
         subprocess.run(cmd, check=True)
 
 
@@ -274,6 +371,15 @@ def _save_topics_metadata(s3_client, model):
 def _load_existing_assignments(s3_client):
     try:
         return s3_client.load_csv_from_s3(Config.TOPICS_ASSIGNMENTS_KEY, missing_ok=True)
+    except TypeError:
+        # Compatibilidad si s3_client aún no tiene missing_ok
+        try:
+            return s3_client.load_csv_from_s3(Config.TOPICS_ASSIGNMENTS_KEY)
+        except ClientError as e:
+            code = e.response.get("Error", {}).get("Code")
+            if code in {"NoSuchKey", "404"}:
+                return pd.DataFrame()
+            raise
     except ClientError:
         return pd.DataFrame()
     except Exception:
@@ -285,7 +391,7 @@ def _upload_assignments(s3_client, assignments_df):
 
 
 def _save_assignments_to_postgres(target_df, topics):
-    """Persiste asignaciones en message_topics (PostgreSQL)."""
+    """Persiste asignaciones en message_topics (PostgreSQL) con bulk insert."""
     if "_pg_id" not in target_df.columns:
         logger.warning("Sin columna _pg_id; no se escriben topics en PostgreSQL")
         return 0
@@ -298,11 +404,12 @@ def _save_assignments_to_postgres(target_df, topics):
     with app.app_context():
         from models import db
 
-        pg_ids = target_df["_pg_id"].tolist()
+        pg_ids = [int(x) for x in target_df["_pg_id"].tolist()]
         MessageTopic.query.filter(MessageTopic.message_id.in_(pg_ids)).delete(
             synchronize_session=False
         )
 
+        mappings = []
         for pg_id, topic_id in zip(pg_ids, topics):
             try:
                 topic_id = int(topic_id)
@@ -310,17 +417,227 @@ def _save_assignments_to_postgres(target_df, topics):
                 continue
             if topic_id < 0:
                 continue
-            db.session.add(MessageTopic(message_id=int(pg_id), topic_id=topic_id))
-            written += 1
+            mappings.append({"message_id": int(pg_id), "topic_id": topic_id})
 
+        if mappings:
+            db.session.bulk_insert_mappings(MessageTopic, mappings)
+            written = len(mappings)
         db.session.commit()
     logger.info("Asignaciones guardadas en PostgreSQL: %d filas", written)
     return written
 
 
-def process_topics(days_window=None):
+def _ensure_pytopicgram():
     if importlib.util.find_spec("pytopicgram") is None:
         logger.error("pytopicgram no disponible en este contenedor")
+        return False
+    return True
+
+
+def train_sample_topics(
+    sample_size=None,
+    days_window=None,
+    min_text_len=None,
+    seed=None,
+):
+    """
+    Fase 1: entrena el modelo con una submuestra SQL y sube model + metadata a S3.
+    Asigna topics solo a la submuestra (útil para validar en staging), no al histórico completo.
+    """
+    if not _ensure_pytopicgram():
+        return {"status": "error", "error": "pytopicgram_not_installed"}
+
+    if not os.environ.get("DATABASE_URL"):
+        return {"status": "error", "error": "DATABASE_URL_required_for_train_sample"}
+
+    sample_size = sample_size if sample_size is not None else Config.TOPICS_TRAIN_SAMPLE_SIZE
+    days_window = days_window if days_window is not None else Config.TOPICS_DAYS_WINDOW
+    min_text_len = min_text_len if min_text_len is not None else Config.TOPICS_MIN_TEXT_LEN
+    seed = seed if seed is not None else Config.TOPICS_SAMPLE_SEED
+
+    logger.info(
+        "train-sample: size=%s days=%s min_text=%s seed=%s",
+        sample_size,
+        days_window or "sin límite",
+        min_text_len,
+        seed,
+    )
+    df = _load_messages_from_postgres(
+        days_window=days_window,
+        sample_size=sample_size,
+        min_text_len=min_text_len,
+        seed=seed,
+    )
+    if df.empty:
+        return {"status": "empty", "mode": "train_sample"}
+
+    docs_series, _ = _prepare_docs(df, min_text_len=min_text_len)
+    df = df.assign(_topic_text=docs_series)
+    df = df[df["_topic_text"].str.len() > 0]
+    if df.empty:
+        return {"status": "empty", "mode": "train_sample", "reason": "no_usable_text"}
+
+    s3_client = get_s3_client()
+    with tempfile.TemporaryDirectory() as tmpdir:
+        model_path = os.path.join(tmpdir, "model.pkl")
+        _train_model_with_pytopicgram(
+            df["_topic_text"].tolist(),
+            model_path,
+            apply_sample_ratio=False,
+        )
+        model = _load_topic_model(model_path)
+        _upload_model(s3_client, model_path)
+        _save_topics_metadata(s3_client, model)
+
+        topics, probs = _assign_topics(model, df["_topic_text"].tolist())
+        if probs is None:
+            probs = [None] * len(topics)
+
+        assignments = pd.DataFrame(
+            {
+                "Message ID": df["Message ID"].astype(str),
+                "topic_id": pd.Series(topics).astype(int),
+                "topic_prob": pd.Series(probs).astype(float),
+            }
+        )
+        _upload_assignments(s3_client, assignments)
+        written = _save_assignments_to_postgres(df, topics)
+
+        topic_info = _get_topic_info(model)
+        n_topics = 0
+        if isinstance(topic_info, list):
+            n_topics = len(
+                [
+                    t
+                    for t in topic_info
+                    if int(t.get("Topic", t.get("topic_id", t.get("id", -1)))) >= 0
+                ]
+            )
+
+    return {
+        "status": "ok",
+        "mode": "train_sample",
+        "sample_size": int(len(df)),
+        "topics_found": int(n_topics),
+        "postgres_rows": int(written),
+        "days_window": days_window or None,
+        "model_key": Config.TOPICS_MODEL_KEY,
+        "meta_key": Config.TOPICS_META_KEY,
+    }
+
+
+def assign_all_topics(
+    batch_size=None,
+    days_window=None,
+    min_text_len=None,
+    reset_progress=False,
+):
+    """
+    Fase 3: aplica el modelo ya entrenado a todo el histórico por lotes, con checkpoint en S3.
+    """
+    if not _ensure_pytopicgram():
+        return {"status": "error", "error": "pytopicgram_not_installed"}
+
+    if not os.environ.get("DATABASE_URL"):
+        return {"status": "error", "error": "DATABASE_URL_required_for_assign_all"}
+
+    batch_size = batch_size if batch_size is not None else Config.TOPICS_ASSIGN_BATCH_SIZE
+    days_window = days_window if days_window is not None else Config.TOPICS_DAYS_WINDOW
+    min_text_len = min_text_len if min_text_len is not None else Config.TOPICS_MIN_TEXT_LEN
+
+    s3_client = get_s3_client()
+    if not _model_exists(s3_client):
+        return {
+            "status": "error",
+            "error": "model_not_found",
+            "hint": "Ejecuta primero --train-sample",
+        }
+
+    progress = {} if reset_progress else _load_assign_progress(s3_client)
+    after_pg_id = int(progress.get("last_pg_id") or 0)
+    total_assigned = int(progress.get("total_assigned") or 0)
+    batches = int(progress.get("batches") or 0)
+
+    logger.info(
+        "assign-all: batch_size=%s after_pg_id=%s days=%s",
+        batch_size,
+        after_pg_id,
+        days_window or "sin límite",
+    )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        model_path = os.path.join(tmpdir, "model.pkl")
+        _download_model(s3_client, model_path)
+        model = _load_topic_model(model_path)
+
+        for batch_df, last_pg_id in _iter_message_batches_from_postgres(
+            after_pg_id=after_pg_id,
+            batch_size=batch_size,
+            days_window=days_window,
+            min_text_len=min_text_len,
+        ):
+            docs_series, _ = _prepare_docs(batch_df, min_text_len=min_text_len)
+            batch_df = batch_df.assign(_topic_text=docs_series)
+            usable = batch_df[batch_df["_topic_text"].str.len() > 0]
+            if usable.empty:
+                after_pg_id = last_pg_id
+                batches += 1
+                _save_assign_progress(
+                    s3_client,
+                    {
+                        "last_pg_id": after_pg_id,
+                        "total_assigned": total_assigned,
+                        "batches": batches,
+                        "updated_at": datetime.utcnow().isoformat(),
+                    },
+                )
+                continue
+
+            topics, _probs = _assign_topics(model, usable["_topic_text"].tolist())
+            written = _save_assignments_to_postgres(usable, topics)
+            total_assigned += written
+            after_pg_id = last_pg_id
+            batches += 1
+            _save_assign_progress(
+                s3_client,
+                {
+                    "last_pg_id": after_pg_id,
+                    "total_assigned": total_assigned,
+                    "batches": batches,
+                    "updated_at": datetime.utcnow().isoformat(),
+                },
+            )
+            logger.info(
+                "assign-all lote %d: last_pg_id=%s escritos=%s acumulado=%s",
+                batches,
+                after_pg_id,
+                written,
+                total_assigned,
+            )
+
+        _save_topics_metadata(s3_client, model)
+        _save_state(
+            s3_client,
+            {
+                "last_processed_at": datetime.utcnow().isoformat(),
+                "last_message_id": after_pg_id,
+                "mode": "assign_all",
+            },
+        )
+
+    return {
+        "status": "ok",
+        "mode": "assign_all",
+        "batches": batches,
+        "total_assigned": total_assigned,
+        "last_pg_id": after_pg_id,
+        "days_window": days_window or None,
+    }
+
+
+def process_topics(days_window=None):
+    """Modo incremental diario: solo mensajes nuevos desde state.json."""
+    if not _ensure_pytopicgram():
         return {"status": "error", "error": "pytopicgram_not_installed"}
 
     days_window = days_window if days_window is not None else Config.TOPICS_DAYS_WINDOW
@@ -328,7 +645,8 @@ def process_topics(days_window=None):
 
     if use_postgres:
         logger.info("Cargando mensajes desde PostgreSQL (ventana: %s días)", days_window or "sin límite")
-        df = _load_messages_from_postgres(days_window)
+        # Incremental: no muestrear; filtrar por state después
+        df = _load_messages_from_postgres(days_window=days_window, sample_size=None)
         s3_client = get_s3_client()
     else:
         s3_client = get_s3_client()
@@ -363,7 +681,17 @@ def process_topics(days_window=None):
                 model = None
 
         if model is None:
-            _train_model_with_pytopicgram(df["_topic_text"].tolist(), model_path)
+            train_docs = df["_topic_text"].tolist()
+            if len(train_docs) > Config.TOPICS_TRAIN_SAMPLE_SIZE > 0:
+                train_docs = (
+                    pd.Series(train_docs)
+                    .sample(
+                        n=Config.TOPICS_TRAIN_SAMPLE_SIZE,
+                        random_state=abs(hash(Config.TOPICS_SAMPLE_SEED)) % (2**32),
+                    )
+                    .tolist()
+                )
+            _train_model_with_pytopicgram(train_docs, model_path, apply_sample_ratio=False)
             model = _load_topic_model(model_path)
             _upload_model(s3_client, model_path)
             assign_full_dataset = True
@@ -374,16 +702,37 @@ def process_topics(days_window=None):
         if (
             len(new_df) >= Config.TOPICS_MIN_NEW_MESSAGES
             and unassigned_ratio >= Config.TOPICS_RETRAIN_THRESHOLD
+            and Config.TOPICS_RESET_STATE
         ):
             logger.info("Reentrenando modelo por alto ratio de no asignados")
-            _train_model_with_pytopicgram(df["_topic_text"].tolist(), model_path)
+            train_docs = df["_topic_text"].tolist()
+            if len(train_docs) > Config.TOPICS_TRAIN_SAMPLE_SIZE > 0:
+                train_docs = (
+                    pd.Series(train_docs)
+                    .sample(
+                        n=Config.TOPICS_TRAIN_SAMPLE_SIZE,
+                        random_state=abs(hash(Config.TOPICS_SAMPLE_SEED)) % (2**32),
+                    )
+                    .tolist()
+                )
+            _train_model_with_pytopicgram(train_docs, model_path, apply_sample_ratio=False)
             model = _load_topic_model(model_path)
             _upload_model(s3_client, model_path)
             assign_full_dataset = True
 
         if assign_full_dataset:
-            topics, probs = _assign_topics(model, df["_topic_text"].tolist())
-            target_df = df.copy()
+            # En modo incremental no reasignar todo el DF en memoria si es enorme
+            if use_postgres and len(df) > Config.TOPICS_TRAIN_SAMPLE_SIZE * 2:
+                logger.info(
+                    "Dataset grande (%d): solo asigna mensajes nuevos; "
+                    "usa --assign-all para el histórico",
+                    len(df),
+                )
+                target_df = new_df.copy()
+                topics, probs = _assign_topics(model, target_df["_topic_text"].tolist())
+            else:
+                topics, probs = _assign_topics(model, df["_topic_text"].tolist())
+                target_df = df.copy()
         else:
             target_df = new_df.copy()
 
@@ -411,6 +760,7 @@ def process_topics(days_window=None):
 
     return {
         "status": "ok",
+        "mode": "incremental",
         "new_messages": int(len(new_df)),
         "retrained": bool(assign_full_dataset),
         "days_window": days_window or None,
