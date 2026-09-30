@@ -6,9 +6,10 @@ Este documento fija el **punto exacto** donde la web funciona igual que en produ
 
 | Referencia | Commit | Notas |
 |------------|--------|--------|
-| Tag `production-baseline-2026-02-17` | `06967fd` | Coincide con `build-id.txt` en producción (`2026-02-17T12:55:59Z`) |
-| Rama **`funcional`** | protegida | Despliega en https://app.monitoria.org — ver [RAMAS.md](RAMAS.md) |
-| Rama **`desarrollo`** | puerto 8080 | Nuevas funcionalidades sin tocar la versión pública |
+| Tag `production-baseline-2026-02-17` | `06967fd` | Baseline antiguo (feb 2026) |
+| Tag `production-stable-pre-login-2026-09-30` | punta de `funcional` pre-login | Rollback estable sin login |
+| Rama **`main`** | producción | https://app.monitoria.org (con login) — ver [RAMAS.md](RAMAS.md) |
+| Rama **`desarrollo`** | puerto 8080 | Staging / nuevas funcionalidades |
 
 La rama remota `scraper` **contiene** este commit y tiene 5 commits posteriores (mejoras del scraper). Para la UI idéntica a producción, usa **`06967fd`**, no necesariamente la punta de `scraper`.
 

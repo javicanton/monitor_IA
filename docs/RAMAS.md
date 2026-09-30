@@ -1,72 +1,69 @@
-# Ramas del proyecto (v1.0)
+# Ramas del proyecto
 
-Solo dos ramas activas:
+## Modelo actual
 
-| Rama | Para qué sirve |
-|------|----------------|
-| **`funcional`** | Producción en https://app.monitoria.org (puerto 80). Versión **1.0**. |
-| **`desarrollo`** | Pruebas en puerto 8080 (`./scripts/deploy-staging.sh`). Misma versión **1.0** hasta el próximo release. |
+| Rama / tag | Para qué sirve |
+|------------|----------------|
+| **`main`** | **Producción** en https://app.monitoria.org (con login magic link). Rama principal protegida. |
+| **`desarrollo`** | Staging / pruebas en puerto 8080 (`./scripts/deploy-staging.sh`). |
+| **`backup/production-pre-login`** | Copia congelada de producción **antes** del login. |
+| Tag **`production-stable-pre-login-2026-09-30`** | Mismo punto de rollback (recomendado). |
+| Tag **`production-baseline-2026-02-17`** | Baseline antiguo (feb 2026). |
 
 ## Uso diario
 
 ```bash
 git fetch origin
 
-# Ver o desplegar la versión que funciona
-git checkout funcional
+# Producción
+git checkout main
+git pull origin main
 
-# Trabajar en cosas nuevas
+# Nuevas funcionalidades
 git checkout desarrollo
+git pull origin desarrollo
 ```
 
-## Si algo sale mal
-
-Vuelve a la rama que funciona y despliega:
+## Si algo sale mal en producción (rollback sin login)
 
 ```bash
-git checkout funcional
-git pull origin funcional
+git fetch origin --tags
+git checkout production-stable-pre-login-2026-09-30
+# o: git checkout backup/production-pre-login
 ./scripts/deploy-local-test.sh --production
 ```
 
-También puedes usar el tag fijo del 17-feb-2026:
+## Pasar cambios a producción
+
+1. Probar en `desarrollo` (staging :8080).
+2. Abrir PR: `desarrollo` → **`main`**.
+3. Merge y desplegar desde `main`:
 
 ```bash
-git checkout production-baseline-2026-02-17
+git checkout main
+git pull origin main
+./scripts/deploy-local-test.sh --production
 ```
 
-## Pasar cambios de desarrollo a funcional
+## Proteger `main` en GitHub
 
-1. Prueba en `desarrollo` (local o puerto 8080 con `./scripts/deploy-staging.sh`).
-2. Abre un **Pull Request** en GitHub: `desarrollo` → `funcional`.
-3. Cuando esté bien, merge y despliega desde `funcional`.
-
-## Proteger `funcional` en GitHub
-
-**Settings → Branches → Add rule** para la rama `funcional`:
+**Settings → Rules → Rulesets** (o Branch protection rules) para `main`:
 
 - Require a pull request before merging
 - Block force pushes
 - Block branch deletion
+- (Opcional) Require approvals
 
-Así no se rompe la versión mostrable por accidente.
+## Datos sensibles (repo público)
 
-## Probar `desarrollo` sin tocar la web pública
+No versionar:
 
-En el servidor, con `funcional` ya en el puerto 80:
+- `backend/allowed_emails.txt` → usar `allowed_emails.example.txt` como plantilla; el real solo en el servidor
+- Listas de canales CSV locales
+- Credenciales AWS / `.env`
 
-```bash
-git checkout desarrollo
-git pull
-./scripts/deploy-staging.sh    # puerto 8080
-```
+La allowlist y secretos viven en el EC2 (`.env` + `allowed_emails.txt`), no en Git.
 
-Parar la prueba:
+## Ramas obsoletas
 
-```bash
-./scripts/deploy-staging.sh --down
-```
-
-## Ramas antiguas (eliminadas o archivadas)
-
-`main`, `production`, `develop`, `scraper`, `database`, `login` y ramas `cursor/*` ya no se usan. Trabaja solo en **`desarrollo`** y publica en **`funcional`**.
+Tras la limpieza: no usar `funcional`, `production`, `develop`, `scraper`, `database`, `login` ni `cursor/*` antiguas como líneas de trabajo. Staging = `desarrollo`; producción = `main`.

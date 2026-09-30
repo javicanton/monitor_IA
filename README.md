@@ -4,10 +4,13 @@ Aplicación web para analizar y etiquetar mensajes de alto rendimiento en canale
 
 ## Ramas
 
-| Rama | Uso |
-|------|-----|
-| **`funcional`** | Versión estable y mostrable (app.monitoria.org) |
-| **`desarrollo`** | Nuevas funcionalidades en curso |
+| Rama / tag | Uso |
+|------------|-----|
+| **`main`** | Producción (app.monitoria.org) con login |
+| **`desarrollo`** | Staging / nuevas funcionalidades (:8080) |
+| **`backup/production-pre-login`** / tag `production-stable-pre-login-2026-09-30` | Rollback a producción sin login |
+
+Detalle: [`docs/RAMAS.md`](docs/RAMAS.md).
 
 Detalle: [docs/RAMAS.md](docs/RAMAS.md)
 
@@ -137,12 +140,12 @@ Acceso por **magic link** a correos de una allowlist. Detalle: [`docs/AUTH.md`](
 
 ### Configurar correos autorizados
 
-Edita `backend/allowed_emails.txt` o define:
+En el **servidor** (no subir a Git): copia `backend/allowed_emails.example.txt` → `backend/allowed_emails.txt`, o define:
 
 ```env
-ALLOWED_EMAILS=admin@monitoria.org:admin,usuario@unir.net
+ALLOWED_EMAILS=admin@example.com:admin,usuario@example.com
 AUTH_FRONTEND_URL=http://localhost:3000
-AUTH_DEV_RETURN_LINK=1   # desarrollo: el enlace viene en la respuesta JSON
+AUTH_DEV_RETURN_LINK=1   # solo pruebas: el enlace viene en la respuesta JSON
 ```
 
 ### Endpoints

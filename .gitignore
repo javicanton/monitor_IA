@@ -485,9 +485,18 @@ logs/
 # Archivos de datos
 *.json
 *.csv
-!scripts/canales_nuevos_jun2026.csv
 *.xlsx
 backend/data/*.json
 backend/data/*.csv
 backend/data/*.xlsx
 backend/data/*.session
+
+# Allowlist de login y credenciales (repo público: no versionar)
+backend/allowed_emails.txt
+backend/AWS Credentials.txt
+**/AWS Credentials.txt
+credentials.txt
+*.pem
+*.key
+scripts/canales*.csv
+scripts/*channels*.csv
