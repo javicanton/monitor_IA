@@ -1,9 +1,0 @@
-# Correos autorizados a iniciar sesión (uno por línea).
-# Formato: email [rol]
-# Roles: user (por defecto) | admin
-#
-# También puedes definir ALLOWED_EMAILS en el entorno:
-#   ALLOWED_EMAILS=admin@monitoria.org:admin,usuario@unir.net
-
-admin@monitoria.org admin
-monitoria@unir.net admin

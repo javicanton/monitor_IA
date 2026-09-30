@@ -1,0 +1,9 @@
+# Copia este archivo a allowed_emails.txt en el servidor (NO subir a Git).
+# Formato: email [rol]
+# Roles: user (por defecto) | admin
+#
+# Alternativa: variable de entorno ALLOWED_EMAILS=
+#   ALLOWED_EMAILS=admin@example.com:admin,usuario@example.com
+
+admin@example.com admin
+user@example.com

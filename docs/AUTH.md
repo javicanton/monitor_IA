@@ -17,20 +17,22 @@ OAuth (Google / GitHub) está preparado en stubs (`backend/auth/providers/`) par
 **Prioridad:**
 
 1. Variable de entorno `ALLOWED_EMAILS` (coma-separada; opcional `email:role`)
-2. Archivo `backend/allowed_emails.txt` (uno por línea: `email [role]`)
+2. Archivo **`backend/allowed_emails.txt` en el servidor** (uno por línea: `email [role]`)
 
 Roles: `user` (por defecto) o `admin`.
+
+> Repo **público**: no subir la allowlist real. Plantilla versionada: `backend/allowed_emails.example.txt`. En el EC2: `cp backend/allowed_emails.example.txt backend/allowed_emails.txt` y editar.
 
 Ejemplos:
 
 ```env
-ALLOWED_EMAILS=admin@monitoria.org:admin,usuario@unir.net
+ALLOWED_EMAILS=admin@example.com:admin,usuario@example.com
 ```
 
 ```text
-# backend/allowed_emails.txt
-admin@monitoria.org admin
-usuario@unir.net
+# backend/allowed_emails.txt  (solo en el servidor)
+admin@example.com admin
+usuario@example.com
 ```
 
 ## Variables de entorno
