@@ -17,9 +17,9 @@ def init_database():
     print("=" * 50)
     
     try:
-        # Importar la aplicación Flask
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "backend"))
         from app import app, db
-        from backend.models import User
+        from models import User
         
         with app.app_context():
             # Crear todas las tablas

@@ -471,10 +471,8 @@ yarn-error.log*
 # Archivos de datos y credenciales
 *.session
 credentials.txt
-telegram_data.xlsx
-telegram_messages.csv
-telegram_channels.csv
-telegram_channels_full.csv
+telegram_channels_test.csv
+telegram_channels_ampliado.csv
 
 # Carpeta de datos
 /data/*
@@ -492,3 +490,13 @@ backend/data/*.json
 backend/data/*.csv
 backend/data/*.xlsx
 backend/data/*.session
+
+# Allowlist de login y credenciales (repo público: no versionar)
+backend/allowed_emails.txt
+backend/AWS Credentials.txt
+**/AWS Credentials.txt
+credentials.txt
+*.pem
+*.key
+scripts/canales*.csv
+scripts/*channels*.csv

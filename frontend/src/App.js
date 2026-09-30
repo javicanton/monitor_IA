@@ -1,10 +1,12 @@
 import React from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
-import Typography from '@mui/material/Typography';
-import Box from '@mui/material/Box';
+import { AuthProvider } from './auth/AuthContext';
+import ProtectedRoute from './auth/ProtectedRoute';
+import LoginForm from './auth/components/LoginForm';
+import VerifyMagicLinkPage from './auth/pages/VerifyMagicLinkPage';
 import Dashboard from './components/Dashboard';
-import config from './config';
 
 const theme = createTheme({
   palette: {
@@ -21,12 +23,23 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Box sx={{ py: 1, textAlign: 'center' }}>
-        <Typography variant="caption" color="textSecondary" display="block">
-          v {config.APP_VERSION}
-        </Typography>
-      </Box>
-      <Dashboard />
+      <BrowserRouter>
+        <AuthProvider>
+          <Routes>
+            <Route path="/login" element={<LoginForm />} />
+            <Route path="/auth/verify" element={<VerifyMagicLinkPage />} />
+            <Route
+              path="/"
+              element={
+                <ProtectedRoute>
+                  <Dashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </AuthProvider>
+      </BrowserRouter>
     </ThemeProvider>
   );
 }

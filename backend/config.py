@@ -1,21 +1,45 @@
 import os
 from datetime import timedelta
 
+# PostgreSQL (AWS RDS compatible): usar DATABASE_URL.
+# Ejemplo: postgresql://user:pass@host:5432/dbname
+# Para desarrollo local: postgresql://localhost/monitor_ia
+DATABASE_URL = os.environ.get('DATABASE_URL')
+
+# Si no hay DATABASE_URL, se usa SQLite (solo para desarrollo sin PostgreSQL)
+if DATABASE_URL:
+    # RDS a veces devuelve URL con protocolo postgres://; SQLAlchemy necesita postgresql://
+    if DATABASE_URL.startswith('postgres://'):
+        DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
+    SQLALCHEMY_DATABASE_URI = DATABASE_URL
+else:
+    SQLALCHEMY_DATABASE_URI = os.environ.get('SQLALCHEMY_DATABASE_URI', 'sqlite:///telegram_app.db')
+
 class Config:
     # Configuración básica de Flask
     SECRET_KEY = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-production')
     
-    # Configuración de la base de datos
-    # Usar SQLite para desarrollo y AWS (sin PostgreSQL)
-    SQLALCHEMY_DATABASE_URI = 'sqlite:///telegram_app.db'
+    # Base de datos: PostgreSQL vía DATABASE_URL o SQLite por defecto
+    SQLALCHEMY_DATABASE_URI = SQLALCHEMY_DATABASE_URI
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "pool_pre_ping": True,
+        "pool_recycle": 300,
+        "pool_size": int(os.environ.get("SQLALCHEMY_POOL_SIZE", "5")),
+        "max_overflow": int(os.environ.get("SQLALCHEMY_MAX_OVERFLOW", "10")),
+    }
     
     # Configuración de JWT
     JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', 'your-jwt-secret-key-change-in-production')
-    JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=1)
+    JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=int(os.environ.get('JWT_ACCESS_TOKEN_HOURS', '12')))
     JWT_TOKEN_LOCATION = ['headers']
     JWT_HEADER_NAME = 'Authorization'
     JWT_HEADER_TYPE = 'Bearer'
+
+    # Auth / magic link
+    # ALLOWED_EMAILS=admin@monitoria.org:admin,user@example.com
+    # AUTH_FRONTEND_URL=https://app.monitoria.org
+    # AUTH_DEV_RETURN_LINK=1  # solo desarrollo: incluye el enlace en la respuesta JSON
     
     # Configuración de correo electrónico (usando SES de AWS)
     MAIL_SERVER = os.environ.get('MAIL_SERVER', 'email-smtp.eu-north-1.amazonaws.com')
@@ -32,6 +56,11 @@ class Config:
     # Credenciales de AWS S3
     AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID')
     AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
+
+    # DataStore (DuckDB + Parquet)
+    DATASTORE_S3_PARQUET_KEY = os.environ.get('DATASTORE_S3_PARQUET_KEY', 'telegram_messages.parquet')
+    DATASTORE_CACHE_DIR = os.environ.get('DATASTORE_CACHE_DIR', '/app/data/cache')
+    DATASTORE_CACHE_TTL = int(os.environ.get('DATASTORE_CACHE_TTL', 1800))
 
     # Configuración de topics
     TOPIC_POLL_INTERVAL_MIN = int(os.environ.get('TOPIC_POLL_INTERVAL_MIN', 1440))
@@ -52,6 +81,10 @@ class Config:
         TOPICS_SAMPLE_RATIO = float(_TOPICS_SAMPLE_RATIO_RAW) if _TOPICS_SAMPLE_RATIO_RAW else None
     except (TypeError, ValueError):
         TOPICS_SAMPLE_RATIO = None
+    # Ventana temporal: solo mensajes de los últimos N días (0 = sin límite). Pruebas: 7.
+    TOPICS_DAYS_WINDOW = int(os.environ.get('TOPICS_DAYS_WINDOW', 0))
+    # Si es true, ignora el estado incremental y reprocesa toda la ventana.
+    TOPICS_RESET_STATE = os.environ.get('TOPICS_RESET_STATE', '').lower() in ('1', 'true', 'yes')
     
     # Configuración de CORS
     CORS_HEADERS = 'Content-Type'

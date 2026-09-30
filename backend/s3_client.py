@@ -11,17 +11,29 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+def _build_boto3_s3_client():
+    """
+    Crea cliente S3 sin inyectar claves vacías (rompen la cadena de credenciales).
+    Si no hay AWS_ACCESS_KEY_ID en el entorno, boto3 usará el rol IAM de la instancia
+    cuando esté disponible (p. ej. EC2 sin Docker, o contenedor con hop limit IMDS >= 2).
+    """
+    kwargs = {"region_name": Config.AWS_REGION}
+    access_key = (os.environ.get("AWS_ACCESS_KEY_ID") or "").strip()
+    secret_key = (os.environ.get("AWS_SECRET_ACCESS_KEY") or "").strip()
+    session_token = (os.environ.get("AWS_SESSION_TOKEN") or "").strip()
+    if access_key and secret_key:
+        kwargs["aws_access_key_id"] = access_key
+        kwargs["aws_secret_access_key"] = secret_key
+        if session_token:
+            kwargs["aws_session_token"] = session_token
+    return boto3.client("s3", **kwargs)
+
+
 class S3Client:
     def __init__(self):
         """Inicializa el cliente S3 con las credenciales de AWS."""
         try:
-            # Intentar usar credenciales del archivo de configuración
-            self.s3_client = boto3.client(
-                's3',
-                region_name=Config.AWS_REGION,
-                aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
-                aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY')
-            )
+            self.s3_client = _build_boto3_s3_client()
             self.bucket_name = Config.S3_BUCKET
             logger.info(f"Cliente S3 inicializado para bucket: {self.bucket_name}")
         except NoCredentialsError:
@@ -77,15 +89,19 @@ class S3Client:
             logger.error(f"Error al obtener contenido del archivo {s3_key}: {e}")
             raise
 
-    def load_csv_from_s3(self, s3_key):
+    def load_csv_from_s3(self, s3_key, missing_ok=False):
         """Carga un archivo CSV desde S3 como DataFrame de pandas."""
         try:
             response = self.s3_client.get_object(Bucket=self.bucket_name, Key=s3_key)
             df = pd.read_csv(io.BytesIO(response['Body'].read()))
             logger.info(f"CSV cargado desde S3: {s3_key}, filas: {len(df)}")
             return df
-            
+
         except ClientError as e:
+            code = e.response.get("Error", {}).get("Code")
+            if missing_ok and code in {"NoSuchKey", "404"}:
+                logger.info("CSV no encontrado en S3 (normal en primera ejecución): %s", s3_key)
+                return pd.DataFrame()
             logger.error(f"Error al cargar CSV {s3_key}: {e}")
             raise
         except Exception as e:

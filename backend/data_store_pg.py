@@ -1,0 +1,396 @@
+# -*- coding: utf-8 -*-
+"""
+DataStore sobre PostgreSQL. Usado cuando DATABASE_URL está definido.
+Todas las consultas son paginadas/filtradas por SQL; no se carga el dataset entero en memoria.
+"""
+from __future__ import annotations
+
+import logging
+from typing import Dict, List, Optional, Tuple
+
+import pandas as pd
+from flask import current_app
+from sqlalchemy import and_, case, cast, func, or_, select, text, distinct
+from sqlalchemy.orm import joinedload
+
+from models import Channel, Message, MessageTopic, db
+
+logger = logging.getLogger(__name__)
+
+# Límite máximo de resultados por página para evitar consultas pesadas
+MAX_PAGE_SIZE = 100
+DEFAULT_PAGE_SIZE = 24
+
+
+def _parse_topic_filter(topic_filter) -> List[int]:
+    topic_ids = []
+    if isinstance(topic_filter, str):
+        topic_ids = [x.strip() for x in topic_filter.split(",") if x.strip()]
+    elif isinstance(topic_filter, list):
+        topic_ids = list(topic_filter)
+    result = []
+    for item in topic_ids:
+        if isinstance(item, dict) and "id" in item:
+            item = item["id"]
+        try:
+            result.append(int(item))
+        except (TypeError, ValueError):
+            continue
+    return result
+
+
+def _date_expr(model=Message):
+    return func.coalesce(
+        model.date_sent,
+        model.creation_date,
+    )
+
+
+def _topic_id_scalar():
+    """Subconsulta correlacionada: evita JOIN en COUNT de listados grandes."""
+    return (
+        select(MessageTopic.topic_id)
+        .where(MessageTopic.message_id == Message.id)
+        .correlate(Message)
+        .limit(1)
+        .scalar_subquery()
+    )
+
+
+class DataStorePG:
+    """Store de mensajes sobre PostgreSQL. Sin carga en memoria."""
+
+    def _search_query(self, filters: Dict) -> str:
+        return (filters.get("search") or filters.get("q") or "").strip()
+
+    def _apply_pg_fts_search(self, q, search_query: str):
+        """
+        Aplica full-text search (PostgreSQL) directamente sobre la query principal.
+        Evita traer listas grandes de IDs a Python (que puede provocar timeouts/504).
+        """
+        from search_boolean import has_boolean_operators, parse_boolean_search, parsed_to_tsquery
+
+        raw = (search_query or "").strip()
+        if not raw:
+            return q
+
+        # Nota: aquí referenciamos la tabla real `messages` (no alias `m`).
+        vector = "to_tsvector('spanish', coalesce(messages.message_text, '') || ' ' || coalesce(messages.url, ''))"
+        try:
+            if has_boolean_operators(raw):
+                parsed = parse_boolean_search(raw)
+                tsq = parsed_to_tsquery(parsed) if parsed else None
+                if tsq:
+                    return q.filter(text(f"{vector} @@ to_tsquery('spanish', :tsq)")).params(tsq=tsq)
+            return q.filter(text(f"{vector} @@ plainto_tsquery('spanish', :fts_q)")).params(fts_q=raw)
+        except Exception as exc:
+            logger.warning("FTS PostgreSQL falló; usando ILIKE (%s)", exc)
+            return self._apply_text_search(q, raw)
+
+    def _search_ids(self, filters: Dict) -> Optional[List[int]]:
+        search_query = self._search_query(filters)
+        if not search_query:
+            return None
+        try:
+            from search_index_pg import search_message_row_ids_pg
+
+            ids = search_message_row_ids_pg(search_query)
+            if ids is not None:
+                return ids
+        except Exception as exc:
+            logger.warning("Búsqueda full-text PostgreSQL no disponible: %s", exc)
+        return None
+
+    def _apply_text_search(self, q, search_query: str):
+        """Fallback ILIKE: texto del mensaje y URL, con soporte AND / OR / NOT."""
+        from search_boolean import apply_boolean_sqlalchemy_filter, has_boolean_operators, parse_boolean_search
+
+        if has_boolean_operators(search_query):
+            parsed = parse_boolean_search(search_query)
+            if parsed:
+                return apply_boolean_sqlalchemy_filter(
+                    q, parsed, Message.message_text, Message.url
+                )
+        terms = [
+            term
+            for term in search_query.split()
+            if term.upper() not in ("AND", "OR", "NOT") and term.strip()
+        ]
+        if not terms:
+            terms = [search_query]
+        for term in terms:
+            pattern = f"%{term}%"
+            q = q.filter(
+                or_(
+                    Message.message_text.ilike(pattern),
+                    Message.url.ilike(pattern),
+                )
+            )
+        return q
+
+    def _apply_filters(
+        self,
+        q,
+        filters: Dict,
+        search_ids: Optional[List[int]],
+        join_topics: bool,
+        use_like_search: bool = False,
+    ):
+        search_query = self._search_query(filters)
+        if search_ids is not None:
+            q = q.filter(Message.id.in_(search_ids))
+        elif search_query:
+            # Preferir FTS (PostgreSQL) por rendimiento; fallback a ILIKE si se fuerza.
+            q = self._apply_text_search(q, search_query) if use_like_search else self._apply_pg_fts_search(q, search_query)
+        channel = filters.get("channel")
+        if channel:
+            if isinstance(channel, list):
+                q = q.filter(Channel.title.in_(channel))
+            else:
+                q = q.filter(Channel.title == channel)
+        else:
+            exclude_channel = filters.get("excludeChannel")
+            if exclude_channel:
+                if isinstance(exclude_channel, list):
+                    q = q.filter(~Channel.title.in_(exclude_channel))
+                else:
+                    q = q.filter(Channel.title != exclude_channel)
+        # Channel ya está en el join en el caller; no volver a hacer join
+
+        topic_filter = filters.get("topics") or filters.get("topic")
+        topic_ids = _parse_topic_filter(topic_filter) if topic_filter else []
+        if topic_ids:
+            if not join_topics:
+                q = q.outerjoin(MessageTopic, Message.id == MessageTopic.message_id)
+            q = q.filter(MessageTopic.topic_id.in_(topic_ids))
+
+        score_min = filters.get("scoreMin")
+        if score_min not in (None, ""):
+            try:
+                q = q.filter(Message.score >= float(score_min))
+            except (TypeError, ValueError):
+                pass
+        score_max = filters.get("scoreMax")
+        if score_max not in (None, ""):
+            try:
+                q = q.filter(Message.score <= float(score_max))
+            except (TypeError, ValueError):
+                pass
+        label_val = filters.get("label")
+        if label_val not in (None, ""):
+            try:
+                q = q.filter(Message.label == int(label_val))
+            except (TypeError, ValueError):
+                pass
+        elif filters.get("excludeNotRelevant") in (True, "true", "1", 1):
+            q = q.filter(or_(Message.label.is_(None), Message.label != 0))
+        media_type = filters.get("mediaType")
+        if media_type:
+            types = [media_type] if isinstance(media_type, str) else media_type
+            types = [str(t).lower() for t in types if t]
+            if types:
+                q = q.filter(func.lower(func.coalesce(Message.media_type, "")).in_(types))
+        date_start = filters.get("dateStart")
+        if date_start:
+            q = q.filter(func.date(_date_expr()) >= func.cast(date_start, db.Date))
+        date_end = filters.get("dateEnd")
+        if date_end:
+            q = q.filter(func.date(_date_expr()) <= func.cast(date_end, db.Date))
+        return q
+
+    def _order_by(self, q, filters: Dict):
+        sort_by = filters.get("sortBy", "score")
+        if sort_by == "views":
+            return q.order_by(Message.views.desc().nullslast(), Message.message_id.desc())
+        if sort_by == "date":
+            return q.order_by(_date_expr().desc().nullslast(), Message.message_id.desc())
+        if sort_by == "channel":
+            return q.order_by(Channel.title.asc(), Message.message_id.desc())
+        return q.order_by(Message.score.desc().nullslast(), Message.message_id.desc())
+
+    def query_messages(self, filters: Dict, limit: int, offset: int) -> Tuple[pd.DataFrame, int]:
+        limit = min(max(1, limit), MAX_PAGE_SIZE)
+        offset = max(0, offset)
+        search_ids = None
+        use_like_search = False
+        topic_filter = filters.get("topics") or filters.get("topic")
+        join_topics = bool(topic_filter)
+
+        q = db.session.query(
+            Message.embed,
+            func.coalesce(Message.score, 0).label("Score"),
+            Message.message_id,
+            Message.url,
+            Message.label,
+            _topic_id_scalar().label("topic_id"),
+        ).join(Channel, Message.channel_id == Channel.id)
+        if join_topics:
+            q = q.outerjoin(MessageTopic, Message.id == MessageTopic.message_id)
+        q = self._apply_filters(q, filters, search_ids, join_topics, use_like_search=use_like_search)
+
+        count_q = db.session.query(Message.id).join(Channel, Message.channel_id == Channel.id)
+        if join_topics:
+            count_q = count_q.outerjoin(MessageTopic, Message.id == MessageTopic.message_id)
+        count_q = self._apply_filters(
+            count_q, filters, search_ids, join_topics, use_like_search=use_like_search
+        )
+        if join_topics:
+            total = count_q.with_entities(func.count(distinct(Message.id))).scalar() or 0
+        else:
+            total = count_q.count()
+
+        q = self._order_by(q, filters)
+        q = q.offset(offset).limit(limit)
+        rows = q.all()
+
+        data = []
+        for r in rows:
+            data.append({
+                "Embed": r.embed,
+                "Score": float(r.Score) if r.Score is not None else 0,
+                "Message ID": r.message_id,
+                "URL": r.url,
+                "Label": r.label,
+                "topic_id": r.topic_id,
+            })
+        df = pd.DataFrame(data)
+        return df, total
+
+    def get_channels(self) -> List[str]:
+        """Títulos de canal con mensajes, ordenados por nº de publicaciones (desc)."""
+        rows = (
+            db.session.query(
+                Channel.title,
+                func.count(Message.id).label("msg_count"),
+            )
+            .join(Message, Message.channel_id == Channel.id)
+            .filter(Channel.title.isnot(None))
+            .group_by(Channel.id, Channel.title)
+            .order_by(func.count(Message.id).desc(), func.lower(Channel.title))
+            .all()
+        )
+        titles = []
+        seen = set()
+        for title, _msg_count in rows:
+            title = (title or "").strip()
+            if not title:
+                continue
+            key = title.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            titles.append(title)
+        return titles
+
+
+    def get_date_bounds(self) -> Tuple[Optional[str], Optional[str]]:
+        """Devuelve (min_date, max_date) como strings YYYY-MM-DD para el date picker."""
+        row = db.session.query(
+            func.min(func.date(_date_expr())).label("min_d"),
+            func.max(func.date(_date_expr())).label("max_d"),
+        ).select_from(Message).filter(_date_expr().isnot(None)).first()
+        if not row or (row.min_d is None and row.max_d is None):
+            return None, None
+        return (
+            str(row.min_d) if row.min_d else None,
+            str(row.max_d) if row.max_d else None,
+        )
+
+    def messages_over_time(self, filters: Dict) -> List[Dict]:
+        filters = dict(filters or {})
+        search_ids = None
+        use_like_search = False
+        topic_filter = filters.get("topics") or filters.get("topic")
+        join_topics = bool(topic_filter)
+
+        q = db.session.query(
+            func.date(_date_expr()).label("day"),
+            func.count(Message.id).label("count"),
+        ).join(Channel, Message.channel_id == Channel.id)
+        if topic_filter:
+            q = q.outerjoin(MessageTopic, Message.id == MessageTopic.message_id)
+        q = self._apply_filters(q, filters, search_ids, join_topics, use_like_search=use_like_search)
+        q = q.filter(_date_expr().isnot(None))
+        q = q.group_by(func.date(_date_expr())).order_by(func.date(_date_expr()))
+        rows = q.all()
+        return [{"date": str(r.day), "count": r.count} for r in rows]
+
+    def export_filtered_dataframe(self, filters: Dict) -> pd.DataFrame:
+        topic_filter = filters.get("topics") or filters.get("topic")
+        join_topics = bool(topic_filter)
+        search_ids = None
+        use_like_search = False
+
+        q = db.session.query(
+            Message.message_id,
+            Message.message_text,
+            Channel.title,
+            _date_expr().label("Date Sent"),
+            func.coalesce(Message.views, 0).label("Views"),
+            func.coalesce(Message.score, 0).label("Score"),
+            Message.label,
+            Message.url,
+            Message.media_type,
+            Message.average_views,
+            _topic_id_scalar().label("topic_id"),
+        ).join(Channel, Message.channel_id == Channel.id)
+        if join_topics:
+            q = q.outerjoin(MessageTopic, Message.id == MessageTopic.message_id)
+        q = self._apply_filters(q, filters, search_ids, join_topics, use_like_search=use_like_search)
+        q = self._order_by(q, filters)
+        rows = q.all()
+
+        columns = [
+            "Message ID", "Message Text", "Title", "Date Sent", "Views", "Score",
+            "Label", "URL", "Media Type", "Average Views", "topic_id",
+        ]
+        data = []
+        for r in rows:
+            data.append({
+                "Message ID": r.message_id,
+                "Message Text": r.message_text,
+                "Title": r[2],
+                "Date Sent": r[3],
+                "Views": r.Views,
+                "Score": r.Score,
+                "Label": r.label,
+                "URL": r.url,
+                "Media Type": r.media_type,
+                "Average Views": getattr(r, "average_views", None),
+                "topic_id": r.topic_id,
+            })
+        return pd.DataFrame(data, columns=columns)
+
+    def update_label(self, message_id: int, label: int) -> bool:
+        updated = Message.query.filter(Message.message_id == message_id).update({"label": label})
+        db.session.commit()
+        return updated > 0
+
+    def get_messages_list(self, limit: int = 500) -> List[Dict]:
+        """Lista de mensajes para /api/messages con límite para no cargar todo en memoria."""
+        limit = min(limit, MAX_PAGE_SIZE * 5)
+        q = (
+            db.session.query(
+                Message.message_id,
+                Message.message_text,
+                Channel.title,
+                Message.views,
+                Message.average_views,
+                Message.label,
+            )
+            .join(Channel, Message.channel_id == Channel.id)
+            .order_by(Message.score.desc().nullslast(), Message.message_id.desc())
+            .limit(limit)
+        )
+        rows = q.all()
+        return [
+            {
+                "Message ID": r.message_id,
+                "Message Text": r.message_text,
+                "Title": r.title,
+                "Views": r.views,
+                "Average Views": r.average_views,
+                "Label": r.label,
+            }
+            for r in rows
+        ]

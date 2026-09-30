@@ -1,0 +1,41 @@
+# No copiar datos locales ni basura al build Docker (evita "no space left on device")
+.git
+.gitignore
+__pycache__
+*.py[cod]
+*.egg-info
+.venv
+venv
+.env
+.env.*
+
+# Datasets locales / scrapes antiguos (la app usa RDS o S3)
+*.xlsx
+*.xls
+*.csv
+*.parquet
+*.duckdb
+*.db
+*.sqlite
+*.sqlite3
+telegram_data*
+telegram_messages*
+
+# Cachés y estado local
+instance/
+cache/
+data/
+*.session
+*.session-journal
+
+# Credenciales y artefactos que no deben ir a la imagen
+AWS Credentials.txt
+credentials.txt
+*.pem
+*.key
+
+# Docs / scripts de deploy locales
+aws-deploy.sh
+ecs-task-definition.json
+Dockerfile
+Dockerfile.*

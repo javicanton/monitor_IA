@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   Box, 
   Grid, 
@@ -6,23 +6,65 @@ import {
   Typography, 
   Button, 
   Alert,
-  Snackbar 
+  Snackbar,
+  Tooltip,
 } from '@mui/material';
-import { Refresh as RefreshIcon } from '@mui/icons-material';
+import {
+  Refresh as RefreshIcon,
+  Download as DownloadIcon,
+  Article as ArticleIcon,
+  Campaign as CampaignIcon,
+} from '@mui/icons-material';
 import MessageCard from './MessageCard';
-import { messagesAPI } from '../utils/api';
+import { messagesAPI, channelsAPI } from '../utils/api';
+import config from '../config';
 
-const MessageList = ({ filters = {} }) => {
+const formatPublicationCount = (count) => {
+  const n = Number(count);
+  if (!Number.isFinite(n)) return '0';
+  return new Intl.NumberFormat('es-ES').format(n);
+};
+
+const DEBOUNCE_MS = 500;
+
+const getLoadingMessage = (filters = {}) => {
+  const search = (filters.search || '').trim();
+  if (search) {
+    return `Buscando «${search}» en el texto del mensaje y el enlace…`;
+  }
+  if (filters.dateStart || filters.dateEnd) {
+    return 'Aplicando filtro de fechas…';
+  }
+  if (filters.channel?.length || filters.excludeChannel?.length || filters.topics?.length) {
+    return 'Aplicando filtros de canal o temas…';
+  }
+  return 'Cargando mensajes…';
+};
+
+const MessageList = ({ filters = {}, onLoadingChange }) => {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [hasMore, setHasMore] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalMessages, setTotalMessages] = useState(0);
+  const [totalChannels, setTotalChannels] = useState(0);
+  const [showNotRelevant, setShowNotRelevant] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
+  const debounceRef = useRef(null);
+  const isFirstLoad = useRef(true);
 
   const MESSAGES_PER_PAGE = 24;
- 
+
+  const fetchChannelCount = useCallback(async () => {
+    try {
+      const channels = await channelsAPI.getChannels();
+      setTotalChannels(channels.length);
+    } catch (err) {
+      console.error('Error al cargar conteo de canales:', err);
+    }
+  }, []);
+
   const fetchMessages = useCallback(async (page = 1, append = false) => {
     try {
       setLoading(true);
@@ -30,6 +72,7 @@ const MessageList = ({ filters = {} }) => {
 
       const response = await messagesAPI.getMessages({
         ...filters,
+        excludeNotRelevant: !showNotRelevant,
         page,
         per_page: MESSAGES_PER_PAGE
       });
@@ -43,7 +86,7 @@ const MessageList = ({ filters = {} }) => {
           setMessages(newMessages);
         }
         
-        setTotalMessages(response.total_messages || 0);
+        setTotalMessages(Number(response.total_messages) || 0);
         setCurrentPage(page);
         setHasMore(newMessages.length === MESSAGES_PER_PAGE);
         
@@ -68,10 +111,26 @@ const MessageList = ({ filters = {} }) => {
     } finally {
       setLoading(false);
     }
-  }, [filters, MESSAGES_PER_PAGE]);
+  }, [filters, showNotRelevant, MESSAGES_PER_PAGE]);
 
   useEffect(() => {
-    fetchMessages(1, false);
+    onLoadingChange?.(loading);
+  }, [loading, onLoadingChange]);
+
+  useEffect(() => {
+    if (isFirstLoad.current) {
+      isFirstLoad.current = false;
+      fetchMessages(1, false);
+      return;
+    }
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      fetchMessages(1, false);
+      debounceRef.current = null;
+    }, DEBOUNCE_MS);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
   }, [fetchMessages]);
 
   const loadMore = async () => {
@@ -86,13 +145,17 @@ const MessageList = ({ filters = {} }) => {
       const response = await messagesAPI.labelMessage(messageId, label);
       
       if (response.success) {
-        // Actualizar el mensaje en el estado local
-        setMessages(prev => 
-          prev.map(msg => 
-            msg['Message ID'] === messageId ? { ...msg, Label: label } : msg
-          )
-        );
-        
+        if (label === config.LABELS.NOT_RELEVANT && !showNotRelevant) {
+          setMessages((prev) => prev.filter((msg) => msg['Message ID'] !== messageId));
+          setTotalMessages((prev) => Math.max(0, prev - 1));
+        } else {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg['Message ID'] === messageId ? { ...msg, Label: label } : msg
+            )
+          );
+        }
+
         setSnackbar({
           open: true,
           message: 'Mensaje etiquetado correctamente',
@@ -112,8 +175,13 @@ const MessageList = ({ filters = {} }) => {
   };
 
   const handleRefresh = () => {
+    fetchChannelCount();
     fetchMessages(1, false);
   };
+
+  useEffect(() => {
+    fetchChannelCount();
+  }, [fetchChannelCount]);
 
   const handleExportRelevants = async () => {
     try {
@@ -138,14 +206,96 @@ const MessageList = ({ filters = {} }) => {
     }
   };
 
+  const handleDownloadChannels = async () => {
+    try {
+      const response = await channelsAPI.downloadChannelGraph();
+      const blob = new Blob([response.data], { type: 'application/zip' });
+      const disposition = response.headers['content-disposition'];
+      let filename = 'channel_graph.zip';
+      if (disposition && disposition.includes('filename=')) {
+        const match = disposition.match(/filename[*]?=['"]?(?:UTF-8'')?([^;\n"']+)['"]?/i);
+        if (match) filename = match[1].trim();
+      }
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      setSnackbar({
+        open: true,
+        message: 'Descarga de canales iniciada',
+        severity: 'success'
+      });
+    } catch (err) {
+      console.error('Error al descargar canales:', err);
+      setSnackbar({
+        open: true,
+        message: `Error al descargar canales: ${err.response?.data?.error || err.message}`,
+        severity: 'error'
+      });
+    }
+  };
+
+  const handleDownloadMessages = async () => {
+    try {
+      const response = await messagesAPI.downloadFilteredCSV({
+        ...filters,
+        excludeNotRelevant: !showNotRelevant,
+      });
+      const blob = new Blob([response.data], { type: 'text/csv;charset=utf-8;' });
+      const disposition = response.headers['content-disposition'];
+      let filename = 'mensajes_filtrados.csv';
+      if (disposition && disposition.includes('filename=')) {
+        const match = disposition.match(/filename[*]?=['"]?(?:UTF-8'')?([^;\n"']+)['"]?/i);
+        if (match) filename = match[1].trim();
+      }
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      setSnackbar({
+        open: true,
+        message: 'Descarga iniciada',
+        severity: 'success'
+      });
+    } catch (err) {
+      console.error('Error al descargar:', err);
+      setSnackbar({
+        open: true,
+        message: `Error al descargar: ${err.message}`,
+        severity: 'error'
+      });
+    }
+  };
+
   const handleCloseSnackbar = () => {
     setSnackbar({ ...snackbar, open: false });
   };
 
   if (loading && messages.length === 0) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
+      <Box
+        display="flex"
+        flexDirection="column"
+        justifyContent="center"
+        alignItems="center"
+        minHeight="200px"
+        sx={{ mt: 4 }}
+      >
         <CircularProgress />
+        <Typography variant="body1" sx={{ mt: 2 }}>
+          {getLoadingMessage(filters)}
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+          Puede tardar unos segundos con búsquedas o filtros amplios.
+        </Typography>
       </Box>
     );
   }
@@ -172,22 +322,83 @@ const MessageList = ({ filters = {} }) => {
 
   return (
     <Box sx={{ mt: 4 }}>
+      {loading && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          <Box display="flex" alignItems="flex-start" gap={1.5}>
+            <CircularProgress size={18} sx={{ mt: 0.25, flexShrink: 0 }} />
+            <Box>
+              <Typography variant="body2">{getLoadingMessage(filters)}</Typography>
+              <Typography variant="caption" color="text.secondary">
+                Espera un momento; el proceso sigue en curso.
+              </Typography>
+            </Box>
+          </Box>
+        </Alert>
+      )}
       {/* Header con estadísticas y botones */}
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h6" color="textSecondary">
-          {totalMessages > 0 ? `${totalMessages} mensajes encontrados` : 'Sin mensajes'}
-        </Typography>
+        <Tooltip
+          title={`${formatPublicationCount(totalMessages)} publicaciones · ${formatPublicationCount(totalChannels)} canales (clic para actualizar)`}
+        >
+          <Button
+            variant="outlined"
+            onClick={handleRefresh}
+            disabled={loading}
+            aria-label={`${totalMessages} publicaciones, ${totalChannels} canales`}
+            sx={{
+              textTransform: 'none',
+              color: 'text.secondary',
+              borderColor: 'divider',
+              px: 2,
+              py: 1,
+            }}
+          >
+            <Box display="flex" alignItems="center" gap={1.5}>
+              <Box display="flex" alignItems="center" gap={0.5} component="span">
+                <ArticleIcon fontSize="small" color="action" aria-hidden />
+                <Typography variant="body1" component="span" fontWeight={500}>
+                  {formatPublicationCount(totalMessages)}
+                </Typography>
+              </Box>
+              <Box
+                component="span"
+                sx={{ width: '1px', height: 20, bgcolor: 'divider' }}
+                aria-hidden
+              />
+              <Box display="flex" alignItems="center" gap={0.5} component="span">
+                <CampaignIcon fontSize="small" color="action" aria-hidden />
+                <Typography variant="body1" component="span" fontWeight={500}>
+                  {formatPublicationCount(totalChannels)}
+                </Typography>
+              </Box>
+            </Box>
+          </Button>
+        </Tooltip>
         
         <Box display="flex" gap={2}>
           <Button
             variant="outlined"
-            onClick={handleRefresh}
-            startIcon={<RefreshIcon />}
+            onClick={handleDownloadMessages}
+            startIcon={<DownloadIcon />}
             disabled={loading}
           >
-            Actualizar
+            Descargar mensajes
           </Button>
-          
+          <Button
+            variant="outlined"
+            onClick={handleDownloadChannels}
+            startIcon={<DownloadIcon />}
+            disabled={loading}
+          >
+            Descargar canales
+          </Button>
+          <Button
+            variant="outlined"
+            onClick={() => setShowNotRelevant((prev) => !prev)}
+            disabled={loading}
+          >
+            {showNotRelevant ? 'Ocultar no relevantes' : 'Mostrar no relevantes'}
+          </Button>
           <Button
             variant="contained"
             color="secondary"

@@ -1,24 +1,36 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Container, 
   Box, 
-  Typography, 
   Paper,
-  Chip,
   Grid,
+  TextField,
+  Button,
+  InputAdornment,
+  Typography,
+  CircularProgress,
 } from '@mui/material';
+import { Search as SearchIcon } from '@mui/icons-material';
 import FilterBar from './FilterBar';
 import MessageList from './MessageList';
 import ScoreExplanation from './ScoreExplanation';
+import MessagesOverTimeChart from './MessagesOverTimeChart';
+import ChartErrorBoundary from './ChartErrorBoundary';
 import logo from '../assets/Logo_MonitorIA ajustado.png';
+import { useAuth } from '../auth/AuthContext';
+import UserMenu from '../auth/components/UserMenu';
 
 const SCROLL_THRESHOLD = 180;
 const LOGO_SIZE = { xs: 210, sm: 270, md: 330 };
 const LOGO_SIZE_SMALL = 88;
 
 const Dashboard = () => {
+  const { logout } = useAuth();
+  const navigate = useNavigate();
   const [filters, setFilters] = useState({});
-  const [channels, setChannels] = useState([]);
+  const [searchInput, setSearchInput] = useState('');
+  const [searchPending, setSearchPending] = useState(false);
   const [scrollProgress, setScrollProgress] = useState(0);
   const logoRef = useRef(null);
   const [logoTransform, setLogoTransform] = useState({
@@ -26,6 +38,11 @@ const Dashboard = () => {
     shiftY: 0,
     scaleTarget: 1
   });
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login', { replace: true });
+  };
 
   useEffect(() => {
     const handleScroll = () => {
@@ -61,11 +78,20 @@ const Dashboard = () => {
 
   const handleFilterChange = (newFilters) => {
     setFilters(newFilters);
+    setSearchInput(newFilters.search ?? '');
+    setSearchPending(false);
   };
 
-  const handleChannelsLoad = (loadedChannels) => {
-    setChannels(loadedChannels);
+  const handleSearchApply = () => {
+    setSearchPending(true);
+    setFilters((prev) => ({ ...prev, search: searchInput.trim() }));
   };
+
+  const handleDateRangeFromChart = (dateStart, dateEnd) => {
+    setFilters((prev) => ({ ...prev, dateStart, dateEnd }));
+  };
+
+  const handleChannelsLoad = () => {};
 
   const clampedProgress = Math.min(scrollProgress, 1);
   const largeLogoOpacity = 1 - clampedProgress;
@@ -77,6 +103,8 @@ const Dashboard = () => {
 
   return (
     <Container maxWidth="xl" sx={{ py: 4, overflow: 'visible' }}>
+      <UserMenu onLogout={handleLogout} />
+
       <Box
         sx={{
           position: 'fixed',
@@ -139,38 +167,63 @@ const Dashboard = () => {
           sx={{ flexBasis: { md: '80%' }, maxWidth: { md: '80%' } }}
         >
 
-          {/* Información de canales disponibles */}
-          {channels.length > 0 && (
-            <Paper sx={{ p: 2, mb: 3, bgcolor: 'grey.50' }}>
-              <Typography variant="subtitle2" color="textSecondary" gutterBottom>
-                Canales disponibles ({channels.length}):
+          {/* Gráfico de evolución de mensajes (filtro de fechas por rango) */}
+          <ChartErrorBoundary>
+            <MessagesOverTimeChart
+              filters={filters}
+              onDateRangeChange={handleDateRangeFromChart}
+              selectedDateStart={filters.dateStart}
+              selectedDateEnd={filters.dateEnd}
+            />
+          </ChartErrorBoundary>
+
+          {/* Barra de búsqueda en mensajes */}
+          <Paper sx={{ p: 2, mb: 3 }} elevation={0} variant="outlined">
+            <Box display="flex" gap={2} alignItems="center" flexWrap="wrap">
+              <TextField
+                fullWidth
+                size="small"
+                label="Buscar en mensajes"
+                placeholder="Ej.: clima AND energía  |  vacuna OR pfizer  |  madrid NOT fútbol"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSearchApply()}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon color="action" />
+                    </InputAdornment>
+                  )
+                }}
+                sx={{ flex: { xs: '1 1 100%', sm: '1 1 auto' }, minWidth: 200 }}
+              />
+              <Button
+                variant="contained"
+                onClick={handleSearchApply}
+                startIcon={searchPending ? <CircularProgress size={16} color="inherit" /> : <SearchIcon />}
+                disabled={searchPending}
+                sx={{ flexShrink: 0 }}
+              >
+                {searchPending ? 'Buscando…' : 'Buscar'}
+              </Button>
+            </Box>
+            <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+              Busca en el texto almacenado del mensaje y su enlace (URL), no en el nombre del canal ni en el widget visible.
+              Puedes usar operadores <strong>AND</strong>, <strong>OR</strong> y <strong>NOT</strong> (ej.:{' '}
+              <code>clima AND energía</code>, <code>vacuna OR pfizer</code>, <code>madrid NOT fútbol</code>).
+              Sin operadores, todas las palabras deben aparecer.
+            </Typography>
+            {filters.search && (
+              <Typography variant="caption" color="primary" display="block" sx={{ mt: 0.5 }}>
+                Búsqueda activa: «{filters.search}»
               </Typography>
-              <Box display="flex" flexWrap="wrap" gap={1}>
-                {channels.slice(0, 10).map((channel) => (
-                  <Chip 
-                    key={channel} 
-                    label={channel} 
-                    size="small" 
-                    variant="outlined"
-                    onClick={() => setFilters(prev => ({ ...prev, channel }))}
-                    sx={{ cursor: 'pointer' }}
-                  />
-                ))}
-                {channels.length > 10 && (
-                  <Chip 
-                    label={`+${channels.length - 10} más`} 
-                    size="small" 
-                    variant="outlined"
-                    color="primary"
-                  />
-                )}
-              </Box>
-            </Paper>
-          )}
+            )}
+          </Paper>
 
           {/* Lista de mensajes */}
           <MessageList 
             filters={filters}
+            onLoadingChange={setSearchPending}
           />
         </Grid>
 
@@ -191,6 +244,7 @@ const Dashboard = () => {
           <FilterBar 
             onFilterChange={handleFilterChange}
             onChannelsLoad={handleChannelsLoad}
+            currentFilters={filters}
           />
         </Grid>
       </Grid>
