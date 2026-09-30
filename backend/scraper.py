@@ -281,6 +281,12 @@ def load_channels_from_postgres():
 
 def get_channels_from_user(channels_file=None, channels_s3_key=None, non_interactive=False, prefer_postgres=False):
     """Solicita los canales al usuario y los guarda en un archivo CSV"""
+    # Si se pasa --channels-file explícito, tiene prioridad (retomar pendientes)
+    if channels_file and os.path.exists(channels_file):
+        channels = load_channels_from_csv(channels_file)
+        if channels:
+            print(f"✓ Canales cargados desde fichero ({len(channels)}): {channels_file}")
+            return channels
     if prefer_postgres or os.environ.get("DATABASE_URL"):
         db_channels = load_channels_from_postgres()
         if db_channels:
@@ -628,7 +634,7 @@ async def main(args):
         channels_file=args.channels_file,
         channels_s3_key=args.channels_s3_key,
         non_interactive=args.non_interactive,
-        prefer_postgres=bool(args.postgres or os.environ.get("DATABASE_URL")),
+        prefer_postgres=bool(args.postgres or os.environ.get("DATABASE_URL")) and not args.channels_file,
     )
     if not channels:
         print("Error: No se pudieron cargar los canales")
