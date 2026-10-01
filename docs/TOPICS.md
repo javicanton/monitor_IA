@@ -31,13 +31,40 @@ git checkout desarrollo && git pull
 
 ### 2) Validar y nombrar etiquetas
 
-En staging (`:8080`):
+`/topics` exige JWT (`Authorization: Bearer …`). Sin token verás `{"msg": "Missing Authorization Header"}` — el proxy está bien; falta auth.
+
+**Opción A — UI:** entra en `http://<host>:8080`, inicia sesión, filtro **Temas**.
+
+**Opción B — curl con token** (DevTools → Application → localStorage → `token`):
 
 ```bash
-curl -s http://localhost:8080/topics | python3 -m json.tool | head -80
+TOKEN='eyJ...'   # valor de localStorage.token tras login
+curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8080/topics \
+  | python3 -m json.tool | head -80
 ```
 
-Revisa el filtro **Temas**. Nombra con admin `POST /admin/topic_titles` o editando `topics/staging/topic_titles.json`.
+**Opción C — sin JWT, en el EC2 de staging** (lee S3 vía el contenedor):
+
+```bash
+docker exec monitoria-staging-backend python3 - <<'PY'
+from app import load_topics_meta
+for t in load_topics_meta()[:20]:
+    print(t["id"], t.get("count"), t["label"])
+PY
+
+# o el script (usa TOKEN si existe; si no, cae a S3 vía backend):
+./scripts/verify-topics.sh http://localhost:8080
+# TOKEN='eyJ...' ./scripts/verify-topics.sh
+```
+
+**Opción D — S3 directo:**
+
+```bash
+aws s3 cp s3://monitoria-data/topics/staging/topics.json - | python3 -m json.tool | head -80
+```
+
+Nombra etiquetas con admin `POST /admin/topic_titles` (rol admin) o editando `topics/staging/topic_titles.json`.  
+Con OpenAI en el próximo train: `TOPICS_OPENAI_KEY=sk-...` en el `.env` del worker.
 
 ### 3) Aplicar al histórico
 
