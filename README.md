@@ -11,6 +11,8 @@ Aplicación web para analizar y etiquetar mensajes de alto rendimiento en canale
 
 Detalle: [docs/RAMAS.md](docs/RAMAS.md)
 
+Comandos de terminal (SSH, despliegue, scraper): [docs/MANUAL_TERMINAL.md](docs/MANUAL_TERMINAL.md)
+
 ## 🚀 Características
 
 - **Conexión automática con AWS S3**: Los datos se cargan automáticamente desde el bucket configurado
