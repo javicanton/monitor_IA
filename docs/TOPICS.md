@@ -63,11 +63,24 @@ Checkpoint: `topics/staging/assign_progress.json`.
 | Variable | Default staging | Uso |
 |----------|-----------------|-----|
 | `TOPICS_TRAIN_SAMPLE_SIZE` | 30000 | Submuestra de entrenamiento |
-| `TOPICS_MIN_TEXT_LEN` | 40 | Descarta textos cortos / ruido |
+| `TOPICS_MIN_TEXT_LEN` | 40 | Longitud mínima tras limpiar URLs |
+| `TOPICS_MIN_ALPHA_CHARS` | 25 | Mínimo de letras (evita solo-enlace/emoji) |
+| `TOPICS_SAMPLE_OVERFETCH` | 2.5 | Sobre-muestreo SQL antes del filtro de calidad |
+| `TOPICS_EXCLUDE_MEDIA_ONLY` | 1 | Excluye Photo/Video/… con caption corto |
 | `TOPICS_SAMPLE_SEED` | monitoria-topics | Muestreo reproducible |
 | `TOPICS_ASSIGN_BATCH_SIZE` | 5000 | Lotes assign-all |
 | `TOPICS_NUM_TOPICS` | 40–100 | Objetivo BERTopic |
 | `TOPICS_S3_PREFIX` | `topics/staging/` | No mezclar con prod |
+
+## Calidad de texto (exclusiones)
+
+Se excluyen del entrenamiento (y del assign si no pasan el filtro):
+
+- Mensajes que son **solo una URL** (`https://…`)
+- Texto que, **tras quitar URLs / t.me**, queda corto o sin letras suficientes
+- **Photo / Video / GIF / Sticker / Voice / Audio / Document / Webpage** con caption corto (<60 chars o < `TOPICS_MIN_TEXT_LEN`)
+
+Los mensajes con media **y** caption narrativo largo **sí** se usan.
 
 ## CLI del worker
 

@@ -2,6 +2,7 @@ import importlib.util
 import json
 import logging
 import os
+import re
 import tempfile
 import subprocess
 import sys
@@ -10,13 +11,28 @@ from hashlib import md5
 
 import pandas as pd
 from botocore.exceptions import ClientError
-from sqlalchemy import func, text
+from sqlalchemy import func, or_, text
 
 from config import Config
 from s3_client import get_s3_client
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+_URL_RE = re.compile(r"https?://\S+|www\.\S+", re.IGNORECASE)
+_TG_LINK_RE = re.compile(r"(?:t\.me|telegram\.me)/\S+", re.IGNORECASE)
+_WHITESPACE_RE = re.compile(r"\s+")
+# Tipos de media que suelen ser “solo archivo” sin narrativa si el caption es vacío/ruido
+_MEDIA_ONLY_TYPES = {
+    "photo",
+    "video",
+    "gif",
+    "sticker",
+    "voice",
+    "audio",
+    "document",
+    "webpage",
+}
 
 
 def _safe_datetime(value):
@@ -72,26 +88,73 @@ def _rows_to_dataframe(rows):
                 "Message ID": row.telegram_id,
                 "Message Text": row.message_text,
                 "Date Sent": row.date_sent,
+                "Media Type": getattr(row, "media_type", None),
             }
         )
     return pd.DataFrame(records)
 
 
-def _postgres_base_query(days_window=None, min_text_len=None):
+def clean_topic_text(raw):
+    """Quita URLs / enlaces t.me y normaliza espacios. Devuelve texto residual."""
+    if raw is None:
+        return ""
+    text_val = str(raw).strip()
+    if not text_val:
+        return ""
+    text_val = _URL_RE.sub(" ", text_val)
+    text_val = _TG_LINK_RE.sub(" ", text_val)
+    text_val = _WHITESPACE_RE.sub(" ", text_val).strip()
+    return text_val
+
+
+def is_usable_topic_text(raw, min_text_len=None, min_alpha=None):
+    """True si, tras limpiar URLs, queda texto narrativo suficiente."""
+    min_text_len = Config.TOPICS_MIN_TEXT_LEN if min_text_len is None else min_text_len
+    min_alpha = Config.TOPICS_MIN_ALPHA_CHARS if min_alpha is None else min_alpha
+    cleaned = clean_topic_text(raw)
+    if len(cleaned) < int(min_text_len):
+        return False
+    alpha_chars = sum(1 for ch in cleaned if ch.isalpha())
+    if alpha_chars < int(min_alpha):
+        return False
+    # Evitar cadenas casi solo puntuación / menciones
+    if alpha_chars / max(len(cleaned), 1) < 0.35:
+        return False
+    return True
+
+
+def _postgres_base_query(days_window=None, min_text_len=None, exclude_media_only=None):
     from models import Message, db
 
     min_text_len = Config.TOPICS_MIN_TEXT_LEN if min_text_len is None else min_text_len
+    if exclude_media_only is None:
+        exclude_media_only = Config.TOPICS_EXCLUDE_MEDIA_ONLY
     date_expr = func.coalesce(Message.date_sent, Message.creation_date)
+    media_expr = func.lower(func.coalesce(Message.media_type, ""))
+    text_len = func.length(func.trim(Message.message_text))
+
     q = (
         db.session.query(
             Message.id.label("pg_id"),
             Message.message_id.label("telegram_id"),
             Message.message_text.label("message_text"),
             date_expr.label("date_sent"),
+            Message.media_type.label("media_type"),
         )
         .filter(Message.message_text.isnot(None))
-        .filter(func.length(func.trim(Message.message_text)) >= int(min_text_len))
+        .filter(text_len >= int(min_text_len))
+        # Excluir en SQL los que son claramente una sola URL
+        .filter(~Message.message_text.op("~*")(r"^\s*https?://\S+\s*$"))
     )
+    if exclude_media_only:
+        # Excluir Photo/Video/... con caption corto; se mantienen si hay texto largo
+        caption_min = max(int(min_text_len), 60)
+        q = q.filter(
+            or_(
+                ~media_expr.in_(sorted(_MEDIA_ONLY_TYPES)),
+                text_len >= caption_min,
+            )
+        )
     if days_window and days_window > 0:
         cutoff = datetime.utcnow() - timedelta(days=days_window)
         q = q.filter(date_expr >= cutoff)
@@ -103,21 +166,28 @@ def _load_messages_from_postgres(
     sample_size=None,
     min_text_len=None,
     seed=None,
+    quality_filter=True,
 ):
     """Carga mensajes desde RDS. Con sample_size, muestreo aleatorio en SQL (no carga todo)."""
     from pg_upsert import create_app
 
     app = create_app()
+    fetch_size = None
+    if sample_size and sample_size > 0:
+        overfetch = max(1.0, float(Config.TOPICS_SAMPLE_OVERFETCH or 1.0))
+        fetch_size = int(sample_size * overfetch) if quality_filter else int(sample_size)
+
     with app.app_context():
         from models import db
 
         q = _postgres_base_query(days_window=days_window, min_text_len=min_text_len)
-        if sample_size and sample_size > 0:
+        if fetch_size:
             seed_val = _seed_to_float(seed if seed is not None else Config.TOPICS_SAMPLE_SEED)
             db.session.execute(text("SELECT setseed(:s)"), {"s": seed_val})
-            q = q.order_by(func.random()).limit(int(sample_size))
+            q = q.order_by(func.random()).limit(int(fetch_size))
             logger.info(
-                "Muestreo SQL: sample_size=%s seed=%s min_text_len=%s",
+                "Muestreo SQL: fetch=%s target=%s seed=%s min_text_len=%s",
+                fetch_size,
                 sample_size,
                 seed if seed is not None else Config.TOPICS_SAMPLE_SEED,
                 min_text_len if min_text_len is not None else Config.TOPICS_MIN_TEXT_LEN,
@@ -125,7 +195,16 @@ def _load_messages_from_postgres(
         rows = q.all()
         df = _rows_to_dataframe(rows)
         logger.info("Mensajes cargados desde PostgreSQL: %d", len(df))
-        return df
+
+    if quality_filter and not df.empty:
+        before = len(df)
+        docs, _ = _prepare_docs(df, min_text_len=min_text_len)
+        df = df.assign(_topic_text=docs)
+        df = df[df["_topic_text"].str.len() > 0]
+        logger.info("Filtro calidad texto: %d -> %d", before, len(df))
+        if sample_size and sample_size > 0 and len(df) > sample_size:
+            df = df.head(int(sample_size))
+    return df.reset_index(drop=True)
 
 
 def _iter_message_batches_from_postgres(
@@ -177,17 +256,30 @@ def _extract_text_column(df):
     return None
 
 
-def _prepare_docs(df, min_text_len=None):
+def _prepare_docs(df, min_text_len=None, min_alpha=None):
+    """Devuelve serie de textos limpios usable para topics ('' = descartar)."""
     text_col = _extract_text_column(df)
     if not text_col:
         return pd.Series([], dtype=str), text_col
 
     min_text_len = Config.TOPICS_MIN_TEXT_LEN if min_text_len is None else min_text_len
-    series = df[text_col].fillna("").astype(str).str.strip()
-    # Quitar textos que son casi solo URL
-    series = series.where(~series.str.match(r"^https?://\S+$", na=False), "")
-    series = series.where(series.str.len() >= int(min_text_len), "")
-    return series, text_col
+    min_alpha = Config.TOPICS_MIN_ALPHA_CHARS if min_alpha is None else min_alpha
+
+    cleaned = df[text_col].fillna("").astype(str).map(clean_topic_text)
+    usable = cleaned.map(
+        lambda t: t
+        if is_usable_topic_text(t, min_text_len=min_text_len, min_alpha=min_alpha)
+        else ""
+    )
+
+    # Media sin caption narrativo (doble filtro por si SQL dejó pasar alguno)
+    if Config.TOPICS_EXCLUDE_MEDIA_ONLY and "Media Type" in df.columns:
+        media = df["Media Type"].fillna("").astype(str).str.lower()
+        media_only = media.isin(_MEDIA_ONLY_TYPES)
+        short = usable.str.len() < max(int(min_text_len), 60)
+        usable = usable.where(~(media_only & short), "")
+
+    return usable, text_col
 
 
 def _load_state(s3_client):

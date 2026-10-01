@@ -96,7 +96,15 @@ class Config:
     # Entrenamiento con submuestra (datasets grandes): tamaño absoluto preferido sobre ratio.
     TOPICS_TRAIN_SAMPLE_SIZE = int(os.environ.get('TOPICS_TRAIN_SAMPLE_SIZE', 30000))
     TOPICS_MIN_TEXT_LEN = int(os.environ.get('TOPICS_MIN_TEXT_LEN', 40))
+    # Tras quitar URLs, exigir al menos N letras (evita "solo enlace" / emoji / ruido).
+    TOPICS_MIN_ALPHA_CHARS = int(os.environ.get('TOPICS_MIN_ALPHA_CHARS', 25))
+    # Multiplicador de muestreo SQL antes del filtro de calidad (train-sample).
+    TOPICS_SAMPLE_OVERFETCH = float(os.environ.get('TOPICS_SAMPLE_OVERFETCH', 2.5))
     TOPICS_SAMPLE_SEED = os.environ.get('TOPICS_SAMPLE_SEED', 'monitoria-topics')
+    # Excluir media sin caption útil (Photo/Video/...) — el caption corto se filtra por texto.
+    TOPICS_EXCLUDE_MEDIA_ONLY = os.environ.get('TOPICS_EXCLUDE_MEDIA_ONLY', '1').lower() in (
+        '1', 'true', 'yes',
+    )
     # Asignación al histórico por lotes
     TOPICS_ASSIGN_BATCH_SIZE = int(os.environ.get('TOPICS_ASSIGN_BATCH_SIZE', 5000))
     TOPICS_ASSIGN_PROGRESS_KEY = os.environ.get(
