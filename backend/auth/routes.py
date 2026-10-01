@@ -83,9 +83,15 @@ def login_request():
         return jsonify({'error': 'No se pudo enviar el correo. Inténtalo más tarde.'}), 502
 
     payload = dict(generic)
-    if not sent and dev_return_link_enabled():
+    # Con AUTH_DEV_RETURN_LINK=1 siempre devolvemos el enlace (staging / local).
+    # Antes solo si el correo no se enviaba; con SES activo el JSON no lo traía
+    # y el email apuntaba a AUTH_FRONTEND_URL (a menudo producción).
+    if dev_return_link_enabled():
         payload['dev_magic_link'] = magic_url
-        logger.info('AUTH_DEV_RETURN_LINK activo: enlace incluido en la respuesta')
+        if not sent:
+            logger.info('AUTH_DEV_RETURN_LINK activo: enlace incluido (correo no enviado)')
+        else:
+            logger.info('AUTH_DEV_RETURN_LINK activo: enlace incluido (correo también enviado)')
 
     return jsonify(payload), 200
 

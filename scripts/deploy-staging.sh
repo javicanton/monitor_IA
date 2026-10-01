@@ -34,7 +34,12 @@ export COMPOSE_DOCKER_CLI_BUILD=1
 export STAGING_FRONTEND_PORT="$STAGING_PORT"
 export FRONTEND_PORT="$STAGING_PORT"
 export REACT_APP_APP_VERSION="${REACT_APP_APP_VERSION:-1.0}"
+# URL pública del frontend staging (magic links). Si entras por IP pública:
+#   STAGING_PUBLIC_URL=http://x.x.x.x:8080 ./scripts/deploy-staging.sh
+export STAGING_PUBLIC_URL="${STAGING_PUBLIC_URL:-http://localhost:${STAGING_PORT}}"
+export STAGING_AUTH_DEV_RETURN_LINK="${STAGING_AUTH_DEV_RETURN_LINK:-1}"
 echo "==> Versión UI staging: ${REACT_APP_APP_VERSION} (puerto ${STAGING_PORT})"
+echo "==> Magic links → ${STAGING_PUBLIC_URL} (AUTH_DEV_RETURN_LINK=${STAGING_AUTH_DEV_RETURN_LINK})"
 
 if $down; then
   docker compose -p "$PROJECT_NAME" "${COMPOSE_FILES[@]}" down
@@ -117,8 +122,14 @@ fi
 
 echo ""
 echo "Staging listo (producción en :80 no se toca si usa otro proyecto compose)."
-echo "  http://localhost:${STAGING_PORT}/"
+echo "  ${STAGING_PUBLIC_URL}/"
 echo "  curl -s http://localhost:${STAGING_PORT}/api/health"
+echo ""
+echo "Login staging (magic link a ${STAGING_PUBLIC_URL}, no a app.monitoria.org):"
+echo "  curl -s -X POST http://localhost:${STAGING_PORT}/api/auth/login-request \\"
+echo "    -H 'Content-Type: application/json' -d '{\"email\":\"TU@EMAIL\"}' | python3 -m json.tool"
+echo "  → abre el campo dev_magic_link en el navegador (caduca 15 min)."
+echo "  Si el correo aún apunta a app.monitoria.org, sustituye el host por ${STAGING_PUBLIC_URL}."
 
 if docker ps --format '{{.Names}}' | grep -q '^monitoria-staging-backend$'; then
   db_mode="$(docker exec monitoria-staging-backend printenv DATABASE_URL 2>/dev/null | wc -c)"
