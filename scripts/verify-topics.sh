@@ -54,7 +54,7 @@ fi
 # Fallback: leer topics.json desde S3 dentro del backend staging (sin JWT)
 if [[ "$topic_count" -eq 0 ]] && docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^monitoria-staging-backend$'; then
   echo "  → leyendo meta S3 vía monitoria-staging-backend..."
-  s3_count="$(docker exec monitoria-staging-backend python3 - <<'PY' 2>/dev/null || echo 0
+  s3_count="$(docker exec -i monitoria-staging-backend python3 - <<'PY' 2>/dev/null || echo 0
 from app import load_topics_meta
 topics = load_topics_meta()
 print(len(topics))

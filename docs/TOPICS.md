@@ -46,9 +46,11 @@ curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8080/topics \
 **Opción C — sin JWT, en el EC2 de staging** (lee S3 vía el contenedor):
 
 ```bash
-docker exec monitoria-staging-backend python3 - <<'PY'
+docker exec -i monitoria-staging-backend python3 - <<'PY'
 from app import load_topics_meta
-for t in load_topics_meta()[:20]:
+topics = load_topics_meta()
+print("total:", len(topics))
+for t in topics[:20]:
     print(t["id"], t.get("count"), t["label"])
 PY
 
