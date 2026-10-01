@@ -15,6 +15,11 @@ services:
       - TOPICS_META_KEY=${TOPICS_META_KEY:-topics/staging/topics.json}
       - TOPICS_ASSIGNMENTS_KEY=${TOPICS_ASSIGNMENTS_KEY:-topics/staging/message_topics.csv}
       - TOPICS_TITLES_KEY=${TOPICS_TITLES_KEY:-topics/staging/topic_titles.json}
+      # No usar AUTH_FRONTEND_URL de producción (app.monitoria.org): el magic link
+      # debe abrir el frontend de staging. Sobrescribe el valor del .env compartido.
+      - AUTH_FRONTEND_URL=${STAGING_PUBLIC_URL:-http://localhost:8080}
+      # En staging devolvemos el enlace en el JSON de login-request (además del email).
+      - AUTH_DEV_RETURN_LINK=${STAGING_AUTH_DEV_RETURN_LINK:-1}
     volumes:
       - staging-backend-cache:/app/data/cache
       - staging-backend-instance:/app/instance
