@@ -11,7 +11,15 @@ if DATABASE_URL:
     # RDS a veces devuelve URL con protocolo postgres://; SQLAlchemy necesita postgresql://
     if DATABASE_URL.startswith('postgres://'):
         DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
+    # Forzar driver psycopg2 (instalado vía psycopg2-binary). Sin esto, SQLAlchemy
+    # reciente puede elegir el dialecto "psycopg" (v3) y fallar en el worker.
+    if DATABASE_URL.startswith('postgresql://') and '+psycopg' not in DATABASE_URL.split('://', 1)[0]:
+        DATABASE_URL = DATABASE_URL.replace('postgresql://', 'postgresql+psycopg2://', 1)
+    elif DATABASE_URL.startswith('postgresql+psycopg://'):
+        DATABASE_URL = DATABASE_URL.replace('postgresql+psycopg://', 'postgresql+psycopg2://', 1)
     SQLALCHEMY_DATABASE_URI = DATABASE_URL
+    # Mantener os.environ alineado para create_app / scripts del worker
+    os.environ['DATABASE_URL'] = DATABASE_URL
 else:
     SQLALCHEMY_DATABASE_URI = os.environ.get('SQLALCHEMY_DATABASE_URI', 'sqlite:///telegram_app.db')
 
