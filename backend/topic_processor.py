@@ -22,6 +22,33 @@ logger = logging.getLogger(__name__)
 _URL_RE = re.compile(r"https?://\S+|www\.\S+", re.IGNORECASE)
 _TG_LINK_RE = re.compile(r"(?:t\.me|telegram\.me)/\S+", re.IGNORECASE)
 _WHITESPACE_RE = re.compile(r"\s+")
+# Ruido típico de captions / reenvíos (inglés)
+_COPYRIGHT_BOILERPLATE_RE = re.compile(
+    r"copyright\s+infringement|"
+    r"displayed\s+on\s+(?:this\s+)?device|"
+    r"couldn'?t\s+be\s+displayed|"
+    r"this\s+content\s+isn'?t\s+available|"
+    r"media\s+could\s+not\s+be\s+loaded|"
+    r"galaxy\s+ai|"
+    r"samsung\s+galaxy",
+    re.IGNORECASE,
+)
+# CTAs de canal Telegram (español/inglés) que monopolizan clusters
+_CHANNEL_CTA_RE = re.compile(
+    r"\búnete\b|"
+    r"\bunete\b|"
+    r"\bsuscr[ií]bete\b|"
+    r"\búnete\s+al\s+canal\b|"
+    r"\bunete\s+al\s+canal\b|"
+    r"\benlace\s+al\s+canal\b|"
+    r"\bcanal\s+de\s+telegram\b|"
+    r"\btelegram\s+channel\b|"
+    r"\bjoin\s+(?:our|the)\s+channel\b|"
+    r"\bfollow\s+(?:us|our\s+channel)\b|"
+    r"\bs[ií]guenos\b|"
+    r"\bs[ií]gueme\b",
+    re.IGNORECASE,
+)
 # Tipos de media que suelen ser “solo archivo” sin narrativa si el caption es vacío/ruido
 _MEDIA_ONLY_TYPES = {
     "photo",
@@ -107,8 +134,43 @@ def clean_topic_text(raw):
     return text_val
 
 
+def is_boilerplate_topic_text(raw_or_cleaned):
+    """
+    Detecta plantillas que rompen BERTopic: copyright/device en inglés,
+    CTAs cortos de canal (únete…), saludos vacíos muy cortos.
+    """
+    cleaned = clean_topic_text(raw_or_cleaned)
+    if not cleaned:
+        return True
+    low = cleaned.lower()
+
+    if _COPYRIGHT_BOILERPLATE_RE.search(low):
+        return True
+
+    # CTA de canal: si es corto, fuera; si es largo pero empieza/termina en CTA puro, fuera
+    if _CHANNEL_CTA_RE.search(low):
+        if len(cleaned) < 220:
+            return True
+        # Texto casi solo CTA + emojis / puntuación
+        alpha = sum(1 for ch in cleaned if ch.isalpha())
+        if alpha < 80:
+            return True
+
+    # Saludos genéricos muy cortos (feliz lunes / viva españa sin narrativa)
+    if len(cleaned) < 80 and re.search(
+        r"\bfeliz\s*(lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)\b|"
+        r"\bviva\s+espa[nñ]a\b|"
+        r"\bbuenos\s+d[ií]as\b|"
+        r"\bbuenas\s+noches\b",
+        low,
+    ):
+        return True
+
+    return False
+
+
 def is_usable_topic_text(raw, min_text_len=None, min_alpha=None):
-    """True si, tras limpiar URLs, queda texto narrativo suficiente."""
+    """True si, tras limpiar URLs, queda texto narrativo suficiente (sin plantillas)."""
     min_text_len = Config.TOPICS_MIN_TEXT_LEN if min_text_len is None else min_text_len
     min_alpha = Config.TOPICS_MIN_ALPHA_CHARS if min_alpha is None else min_alpha
     cleaned = clean_topic_text(raw)
@@ -120,7 +182,24 @@ def is_usable_topic_text(raw, min_text_len=None, min_alpha=None):
     # Evitar cadenas casi solo puntuación / menciones
     if alpha_chars / max(len(cleaned), 1) < 0.35:
         return False
+    if getattr(Config, "TOPICS_EXCLUDE_BOILERPLATE", True) and is_boilerplate_topic_text(cleaned):
+        return False
     return True
+
+
+def _normalize_for_dedupe(text_val):
+    return _WHITESPACE_RE.sub(" ", str(text_val or "").lower()).strip()
+
+
+def _dedupe_docs_for_training(df, text_col="_topic_text"):
+    """Deja una fila por texto normalizado (el CTA repetido no satura el modelo)."""
+    if df.empty or text_col not in df.columns:
+        return df
+    keys = df[text_col].map(_normalize_for_dedupe)
+    before = len(df)
+    out = df.loc[~keys.duplicated(keep="first")].copy()
+    logger.info("Deduplicación train: %d -> %d docs únicos", before, len(out))
+    return out
 
 
 def _postgres_base_query(days_window=None, min_text_len=None, exclude_media_only=None):
@@ -569,11 +648,25 @@ def train_sample_topics(
     if df.empty:
         return {"status": "empty", "mode": "train_sample", "reason": "no_usable_text"}
 
+    raw_usable = int(len(df))
+    train_df = df
+    if getattr(Config, "TOPICS_TRAIN_DEDUPE", True):
+        train_df = _dedupe_docs_for_training(df, text_col="_topic_text")
+    if train_df.empty:
+        return {"status": "empty", "mode": "train_sample", "reason": "no_unique_text"}
+
+    logger.info(
+        "train-sample docs: usable=%s unique_for_train=%s boilerplate_filter=%s",
+        raw_usable,
+        len(train_df),
+        getattr(Config, "TOPICS_EXCLUDE_BOILERPLATE", True),
+    )
+
     s3_client = get_s3_client()
     with tempfile.TemporaryDirectory() as tmpdir:
         model_path = os.path.join(tmpdir, "model.pkl")
         _train_model_with_pytopicgram(
-            df["_topic_text"].tolist(),
+            train_df["_topic_text"].tolist(),
             model_path,
             apply_sample_ratio=False,
         )
@@ -581,6 +674,7 @@ def train_sample_topics(
         _upload_model(s3_client, model_path)
         _save_topics_metadata(s3_client, model)
 
+        # Asignar a toda la submuestra usable (no solo a los únicos del train)
         topics, probs = _assign_topics(model, df["_topic_text"].tolist())
         if probs is None:
             probs = [None] * len(topics)
@@ -609,7 +703,8 @@ def train_sample_topics(
     return {
         "status": "ok",
         "mode": "train_sample",
-        "sample_size": int(len(df)),
+        "sample_size": int(raw_usable),
+        "train_unique_docs": int(len(train_df)),
         "topics_found": int(n_topics),
         "postgres_rows": int(written),
         "days_window": days_window or None,

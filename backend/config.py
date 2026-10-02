@@ -105,6 +105,14 @@ class Config:
     TOPICS_EXCLUDE_MEDIA_ONLY = os.environ.get('TOPICS_EXCLUDE_MEDIA_ONLY', '1').lower() in (
         '1', 'true', 'yes',
     )
+    # Excluir plantillas (únete/CTA canal, copyright device, etc.) del train/assign.
+    TOPICS_EXCLUDE_BOILERPLATE = os.environ.get('TOPICS_EXCLUDE_BOILERPLATE', '1').lower() in (
+        '1', 'true', 'yes',
+    )
+    # En train-sample: entrenar solo con textos únicos (evita que un CTA x5000 monopolice BERTopic).
+    TOPICS_TRAIN_DEDUPE = os.environ.get('TOPICS_TRAIN_DEDUPE', '1').lower() in (
+        '1', 'true', 'yes',
+    )
     # Asignación al histórico por lotes
     TOPICS_ASSIGN_BATCH_SIZE = int(os.environ.get('TOPICS_ASSIGN_BATCH_SIZE', 5000))
     TOPICS_ASSIGN_PROGRESS_KEY = os.environ.get(

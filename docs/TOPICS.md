@@ -67,6 +67,8 @@ Checkpoint: `topics/staging/assign_progress.json`.
 | `TOPICS_MIN_ALPHA_CHARS` | 25 | Mínimo de letras (evita solo-enlace/emoji) |
 | `TOPICS_SAMPLE_OVERFETCH` | 2.5 | Sobre-muestreo SQL antes del filtro de calidad |
 | `TOPICS_EXCLUDE_MEDIA_ONLY` | 1 | Excluye Photo/Video/… con caption corto |
+| `TOPICS_EXCLUDE_BOILERPLATE` | 1 | Excluye CTAs «únete», copyright/device, saludos vacíos |
+| `TOPICS_TRAIN_DEDUPE` | 1 | Entrena solo con textos únicos (evita monopolio de plantillas) |
 | `TOPICS_SAMPLE_SEED` | monitoria-topics | Muestreo reproducible |
 | `TOPICS_ASSIGN_BATCH_SIZE` | 5000 | Lotes assign-all |
 | `TOPICS_NUM_TOPICS` | 40–100 | Objetivo BERTopic |
@@ -79,8 +81,17 @@ Se excluyen del entrenamiento (y del assign si no pasan el filtro):
 - Mensajes que son **solo una URL** (`https://…`)
 - Texto que, **tras quitar URLs / t.me**, queda corto o sin letras suficientes
 - **Photo / Video / GIF / Sticker / Voice / Audio / Document / Webpage** con caption corto (<60 chars o < `TOPICS_MIN_TEXT_LEN`)
+- **Plantillas**: copyright/device en inglés, CTAs de canal (`únete`, `suscríbete`, …), saludos genéricos muy cortos
+- En train-sample, con `TOPICS_TRAIN_DEDUPE=1`, solo entra **una copia** de cada texto (el resto se puede asignar después, pero no satura BERTopic)
 
 Los mensajes con media **y** caption narrativo largo **sí** se usan.
+
+Si un topic se come >80% de la muestra (p. ej. `si_españa_únete`), sube el worker con este filtro y reentrena:
+
+```bash
+TOPICS_NUM_TOPICS=20 TOPICS_SAMPLE_OVERFETCH=4 \
+./scripts/deploy-worker.sh --train-sample --days 0 --sample-size 10000
+```
 
 ## CLI del worker
 
