@@ -86,12 +86,16 @@ Se excluyen del entrenamiento (y del assign si no pasan el filtro):
 
 Los mensajes con media **y** caption narrativo largo **sí** se usan.
 
-Si un topic se come >80% de la muestra (p. ej. `si_españa_únete`), sube el worker con este filtro y reentrena:
+Si un topic se come >80% de la muestra (p. ej. `si_españa_telegram`), reentrena con el filtro reforzado
+(y opcionalmente ventana reciente para menos plantillas históricas):
 
 ```bash
-TOPICS_NUM_TOPICS=20 TOPICS_SAMPLE_OVERFETCH=4 \
-./scripts/deploy-worker.sh --train-sample --days 0 --sample-size 10000
+TOPICS_NUM_TOPICS=20 TOPICS_SAMPLE_OVERFETCH=5 TOPICS_MIN_TEXT_LEN=60 \
+./scripts/deploy-worker.sh --train-sample --days 90 --sample-size 10000
 ```
+
+En los logs del worker debe aparecer `Deduplicación train: N -> M` con **M ≪ N**.
+Si M ≈ N y sigue un mega-cluster, el rebuild no cargó este código.
 
 ## CLI del worker
 

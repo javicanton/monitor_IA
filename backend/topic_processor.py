@@ -38,17 +38,33 @@ _CHANNEL_CTA_RE = re.compile(
     r"\búnete\b|"
     r"\bunete\b|"
     r"\bsuscr[ií]bete\b|"
-    r"\búnete\s+al\s+canal\b|"
-    r"\bunete\s+al\s+canal\b|"
     r"\benlace\s+al\s+canal\b|"
     r"\bcanal\s+de\s+telegram\b|"
     r"\btelegram\s+channel\b|"
     r"\bjoin\s+(?:our|the)\s+channel\b|"
     r"\bfollow\s+(?:us|our\s+channel)\b|"
     r"\bs[ií]guenos\b|"
-    r"\bs[ií]gueme\b",
+    r"\bs[ií]gueme\b|"
+    r"\bcompart[ea]\b|"
+    r"\binvita\s+a\s+(?:tus\s+)?amig",
     re.IGNORECASE,
 )
+# Promo corto típico: "si … españa … telegram/canal" (sin decir únete)
+_PROMO_CHANNEL_RE = re.compile(r"\btelegram\b|\bcanal\b", re.IGNORECASE)
+_PROMO_HOOK_RE = re.compile(
+    r"\bespa[nñ]a\b|\benlace\b|\btrend\b|\bstellar\b|\bsemilla\b|"
+    r"\bwhatsapp\b|\bgroup\b|\bgrupo\b",
+    re.IGNORECASE,
+)
+_EMOJI_RE = re.compile(
+    "["
+    "\U0001F300-\U0001FAFF"
+    "\U00002700-\U000027BF"
+    "\U0001F1E0-\U0001F1FF"
+    "]+",
+    flags=re.UNICODE,
+)
+_NON_WORD_RE = re.compile(r"[^a-z0-9áéíóúüñ\s]+", re.IGNORECASE)
 # Tipos de media que suelen ser “solo archivo” sin narrativa si el caption es vacío/ruido
 _MEDIA_ONLY_TYPES = {
     "photo",
@@ -137,26 +153,36 @@ def clean_topic_text(raw):
 def is_boilerplate_topic_text(raw_or_cleaned):
     """
     Detecta plantillas que rompen BERTopic: copyright/device en inglés,
-    CTAs cortos de canal (únete…), saludos vacíos muy cortos.
+    CTAs de canal (únete / telegram / canal…), saludos vacíos.
     """
     cleaned = clean_topic_text(raw_or_cleaned)
     if not cleaned:
         return True
     low = cleaned.lower()
+    alpha = sum(1 for ch in cleaned if ch.isalpha())
 
     if _COPYRIGHT_BOILERPLATE_RE.search(low):
         return True
 
-    # CTA de canal: si es corto, fuera; si es largo pero empieza/termina en CTA puro, fuera
+    # CTA explícito
     if _CHANNEL_CTA_RE.search(low):
-        if len(cleaned) < 220:
-            return True
-        # Texto casi solo CTA + emojis / puntuación
-        alpha = sum(1 for ch in cleaned if ch.isalpha())
-        if alpha < 80:
+        if len(cleaned) < 280 or alpha < 100:
             return True
 
-    # Saludos genéricos muy cortos (feliz lunes / viva españa sin narrativa)
+    # Promo corto "… España … Telegram/canal …" (el cluster si_españa_telegram)
+    if len(cleaned) < 320 and _PROMO_CHANNEL_RE.search(low) and _PROMO_HOOK_RE.search(low):
+        return True
+
+    # Mención a telegram/canal en textos muy cortos (casi siempre promo)
+    if len(cleaned) < 140 and _PROMO_CHANNEL_RE.search(low):
+        return True
+
+    # Pocas palabras significativas + telegram/canal → plantilla
+    tokens = [w for w in _NON_WORD_RE.sub(" ", low).split() if len(w) > 2]
+    if _PROMO_CHANNEL_RE.search(low) and len(set(tokens)) <= 12 and len(cleaned) < 400:
+        return True
+
+    # Saludos genéricos muy cortos
     if len(cleaned) < 80 and re.search(
         r"\bfeliz\s*(lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)\b|"
         r"\bviva\s+espa[nñ]a\b|"
@@ -188,17 +214,28 @@ def is_usable_topic_text(raw, min_text_len=None, min_alpha=None):
 
 
 def _normalize_for_dedupe(text_val):
-    return _WHITESPACE_RE.sub(" ", str(text_val or "").lower()).strip()
+    """Huella estable: minúsculas, sin emoji/puntuación, primeras 20 palabras >2 chars."""
+    t = str(text_val or "").lower()
+    t = _EMOJI_RE.sub(" ", t)
+    t = _URL_RE.sub(" ", t)
+    t = _TG_LINK_RE.sub(" ", t)
+    t = _NON_WORD_RE.sub(" ", t)
+    tokens = [w for w in _WHITESPACE_RE.sub(" ", t).strip().split() if len(w) > 2]
+    return " ".join(tokens[:20])
 
 
 def _dedupe_docs_for_training(df, text_col="_topic_text"):
-    """Deja una fila por texto normalizado (el CTA repetido no satura el modelo)."""
+    """Deja una fila por huella normalizada (variantes de CTA no saturan el modelo)."""
     if df.empty or text_col not in df.columns:
         return df
     keys = df[text_col].map(_normalize_for_dedupe)
+    # Descartar huellas vacías / casi vacías
+    valid = keys.str.len() >= 8
     before = len(df)
-    out = df.loc[~keys.duplicated(keep="first")].copy()
-    logger.info("Deduplicación train: %d -> %d docs únicos", before, len(out))
+    out = df.loc[valid].copy()
+    keys = keys.loc[valid]
+    out = out.loc[~keys.duplicated(keep="first")].copy()
+    logger.info("Deduplicación train: %d -> %d docs únicos (near-hash)", before, len(out))
     return out
 
 
