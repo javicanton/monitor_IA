@@ -11,10 +11,12 @@ from flask import Blueprint, current_app, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
+from auth.activity import log_activity
 from auth.allowlist import is_email_allowed
+from auth.decorators import admin_required
 from auth.email_service import dev_return_link_enabled, send_magic_link_email
 from auth.session import get_or_create_user, issue_access_token, load_user_by_identity, normalize_email
-from models import db
+from models import UserActivity, db
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +117,7 @@ def verify_magic_link(token):
             return jsonify({'error': 'Acceso no autorizado'}), 403
         access_token = issue_access_token(user)
         _consumed_tokens[fp] = datetime.utcnow()
+        log_activity('login', user=user, status_code=200, meta={'method': 'magic_link'})
         return jsonify({
             'access_token': access_token,
             'user': user.to_dict(),
@@ -137,8 +140,32 @@ def get_current_user():
 @auth_bp.route('/logout', methods=['POST'])
 @jwt_required(optional=True)
 def logout():
-    # JWT stateless: el cliente elimina el token. Endpoint para simetría futura.
+    # JWT stateless: el cliente elimina el token. La actividad la registra el after_request.
     return jsonify({'message': 'Sesión cerrada'}), 200
+
+
+@auth_bp.route('/admin/activity', methods=['GET'])
+@admin_required
+def list_activity():
+    """Lista actividad reciente (solo admin). Query: limit, email, action."""
+    try:
+        limit = min(int(request.args.get('limit', 100)), 500)
+    except (TypeError, ValueError):
+        limit = 100
+    email = (request.args.get('email') or '').strip().lower()
+    action = (request.args.get('action') or '').strip()
+
+    q = UserActivity.query.order_by(UserActivity.created_at.desc())
+    if email:
+        q = q.filter(UserActivity.email == email)
+    if action:
+        q = q.filter(UserActivity.action == action)
+    rows = q.limit(limit).all()
+    return jsonify({
+        'success': True,
+        'count': len(rows),
+        'activities': [r.to_dict() for r in rows],
+    }), 200
 
 
 # --- Endpoints legado desactivados (registro / password) ---

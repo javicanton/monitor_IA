@@ -87,6 +87,38 @@ export REACT_APP_ACCESS_REQUEST_URL='https://tally.so/r/xxxx'
 # o pasar como build-arg en docker compose
 ```
 
+## Actividad de usuarios (login + API)
+
+Tabla PostgreSQL `user_activities` (se crea con `db.create_all`).
+
+| Acción | Cuándo |
+|--------|--------|
+| `login` | Magic link canjeado |
+| `logout` | `POST /auth/logout` |
+| `filter_messages` | Listado/filtros/búsqueda |
+| `load_more` | Paginación |
+| `messages_over_time` | Gráfico |
+| `label_message` | Etiquetado |
+| `download_filtered_messages` / `download_channel_graph` / `export_relevants` | Descargas |
+| `admin_*` | Acciones admin de topics |
+
+Consulta (solo admin):
+
+```bash
+curl -sS "https://app.monitoria.org/api/auth/admin/activity?limit=50" \
+  -H "Authorization: Bearer $TOKEN"
+# filtros opcionales: &email=user@example.com&action=login
+```
+
+En SQL:
+
+```sql
+SELECT created_at, email, action, meta, ip
+FROM user_activities
+ORDER BY created_at DESC
+LIMIT 50;
+```
+
 ## Fase 2 (OAuth)
 
 Implementar `GoogleOAuthProvider` / `GitHubOAuthProvider` y rutas `/auth/oauth/...`. La allowlist por email sigue siendo la puerta de entrada.
