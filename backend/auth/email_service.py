@@ -24,23 +24,26 @@ def send_magic_link_email(to_email: str, magic_link_url: str) -> bool:
     """
     Envía el magic link. Si el correo no está configurado, registra el enlace
     en logs (útil en desarrollo) y no lanza error.
+
+    Importante: el enlace HTML usa ses:no-track para que SES no lo reescriba
+    a awstrack.me (ese wrapping suele romper el token del magic link).
     """
     subject = 'Tu enlace de acceso a MonitorIA'
     safe_url = html.escape(magic_link_url, quote=True)
     body = (
         'Hola,\n\n'
-        'Para iniciar sesión en MonitorIA, abre el enlace «Link de acceso» '
-        'en este correo (caduca en 15 minutos y solo se puede usar una vez).\n\n'
-        'Si tu cliente de correo no muestra el enlace, copia y pega esta URL '
-        'en el navegador:\n'
+        'Para iniciar sesión en MonitorIA, copia y pega esta URL '
+        'en el navegador (caduca en 15 minutos y solo se puede usar una vez):\n\n'
         f'{magic_link_url}\n\n'
         'Si no solicitaste este acceso, ignora este mensaje.\n'
     )
+    # ses:no-track: evita click-tracking de SES que envuelve la URL en awstrack.me
     html_body = (
         '<p>Hola,</p>'
         '<p>Usa el siguiente enlace para iniciar sesión en MonitorIA '
         '(caduca en 15 minutos y solo se puede usar una vez):</p>'
-        f'<p><a href="{safe_url}">Link de acceso</a></p>'
+        f'<p><a ses:no-track href="{safe_url}">Link de acceso</a></p>'
+        f'<p style="word-break:break-all;font-size:12px;color:#555">{safe_url}</p>'
         '<p>Si no solicitaste este acceso, ignora este mensaje.</p>'
     )
 
