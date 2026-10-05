@@ -16,7 +16,7 @@ from auth.allowlist import add_email_to_allowlist, is_email_allowed
 from auth.decorators import admin_required
 from auth.email_service import dev_return_link_enabled, send_magic_link_email
 from auth.session import get_or_create_user, issue_access_token, load_user_by_identity, normalize_email
-from models import UserActivity, db
+from models import MagicLinkCode, UserActivity, db
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ auth_bp = Blueprint('auth', __name__)
 MAGIC_LINK_SALT = 'magic-link-login'
 MAGIC_LINK_MAX_AGE = 15 * 60  # 15 minutos
 
-# Tokens de un solo uso (en memoria; suficiente para una sola instancia)
+# Tokens itsdangerous de un solo uso (legado; los códigos DB son preferidos)
 _consumed_tokens: dict[str, datetime] = {}
 
 
@@ -50,14 +50,28 @@ def _purge_consumed_tokens() -> None:
 
 
 def _token_fingerprint(token: str) -> str:
-    # Huella corta para marcar consumo sin guardar el token completo
     import hashlib
     return hashlib.sha256(token.encode('utf-8')).hexdigest()[:32]
 
 
+def _create_magic_code(email: str) -> MagicLinkCode:
+    """Persiste un código corto de un solo uso (sobrevive al wrapping de SES)."""
+    import secrets
+    code = secrets.token_urlsafe(18)[:24]
+    row = MagicLinkCode(
+        id=code,
+        email=email,
+        expires_at=datetime.utcnow() + timedelta(seconds=MAGIC_LINK_MAX_AGE),
+    )
+    db.session.add(row)
+    db.session.commit()
+    return row
+
+
 def _build_magic_url(email: str) -> str:
-    token = _serializer().dumps({'email': email}, salt=MAGIC_LINK_SALT)
-    return f'{_frontend_base_url()}/auth/verify?token={quote(token, safe="")}'
+    """URL corta con ?code=… (no el JWT/itsdangerous largo que SES rompe)."""
+    row = _create_magic_code(email)
+    return f'{_frontend_base_url()}/auth/verify?code={quote(row.id, safe="")}'
 
 
 @auth_bp.route('/login-request', methods=['POST'])
@@ -76,12 +90,16 @@ def login_request():
     if not email or '@' not in email:
         return jsonify({'error': 'Email no válido'}), 400
 
-    # Misma respuesta genérica si no está en la allowlist
     if not is_email_allowed(email):
         logger.info('Login request rechazado (no allowlist): %s', email)
         return jsonify(generic), 200
 
-    magic_url = _build_magic_url(email)
+    try:
+        magic_url = _build_magic_url(email)
+    except Exception as exc:
+        logger.exception('No se pudo crear magic code: %s', exc)
+        db.session.rollback()
+        return jsonify({'error': 'No se pudo generar el enlace. Inténtalo más tarde.'}), 500
 
     try:
         sent = send_magic_link_email(email, magic_url)
@@ -96,9 +114,90 @@ def login_request():
     return jsonify(payload), 200
 
 
-@auth_bp.route('/verify-magic-link/<path:token>', methods=['GET', 'POST'])
-def verify_magic_link(token):
-    """Valida el magic link, crea/actualiza el usuario y emite JWT."""
+def _extract_magic_payload(path_token: str | None = None) -> tuple[str | None, str | None]:
+    """Devuelve (code, token) desde path, query o JSON."""
+    code = None
+    token = None
+    data = {}
+    if request.method in ('POST', 'PUT', 'PATCH'):
+        data = request.get_json(silent=True) or {}
+    if isinstance(data.get('code'), str) and data['code'].strip():
+        code = data['code'].strip()
+    if isinstance(data.get('token'), str) and data['token'].strip():
+        token = data['token'].strip()
+    if not code and isinstance(request.args.get('code'), str):
+        code = request.args.get('code', '').strip() or None
+    if not token and isinstance(request.args.get('token'), str):
+        token = request.args.get('token', '').strip() or None
+    if path_token and not token and not code:
+        # path legado: puede ser token largo o code corto
+        path_token = path_token.strip()
+        if len(path_token) <= 32 and '.' not in path_token:
+            code = path_token
+        else:
+            token = path_token
+    return code, token
+
+
+def _login_user_by_email(email: str, meta: dict | None = None):
+    email = normalize_email(email)
+    if not email or not is_email_allowed(email):
+        return jsonify({'error': 'Acceso no autorizado'}), 403
+    try:
+        user = get_or_create_user(email)
+        if not user:
+            return jsonify({'error': 'Acceso no autorizado'}), 403
+        access_token = issue_access_token(user)
+        log_activity(
+            'login',
+            user=user,
+            status_code=200,
+            meta=meta or {'method': 'magic_link'},
+        )
+        return jsonify({
+            'access_token': access_token,
+            'user': user.to_dict(),
+        }), 200
+    except Exception as exc:
+        db.session.rollback()
+        logger.exception('Error verificando magic link: %s', exc)
+        return jsonify({'error': 'No se pudo completar el acceso'}), 500
+
+
+def _verify_magic_code(code: str):
+    if '/1/' in code:
+        code = code.split('/1/', 1)[0]
+    code = code.strip()
+    if not code:
+        return jsonify({'error': 'Enlace no válido'}), 400
+
+    row = MagicLinkCode.query.get(code)
+    if not row:
+        return jsonify({'error': 'Enlace no válido'}), 400
+    if row.used_at is not None:
+        return jsonify({'error': 'Este enlace ya fue utilizado'}), 400
+    if row.expires_at < datetime.utcnow():
+        return jsonify({'error': 'El enlace ha caducado. Solicita uno nuevo.'}), 400
+
+    row.used_at = datetime.utcnow()
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        return jsonify({'error': 'No se pudo completar el acceso'}), 500
+
+    return _login_user_by_email(row.email, meta={'method': 'magic_link_code'})
+
+
+def _verify_magic_token(token: str):
+    """Legado: token itsdangerous en la URL."""
+    if not token:
+        return jsonify({'error': 'Enlace no válido'}), 400
+
+    if '/1/' in token:
+        token = token.split('/1/', 1)[0]
+    token = token.strip()
+
     _purge_consumed_tokens()
     fp = _token_fingerprint(token)
     if fp in _consumed_tokens:
@@ -112,24 +211,29 @@ def verify_magic_link(token):
         return jsonify({'error': 'Enlace no válido'}), 400
 
     email = normalize_email(data.get('email', '') if isinstance(data, dict) else '')
-    if not email or not is_email_allowed(email):
-        return jsonify({'error': 'Acceso no autorizado'}), 403
+    _consumed_tokens[fp] = datetime.utcnow()
+    return _login_user_by_email(email, meta={'method': 'magic_link_token'})
 
-    try:
-        user = get_or_create_user(email)
-        if not user:
-            return jsonify({'error': 'Acceso no autorizado'}), 403
-        access_token = issue_access_token(user)
-        _consumed_tokens[fp] = datetime.utcnow()
-        log_activity('login', user=user, status_code=200, meta={'method': 'magic_link'})
-        return jsonify({
-            'access_token': access_token,
-            'user': user.to_dict(),
-        }), 200
-    except Exception as exc:
-        db.session.rollback()
-        logger.exception('Error verificando magic link: %s', exc)
-        return jsonify({'error': 'No se pudo completar el acceso'}), 500
+
+def _verify_magic_request(path_token: str | None = None):
+    code, token = _extract_magic_payload(path_token)
+    if code:
+        return _verify_magic_code(code)
+    if token:
+        return _verify_magic_token(token)
+    return jsonify({'error': 'Enlace no válido'}), 400
+
+
+@auth_bp.route('/verify-magic-link', methods=['GET', 'POST'])
+def verify_magic_link_body():
+    """Verificación preferida: POST JSON {code} o {token}."""
+    return _verify_magic_request()
+
+
+@auth_bp.route('/verify-magic-link/<path:token>', methods=['GET', 'POST'])
+def verify_magic_link(token):
+    """Compatibilidad: code/token en el path."""
+    return _verify_magic_request(token)
 
 
 @auth_bp.route('/me', methods=['GET'])

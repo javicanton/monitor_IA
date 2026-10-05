@@ -8,8 +8,9 @@ OAuth (Google / GitHub) está preparado en stubs (`backend/auth/providers/`) par
 
 1. El usuario introduce su email en `/login`.
 2. `POST /auth/login-request` comprueba la allowlist (sin revelar si el correo está o no).
-3. Si está autorizado, se envía un enlace a `{AUTH_FRONTEND_URL}/auth/verify?token=...`.
-4. El frontend llama a `GET /auth/verify-magic-link/<token>` y guarda el JWT.
+3. Si está autorizado, se crea un **código corto** en BD y se envía
+   `{AUTH_FRONTEND_URL}/auth/verify?code=...` (sin `<a href>` trackeable).
+4. El frontend llama a `POST /auth/verify-magic-link` con `{code}` y guarda el JWT.
 5. Las rutas de datos del API exigen `Authorization: Bearer <token>`.
 
 ## Allowlist
@@ -46,6 +47,7 @@ usuario@example.com
 | `ALLOWED_EMAILS` | Lista de correos (opcional si usas el archivo) |
 | `ALLOWED_EMAILS_FILE` | Ruta alternativa al archivo de allowlist |
 | `AUTH_FRONTEND_URL` | Base del frontend para el enlace (`https://app.monitoria.org`) |
+| `SES_CONFIGURATION_SET` | Configuration set SES **sin** click tracking (evita `awstrack.me`) |
 | `AUTH_DEV_RETURN_LINK` | `1` en desarrollo: incluye el magic link en la respuesta JSON |
 | `MAIL_*` / SES | Envío real del correo (si no hay mail, el enlace se registra en logs) |
 | `JWT_SECRET_KEY` | Firma de tokens |
