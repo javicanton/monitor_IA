@@ -22,28 +22,33 @@ def _mail_configured() -> bool:
 
 def send_magic_link_email(to_email: str, magic_link_url: str) -> bool:
     """
-    Envía el magic link. Si el correo no está configurado, registra el enlace
-    en logs (útil en desarrollo) y no lanza error.
+    Envía el magic link.
 
-    Importante: el enlace HTML usa ses:no-track para que SES no lo reescriba
-    a awstrack.me (ese wrapping suele romper el token del magic link).
+    Evita awstrack.me en la medida de lo posible:
+    - HTML con ses:no-track (si el configuration set lo honra)
+    - Cabecera X-SES-CONFIGURATION-SET si SES_CONFIGURATION_SET está definida
+      (usa un configuration set CON click tracking desactivado)
+    - URL también en texto plano para copiar/pegar
     """
     subject = 'Tu enlace de acceso a MonitorIA'
     safe_url = html.escape(magic_link_url, quote=True)
     body = (
         'Hola,\n\n'
-        'Para iniciar sesión en MonitorIA, copia y pega esta URL '
+        'Para iniciar sesión en MonitorIA, copia y pega ESTA URL completa '
         'en el navegador (caduca en 15 minutos y solo se puede usar una vez):\n\n'
         f'{magic_link_url}\n\n'
+        'Importante: usa la URL que empieza por https://app.monitoria.org '
+        '(o tu dominio), no la de awstrack.me.\n\n'
         'Si no solicitaste este acceso, ignora este mensaje.\n'
     )
-    # ses:no-track: evita click-tracking de SES que envuelve la URL en awstrack.me
     html_body = (
         '<p>Hola,</p>'
-        '<p>Usa el siguiente enlace para iniciar sesión en MonitorIA '
-        '(caduca en 15 minutos y solo se puede usar una vez):</p>'
-        f'<p><a ses:no-track href="{safe_url}">Link de acceso</a></p>'
-        f'<p style="word-break:break-all;font-size:12px;color:#555">{safe_url}</p>'
+        '<p>Copia y pega esta URL en el navegador para iniciar sesión en MonitorIA '
+        '(caduca en 15 minutos, un solo uso):</p>'
+        f'<p style="word-break:break-all;font-family:monospace;font-size:14px">{safe_url}</p>'
+        # sin <a href> → SES no puede envolver un hipervínculo HTML
+        '<p>Si tu cliente convierte la URL en enlace y pasa por awstrack.me, '
+        'copia la URL de arriba a mano.</p>'
         '<p>Si no solicitaste este acceso, ignora este mensaje.</p>'
     )
 
@@ -67,8 +72,16 @@ def send_magic_link_email(to_email: str, magic_link_url: str) -> bool:
             html=html_body,
             sender=current_app.config.get('MAIL_DEFAULT_SENDER'),
         )
+        # Configuration set SIN click/open tracking (crear en consola SES)
+        config_set = (
+            os.environ.get('SES_CONFIGURATION_SET')
+            or os.environ.get('AWS_SES_CONFIGURATION_SET')
+            or ''
+        ).strip()
+        if config_set:
+            msg.extra_headers = {'X-SES-CONFIGURATION-SET': config_set}
         mail.send(msg)
-        logger.info('Magic link enviado a %s', to_email)
+        logger.info('Magic link enviado a %s (config_set=%s)', to_email, config_set or 'none')
         return True
     except Exception as exc:
         logger.exception('Error enviando magic link a %s: %s', to_email, exc)
