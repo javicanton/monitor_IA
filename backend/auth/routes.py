@@ -147,15 +147,23 @@ def logout():
 @auth_bp.route('/admin/activity', methods=['GET'])
 @admin_required
 def list_activity():
-    """Lista actividad reciente (solo admin). Query: limit, email, action."""
+    """Lista actividad reciente (solo admin). Query: limit, email, action, days."""
     try:
         limit = min(int(request.args.get('limit', 100)), 500)
     except (TypeError, ValueError):
         limit = 100
     email = (request.args.get('email') or '').strip().lower()
     action = (request.args.get('action') or '').strip()
+    days = request.args.get('days')
 
     q = UserActivity.query.order_by(UserActivity.created_at.desc())
+    if days is not None and str(days).strip() != '':
+        try:
+            days_n = max(1, min(int(days), 90))
+            since = datetime.utcnow() - timedelta(days=days_n)
+            q = q.filter(UserActivity.created_at >= since)
+        except (TypeError, ValueError):
+            pass
     if email:
         q = q.filter(UserActivity.email == email)
     if action:
@@ -166,6 +174,65 @@ def list_activity():
         'count': len(rows),
         'activities': [r.to_dict() for r in rows],
     }), 200
+
+
+@auth_bp.route('/admin/activity/export', methods=['GET'])
+@admin_required
+def export_activity_csv():
+    """Descarga CSV de actividad (solo admin). Query: days (default 7, máx 90)."""
+    import csv
+    import io
+    import json
+
+    try:
+        days_n = max(1, min(int(request.args.get('days', 7)), 90))
+    except (TypeError, ValueError):
+        days_n = 7
+
+    since = datetime.utcnow() - timedelta(days=days_n)
+    rows = (
+        UserActivity.query
+        .filter(UserActivity.created_at >= since)
+        .order_by(UserActivity.created_at.desc())
+        .limit(10000)
+        .all()
+    )
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow([
+        'created_at', 'email', 'user_id', 'action', 'method', 'path',
+        'status_code', 'ip', 'user_agent', 'meta',
+    ])
+    for r in rows:
+        meta_str = ''
+        if r.meta is not None:
+            try:
+                meta_str = json.dumps(r.meta, ensure_ascii=False)
+            except (TypeError, ValueError):
+                meta_str = str(r.meta)
+        writer.writerow([
+            r.created_at.isoformat() if r.created_at else '',
+            r.email or '',
+            r.user_id if r.user_id is not None else '',
+            r.action or '',
+            r.method or '',
+            r.path or '',
+            r.status_code if r.status_code is not None else '',
+            r.ip or '',
+            r.user_agent or '',
+            meta_str,
+        ])
+
+    from flask import Response
+    filename = f'user_activity_last_{days_n}d_{datetime.utcnow().strftime("%Y%m%d")}.csv'
+    return Response(
+        buf.getvalue(),
+        mimetype='text/csv; charset=utf-8',
+        headers={
+            'Content-Disposition': f'attachment; filename="{filename}"',
+        },
+    )
 
 
 # --- Endpoints legado desactivados (registro / password) ---

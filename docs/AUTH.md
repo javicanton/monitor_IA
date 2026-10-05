@@ -107,7 +107,14 @@ Consulta (solo admin):
 ```bash
 curl -sS "https://app.monitoria.org/api/auth/admin/activity?limit=50" \
   -H "Authorization: Bearer $TOKEN"
-# filtros opcionales: &email=user@example.com&action=login
+# filtros opcionales: &email=user@example.com&action=login&days=7
+```
+
+Descarga CSV (últimos N días, default 7) — también desde el menú de perfil (usuarios admin):
+
+```bash
+curl -sS "https://app.monitoria.org/api/auth/admin/activity/export?days=7" \
+  -H "Authorization: Bearer $TOKEN" -o activity.csv
 ```
 
 En SQL:
