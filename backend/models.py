@@ -137,4 +137,37 @@ class User(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'last_login': self.last_login.isoformat() if self.last_login else None,
             'oauth_provider': self.oauth_provider
-        } 
+        }
+
+class UserActivity(db.Model):
+    """Registro de logins y acciones relevantes en la API (sin analytics de producto)."""
+    __tablename__ = 'user_activities'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True, index=True)
+    email = db.Column(db.String(120), nullable=True, index=True)
+    action = db.Column(db.String(64), nullable=False, index=True)
+    path = db.Column(db.String(255), nullable=True)
+    method = db.Column(db.String(10), nullable=True)
+    status_code = db.Column(db.Integer, nullable=True)
+    ip = db.Column(db.String(64), nullable=True)
+    user_agent = db.Column(db.String(255), nullable=True)
+    meta = db.Column(db.JSON, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    user = db.relationship('User', backref=db.backref('activities', lazy='dynamic'))
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'email': self.email,
+            'action': self.action,
+            'path': self.path,
+            'method': self.method,
+            'status_code': self.status_code,
+            'ip': self.ip,
+            'user_agent': self.user_agent,
+            'meta': self.meta,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+ 

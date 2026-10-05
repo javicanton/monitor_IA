@@ -9,6 +9,11 @@ COMPOSE_FILE="docker-compose.worker.yml"
 ONCE=false
 DAYS="${TOPICS_DAYS_WINDOW:-7}"
 DOWN=false
+MODE="incremental"
+SAMPLE_SIZE="${TOPICS_TRAIN_SAMPLE_SIZE:-30000}"
+BATCH_SIZE="${TOPICS_ASSIGN_BATCH_SIZE:-5000}"
+RESET_PROGRESS=false
+WORKER_EXTRA_ARGS=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -16,21 +21,34 @@ while [[ $# -gt 0 ]]; do
     --down) DOWN=true; shift ;;
     --days=*) DAYS="${1#*=}"; shift ;;
     --days) DAYS="${2:-7}"; shift 2 ;;
+    --train-sample) MODE="train_sample"; ONCE=true; shift ;;
+    --assign-all) MODE="assign_all"; ONCE=true; shift ;;
+    --sample-size=*) SAMPLE_SIZE="${1#*=}"; shift ;;
+    --sample-size) SAMPLE_SIZE="${2:-30000}"; shift 2 ;;
+    --batch-size=*) BATCH_SIZE="${1#*=}"; shift ;;
+    --batch-size) BATCH_SIZE="${2:-5000}"; shift 2 ;;
+    --reset-progress) RESET_PROGRESS=true; shift ;;
     -h|--help)
       cat <<EOF
-Uso: $0 [--once] [--days N] [--down]
+Uso: $0 [--once|--train-sample|--assign-all] [--days N] [--down]
 
   Despliega topic_worker con docker-compose.worker.yml en esta instancia.
-  Por defecto procesa solo los últimos 7 días (TOPICS_DAYS_WINDOW).
+  Prefijo S3 por defecto: topics/staging/ (no toca producción).
 
-  --once     Ejecuta una pasada y sale (no deja el bucle activo)
-  --days N   Ventana temporal en días (pruebas: 7)
-  --down     Detiene el contenedor del worker
+  --once              Pasada incremental (mensajes nuevos)
+  --train-sample      Entrenar con submuestra SQL (~TOPICS_TRAIN_SAMPLE_SIZE)
+  --assign-all        Aplicar modelo al histórico por lotes (con checkpoint)
+  --days N            Ventana temporal (0 = sin límite)
+  --sample-size N     Tamaño submuestra para --train-sample
+  --batch-size N      Lote para --assign-all
+  --reset-progress    Reinicia checkpoint de --assign-all
+  --down              Detiene el contenedor del worker
 
-Variables útiles en .env:
-  DATABASE_URL          PostgreSQL (mensajes + message_topics)
-  TOPICS_RESET_STATE=1  Reprocesar toda la ventana (recomendado en pruebas)
-  TOPICS_S3_PREFIX      Prefijo S3 para modelo/asignaciones (p. ej. topics/staging/)
+Flujo recomendado (dataset grande):
+  1) $0 --train-sample --days 0 --sample-size 30000
+  2) Revisar /topics en staging :8080 y nombrar etiquetas
+  3) $0 --assign-all --days 0
+  4) $0   # bucle diario
 EOF
       exit 0
       ;;
@@ -52,6 +70,8 @@ _setup_buildkit() {
 
 _setup_buildkit
 export TOPICS_DAYS_WINDOW="$DAYS"
+export TOPICS_TRAIN_SAMPLE_SIZE="$SAMPLE_SIZE"
+export TOPICS_ASSIGN_BATCH_SIZE="$BATCH_SIZE"
 
 if [[ -f .env ]]; then
   set -a
@@ -59,6 +79,11 @@ if [[ -f .env ]]; then
   source .env
   set +a
 fi
+
+# Reaplicar overrides de CLI tras source .env
+export TOPICS_DAYS_WINDOW="$DAYS"
+export TOPICS_TRAIN_SAMPLE_SIZE="$SAMPLE_SIZE"
+export TOPICS_ASSIGN_BATCH_SIZE="$BATCH_SIZE"
 
 _validate_database_url() {
   if [[ -z "${DATABASE_URL:-}" ]]; then
@@ -128,8 +153,32 @@ else
   compose build topic_worker
 fi
 
+if [[ "$MODE" == "train_sample" ]]; then
+  echo "==> Train-sample: ${SAMPLE_SIZE} msgs, ventana ${DAYS} días..."
+  compose run --rm \
+    -e TOPICS_DAYS_WINDOW="$DAYS" \
+    -e TOPICS_TRAIN_SAMPLE_SIZE="$SAMPLE_SIZE" \
+    topic_worker python topic_worker.py --train-sample --days "$DAYS" --sample-size "$SAMPLE_SIZE"
+  echo "Listo. Revisa S3 (${TOPICS_S3_PREFIX:-topics/staging/}) y /topics en staging :8080"
+  exit 0
+fi
+
+if [[ "$MODE" == "assign_all" ]]; then
+  echo "==> Assign-all: lote ${BATCH_SIZE}, ventana ${DAYS} días..."
+  EXTRA=()
+  if $RESET_PROGRESS; then
+    EXTRA+=(--reset-progress)
+  fi
+  compose run --rm \
+    -e TOPICS_DAYS_WINDOW="$DAYS" \
+    -e TOPICS_ASSIGN_BATCH_SIZE="$BATCH_SIZE" \
+    topic_worker python topic_worker.py --assign-all --days "$DAYS" --batch-size "$BATCH_SIZE" "${EXTRA[@]}"
+  echo "Listo. Checkpoint en ${TOPICS_ASSIGN_PROGRESS_KEY:-topics/staging/assign_progress.json}"
+  exit 0
+fi
+
 if $ONCE; then
-  echo "==> Ejecución única (--once), ventana ${DAYS} días..."
+  echo "==> Ejecución incremental (--once), ventana ${DAYS} días..."
   compose run --rm \
     -e TOPICS_DAYS_WINDOW="$DAYS" \
     topic_worker python topic_worker.py --once --days "$DAYS"
@@ -143,4 +192,6 @@ echo ""
 echo "Worker activo. Logs:"
 echo "  docker logs -f monitoria-topic-worker"
 echo "Ejecución manual:"
+echo "  $0 --train-sample --days 0 --sample-size ${SAMPLE_SIZE}"
+echo "  $0 --assign-all --days 0"
 echo "  $0 --once --days ${DAYS}"

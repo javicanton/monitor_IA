@@ -11,7 +11,15 @@ if DATABASE_URL:
     # RDS a veces devuelve URL con protocolo postgres://; SQLAlchemy necesita postgresql://
     if DATABASE_URL.startswith('postgres://'):
         DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
+    # Forzar driver psycopg2 (instalado vía psycopg2-binary). Sin esto, SQLAlchemy
+    # reciente puede elegir el dialecto "psycopg" (v3) y fallar en el worker.
+    if DATABASE_URL.startswith('postgresql://') and '+psycopg' not in DATABASE_URL.split('://', 1)[0]:
+        DATABASE_URL = DATABASE_URL.replace('postgresql://', 'postgresql+psycopg2://', 1)
+    elif DATABASE_URL.startswith('postgresql+psycopg://'):
+        DATABASE_URL = DATABASE_URL.replace('postgresql+psycopg://', 'postgresql+psycopg2://', 1)
     SQLALCHEMY_DATABASE_URI = DATABASE_URL
+    # Mantener os.environ alineado para create_app / scripts del worker
+    os.environ['DATABASE_URL'] = DATABASE_URL
 else:
     SQLALCHEMY_DATABASE_URI = os.environ.get('SQLALCHEMY_DATABASE_URI', 'sqlite:///telegram_app.db')
 
@@ -85,7 +93,24 @@ class Config:
     TOPICS_DAYS_WINDOW = int(os.environ.get('TOPICS_DAYS_WINDOW', 0))
     # Si es true, ignora el estado incremental y reprocesa toda la ventana.
     TOPICS_RESET_STATE = os.environ.get('TOPICS_RESET_STATE', '').lower() in ('1', 'true', 'yes')
-    
+    # Entrenamiento con submuestra (datasets grandes): tamaño absoluto preferido sobre ratio.
+    TOPICS_TRAIN_SAMPLE_SIZE = int(os.environ.get('TOPICS_TRAIN_SAMPLE_SIZE', 30000))
+    TOPICS_MIN_TEXT_LEN = int(os.environ.get('TOPICS_MIN_TEXT_LEN', 40))
+    # Tras quitar URLs, exigir al menos N letras (evita "solo enlace" / emoji / ruido).
+    TOPICS_MIN_ALPHA_CHARS = int(os.environ.get('TOPICS_MIN_ALPHA_CHARS', 25))
+    # Multiplicador de muestreo SQL antes del filtro de calidad (train-sample).
+    TOPICS_SAMPLE_OVERFETCH = float(os.environ.get('TOPICS_SAMPLE_OVERFETCH', 2.5))
+    TOPICS_SAMPLE_SEED = os.environ.get('TOPICS_SAMPLE_SEED', 'monitoria-topics')
+    # Excluir media sin caption útil (Photo/Video/...) — el caption corto se filtra por texto.
+    TOPICS_EXCLUDE_MEDIA_ONLY = os.environ.get('TOPICS_EXCLUDE_MEDIA_ONLY', '1').lower() in (
+        '1', 'true', 'yes',
+    )
+    # Asignación al histórico por lotes
+    TOPICS_ASSIGN_BATCH_SIZE = int(os.environ.get('TOPICS_ASSIGN_BATCH_SIZE', 5000))
+    TOPICS_ASSIGN_PROGRESS_KEY = os.environ.get(
+        'TOPICS_ASSIGN_PROGRESS_KEY', 'topics/staging/assign_progress.json'
+    )
+
     # Configuración de CORS
     CORS_HEADERS = 'Content-Type'
     CORS_ORIGINS = os.environ.get('CORS_ORIGINS', 'http://app.monitoria.org,http://localhost:3000').split(',') 
