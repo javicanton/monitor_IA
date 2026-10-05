@@ -3,11 +3,15 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Container, Box, CircularProgress, Alert, Typography, Button } from '@mui/material';
 import { useAuth } from '../AuthContext';
 
+const cleanParam = (value) => {
+  if (!value) return '';
+  return value.includes('/1/') ? value.split('/1/')[0] : value;
+};
+
 const VerifyMagicLinkPage = () => {
   const [searchParams] = useSearchParams();
-  const rawToken = searchParams.get('token') || '';
-  // Limpia basura de awstrack si el redirect dejó /1/... pegado al token
-  const token = rawToken.includes('/1/') ? rawToken.split('/1/')[0] : rawToken;
+  const code = cleanParam(searchParams.get('code') || '');
+  const token = cleanParam(searchParams.get('token') || '');
   const { verifyMagicLink, user } = useAuth();
   const navigate = useNavigate();
   const [error, setError] = useState('');
@@ -18,7 +22,7 @@ const VerifyMagicLinkPage = () => {
     let cancelled = false;
 
     const run = async () => {
-      if (!token) {
+      if (!code && !token) {
         setError('Enlace no válido');
         return;
       }
@@ -26,11 +30,10 @@ const VerifyMagicLinkPage = () => {
         navigate('/', { replace: true });
         return;
       }
-      // Evita doble canje (React StrictMode / remount) del token de un solo uso
       if (startedRef.current) return;
       startedRef.current = true;
       try {
-        await verifyMagicLink(token);
+        await verifyMagicLink({ code: code || undefined, token: token || undefined });
         if (!cancelled) {
           setDone(true);
           navigate('/', { replace: true });
@@ -49,7 +52,7 @@ const VerifyMagicLinkPage = () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, [code, token]);
 
   return (
     <Container maxWidth="sm">
