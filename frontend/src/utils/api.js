@@ -200,6 +200,39 @@ export const authAPI = {
     const response = await api.post('/auth/logout');
     return response.data;
   },
+
+  /** Descarga CSV de actividad (solo admin). Dispara descarga en el navegador. */
+  downloadActivityCsv: async (days = 7) => {
+    const response = await api.get('/auth/admin/activity/export', {
+      params: { days },
+      responseType: 'blob',
+    });
+    const disposition = response.headers['content-disposition'] || '';
+    const match = /filename="?([^"]+)"?/i.exec(disposition);
+    const filename = match?.[1] || `user_activity_last_${days}d.csv`;
+    const url = window.URL.createObjectURL(new Blob([response.data], { type: 'text/csv' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+    return true;
+  },
+
+  /**
+   * Invita usuario (solo admin): añade a allowlist, genera magic link
+   * y opcionalmente envía el correo. Siempre devuelve magic_link.
+   */
+  inviteUser: async ({ email, role = 'user', sendEmail = true }) => {
+    const response = await api.post('/auth/admin/invite', {
+      email,
+      role,
+      send_email: sendEmail,
+    });
+    return response.data;
+  },
 };
 
 // Función para verificar el estado de la conexión

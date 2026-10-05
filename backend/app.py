@@ -21,6 +21,7 @@ from datetime import datetime, timedelta
 import json
 from s3_client import get_s3_client
 from auth import auth_bp, admin_required, allowed_email_required
+from auth.activity import register_activity_tracking
 from models import Channel, ChannelEdge, MonitoredChannel, db
 from channel_graph import normalize_username
 from config import Config
@@ -80,6 +81,7 @@ db.init_app(app)
 app.register_blueprint(auth_bp, url_prefix='/auth')
 # Compatibilidad con clientes que aún usan /api/auth/*
 app.register_blueprint(auth_bp, url_prefix='/api/auth', name='auth_api_compat')
+register_activity_tracking(app)
 
 # Crear tablas de base de datos (no bloquear arranque si RDS tarda o falla)
 with app.app_context():
