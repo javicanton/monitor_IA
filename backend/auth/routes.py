@@ -12,7 +12,7 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from auth.activity import log_activity
-from auth.allowlist import is_email_allowed
+from auth.allowlist import add_email_to_allowlist, is_email_allowed
 from auth.decorators import admin_required
 from auth.email_service import dev_return_link_enabled, send_magic_link_email
 from auth.session import get_or_create_user, issue_access_token, load_user_by_identity, normalize_email
@@ -55,6 +55,11 @@ def _token_fingerprint(token: str) -> str:
     return hashlib.sha256(token.encode('utf-8')).hexdigest()[:32]
 
 
+def _build_magic_url(email: str) -> str:
+    token = _serializer().dumps({'email': email}, salt=MAGIC_LINK_SALT)
+    return f'{_frontend_base_url()}/auth/verify?token={quote(token, safe="")}'
+
+
 @auth_bp.route('/login-request', methods=['POST'])
 def login_request():
     """Solicita un magic link. No revela si el email está o no autorizado."""
@@ -76,8 +81,7 @@ def login_request():
         logger.info('Login request rechazado (no allowlist): %s', email)
         return jsonify(generic), 200
 
-    token = _serializer().dumps({'email': email}, salt=MAGIC_LINK_SALT)
-    magic_url = f'{_frontend_base_url()}/auth/verify?token={quote(token, safe="")}'
+    magic_url = _build_magic_url(email)
 
     try:
         sent = send_magic_link_email(email, magic_url)
@@ -142,6 +146,81 @@ def get_current_user():
 def logout():
     # JWT stateless: el cliente elimina el token. La actividad la registra el after_request.
     return jsonify({'message': 'Sesión cerrada'}), 200
+
+
+@auth_bp.route('/admin/invite', methods=['POST'])
+@admin_required
+def admin_invite():
+    """
+    Invita a un usuario: lo añade a la allowlist y genera un magic link.
+
+    Body JSON:
+      - email (requerido)
+      - role: user|admin (default user)
+      - send_email: bool (default true) — intenta enviar el correo
+
+    Siempre devuelve magic_link para que el admin pueda copiarlo si el mail falla.
+    """
+    data = request.get_json(silent=True) or {}
+    email = normalize_email(data.get('email', ''))
+    role = (data.get('role') or 'user').strip().lower()
+    send_email = data.get('send_email', True)
+    if isinstance(send_email, str):
+        send_email = send_email.lower() in ('1', 'true', 'yes')
+
+    if not email or '@' not in email:
+        return jsonify({'error': 'Email no válido'}), 400
+    if role not in ('user', 'admin'):
+        return jsonify({'error': 'Rol no válido (user|admin)'}), 400
+
+    try:
+        allow = add_email_to_allowlist(email, role=role)
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+    except OSError:
+        return jsonify({'error': 'No se pudo actualizar la allowlist en el servidor'}), 500
+
+    magic_url = _build_magic_url(email)
+    email_sent = False
+    email_error = None
+
+    if send_email:
+        try:
+            email_sent = bool(send_magic_link_email(email, magic_url))
+            if not email_sent:
+                email_error = 'Correo no configurado o no enviado'
+        except Exception as exc:
+            email_error = str(exc) or 'Error enviando el correo'
+            logger.warning('Invite: fallo envío a %s: %s', email, email_error)
+
+    admin_user = load_user_by_identity(get_jwt_identity())
+    log_activity(
+        'admin_invite',
+        user=admin_user,
+        status_code=200,
+        meta={
+            'invited_email': email,
+            'role': role,
+            'allowlist_created': allow.get('created'),
+            'email_sent': email_sent,
+        },
+    )
+
+    return jsonify({
+        'success': True,
+        'email': email,
+        'role': role,
+        'allowlist_created': allow.get('created'),
+        'allowlist_path': allow.get('path'),
+        'magic_link': magic_url,
+        'expires_in_seconds': MAGIC_LINK_MAX_AGE,
+        'email_sent': email_sent,
+        'email_error': email_error,
+        'message': (
+            'Usuario en allowlist. Enlace generado'
+            + (' y correo enviado.' if email_sent else '. Copia el enlace y envíaselo manualmente.')
+        ),
+    }), 200
 
 
 @auth_bp.route('/admin/activity', methods=['GET'])

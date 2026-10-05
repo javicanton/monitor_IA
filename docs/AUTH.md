@@ -14,10 +14,14 @@ OAuth (Google / GitHub) está preparado en stubs (`backend/auth/providers/`) par
 
 ## Allowlist
 
-**Prioridad:**
+**Fuentes (se fusionan):**
 
 1. Variable de entorno `ALLOWED_EMAILS` (coma-separada; opcional `email:role`)
 2. Archivo **`backend/allowed_emails.txt` en el servidor** (uno por línea: `email [role]`)
+
+Si un email está en ambas, **gana el archivo**. Así las invitaciones admin (que escriben en el archivo) funcionan aunque exista `ALLOWED_EMAILS` en el `.env`.
+
+La allowlist se recarga al cambiar el mtime del archivo (no hace falta reiniciar el backend tras editarlo o invitar).
 
 Roles: `user` (por defecto) o `admin`.
 
@@ -56,6 +60,22 @@ usuario@example.com
 | `GET` | `/auth/verify-magic-link/<token>` | Canjear enlace por JWT |
 | `GET` | `/auth/me` | Usuario actual |
 | `POST` | `/auth/logout` | Cierre de sesión (el cliente borra el token) |
+| `POST` | `/auth/admin/invite` | **Admin:** añadir a allowlist + generar magic link (opcional enviar email) |
+| `GET` | `/auth/admin/activity` | **Admin:** listar actividad |
+| `GET` | `/auth/admin/activity/export` | **Admin:** CSV de actividad |
+
+### Invitar / generar enlace (admin)
+
+Desde el menú de perfil → **Invitar / generar enlace**, o por API:
+
+```bash
+curl -sS -X POST "https://app.monitoria.org/api/auth/admin/invite" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"usuario@ejemplo.com","role":"user","send_email":true}'
+```
+
+Respuesta: `magic_link` (siempre), `email_sent`, `allowlist_created`. Si el correo no llega (spam, SES, dominio institucional), copia el enlace y envíaselo por otro canal. Caduca en 15 minutos.
 
 Con nginx (`/api/` → backend), el frontend llama a `/api/auth/...`, que llega como `/auth/...`.
 

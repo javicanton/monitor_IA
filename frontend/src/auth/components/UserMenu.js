@@ -1,20 +1,31 @@
 import React, { useState } from 'react';
 import {
+  Alert,
   Avatar,
   Box,
+  Button,
+  Checkbox,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
+  FormControlLabel,
   IconButton,
   ListItemIcon,
   ListItemText,
   Menu,
   MenuItem,
+  TextField,
   Typography,
 } from '@mui/material';
 import LogoutIcon from '@mui/icons-material/Logout';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import DownloadIcon from '@mui/icons-material/Download';
+import PersonAddAltIcon from '@mui/icons-material/PersonAddAlt';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { useAuth } from '../AuthContext';
 import {
   getAvatarUrl,
@@ -29,6 +40,13 @@ const UserMenu = ({ onLogout }) => {
   const [anchorEl, setAnchorEl] = useState(null);
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState('');
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteSendEmail, setInviteSendEmail] = useState(true);
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteError, setInviteError] = useState('');
+  const [inviteResult, setInviteResult] = useState(null);
+  const [copied, setCopied] = useState(false);
   const open = Boolean(anchorEl);
 
   if (!user) return null;
@@ -64,6 +82,56 @@ const UserMenu = ({ onLogout }) => {
       setDownloadError(message);
     } finally {
       setDownloading(false);
+    }
+  };
+
+  const openInviteDialog = () => {
+    handleClose();
+    setInviteEmail('');
+    setInviteSendEmail(true);
+    setInviteError('');
+    setInviteResult(null);
+    setCopied(false);
+    setInviteOpen(true);
+  };
+
+  const closeInviteDialog = () => {
+    if (inviteLoading) return;
+    setInviteOpen(false);
+  };
+
+  const handleInvite = async (event) => {
+    event.preventDefault();
+    const email = inviteEmail.trim().toLowerCase();
+    if (!email || !email.includes('@')) {
+      setInviteError('Introduce un email válido');
+      return;
+    }
+    try {
+      setInviteLoading(true);
+      setInviteError('');
+      setInviteResult(null);
+      setCopied(false);
+      const result = await authAPI.inviteUser({
+        email,
+        role: 'user',
+        sendEmail: inviteSendEmail,
+      });
+      setInviteResult(result);
+    } catch (err) {
+      setInviteError(err.response?.data?.error || 'No se pudo generar la invitación');
+    } finally {
+      setInviteLoading(false);
+    }
+  };
+
+  const handleCopyLink = async () => {
+    if (!inviteResult?.magic_link) return;
+    try {
+      await navigator.clipboard.writeText(inviteResult.magic_link);
+      setCopied(true);
+    } catch {
+      setInviteError('No se pudo copiar. Selecciona el enlace manualmente.');
     }
   };
 
@@ -129,7 +197,7 @@ const UserMenu = ({ onLogout }) => {
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
         slotProps={{
-          paper: { sx: { minWidth: 240, mt: 1 } },
+          paper: { sx: { minWidth: 260, mt: 1 } },
         }}
       >
         <Box sx={{ px: 2, py: 1.25 }}>
@@ -163,6 +231,18 @@ const UserMenu = ({ onLogout }) => {
           />
         </MenuItem>
         {isAdmin && (
+          <MenuItem onClick={openInviteDialog}>
+            <ListItemIcon>
+              <PersonAddAltIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText
+              primary="Invitar / generar enlace"
+              secondary="Añade a allowlist y crea magic link"
+              secondaryTypographyProps={{ variant: 'caption' }}
+            />
+          </MenuItem>
+        )}
+        {isAdmin && (
           <MenuItem onClick={handleDownloadActivity} disabled={downloading}>
             <ListItemIcon>
               {downloading ? (
@@ -186,6 +266,99 @@ const UserMenu = ({ onLogout }) => {
           <ListItemText primary="Cerrar sesión" />
         </MenuItem>
       </Menu>
+
+      <Dialog open={inviteOpen} onClose={closeInviteDialog} fullWidth maxWidth="sm">
+        <DialogTitle>Invitar usuario</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Añade el email a la allowlist y genera un enlace de acceso (15 min, un solo uso).
+            Si el correo no llega, copia el enlace y envíaselo tú.
+          </Typography>
+          <Box component="form" id="invite-form" onSubmit={handleInvite}>
+            <TextField
+              autoFocus
+              fullWidth
+              label="Email"
+              type="email"
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              disabled={inviteLoading || Boolean(inviteResult)}
+              margin="dense"
+              required
+            />
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={inviteSendEmail}
+                  onChange={(e) => setInviteSendEmail(e.target.checked)}
+                  disabled={inviteLoading || Boolean(inviteResult)}
+                />
+              }
+              label="Enviar también por correo"
+            />
+          </Box>
+          {inviteError && (
+            <Alert severity="error" sx={{ mt: 1.5 }}>
+              {inviteError}
+            </Alert>
+          )}
+          {inviteResult && (
+            <Box sx={{ mt: 2 }}>
+              <Alert severity={inviteResult.email_sent ? 'success' : 'warning'} sx={{ mb: 1.5 }}>
+                {inviteResult.message}
+                {!inviteResult.email_sent && inviteResult.email_error
+                  ? ` (${inviteResult.email_error})`
+                  : ''}
+              </Alert>
+              <TextField
+                fullWidth
+                label="Magic link"
+                value={inviteResult.magic_link || ''}
+                InputProps={{ readOnly: true }}
+                size="small"
+                multiline
+                minRows={2}
+              />
+              <Button
+                startIcon={<ContentCopyIcon />}
+                onClick={handleCopyLink}
+                sx={{ mt: 1 }}
+                size="small"
+              >
+                {copied ? 'Copiado' : 'Copiar enlace'}
+              </Button>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeInviteDialog} disabled={inviteLoading}>
+            Cerrar
+          </Button>
+          {!inviteResult && (
+            <Button
+              type="submit"
+              form="invite-form"
+              variant="contained"
+              disabled={inviteLoading}
+              startIcon={inviteLoading ? <CircularProgress size={16} color="inherit" /> : null}
+            >
+              Generar enlace
+            </Button>
+          )}
+          {inviteResult && (
+            <Button
+              onClick={() => {
+                setInviteResult(null);
+                setInviteError('');
+                setCopied(false);
+                setInviteEmail('');
+              }}
+            >
+              Invitar otro
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

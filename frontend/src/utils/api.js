@@ -220,6 +220,19 @@ export const authAPI = {
     window.URL.revokeObjectURL(url);
     return true;
   },
+
+  /**
+   * Invita usuario (solo admin): añade a allowlist, genera magic link
+   * y opcionalmente envía el correo. Siempre devuelve magic_link.
+   */
+  inviteUser: async ({ email, role = 'user', sendEmail = true }) => {
+    const response = await api.post('/auth/admin/invite', {
+      email,
+      role,
+      send_email: sendEmail,
+    });
+    return response.data;
+  },
 };
 
 // Función para verificar el estado de la conexión
