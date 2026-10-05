@@ -34,7 +34,8 @@ export const AuthProvider = ({ children }) => {
   };
 
   const verifyMagicLink = async (token) => {
-    const response = await axios.get(`/auth/verify-magic-link/${encodeURIComponent(token)}`);
+    // POST body: evita que nginx/SES/path corrompan el token
+    const response = await axios.post('/auth/verify-magic-link', { token });
     const { access_token, user: userData } = response.data;
     localStorage.setItem('token', access_token);
     setUser(userData);

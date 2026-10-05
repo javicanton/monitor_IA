@@ -8,8 +8,9 @@ OAuth (Google / GitHub) está preparado en stubs (`backend/auth/providers/`) par
 
 1. El usuario introduce su email en `/login`.
 2. `POST /auth/login-request` comprueba la allowlist (sin revelar si el correo está o no).
-3. Si está autorizado, se envía un enlace a `{AUTH_FRONTEND_URL}/auth/verify?token=...`.
-4. El frontend llama a `GET /auth/verify-magic-link/<token>` y guarda el JWT.
+3. Si está autorizado, se envía un enlace a `{AUTH_FRONTEND_URL}/auth/verify?token=...`
+   (sin click-tracking de SES: atributo `ses:no-track`).
+4. El frontend llama a `POST /auth/verify-magic-link` con `{token}` y guarda el JWT.
 5. Las rutas de datos del API exigen `Authorization: Bearer <token>`.
 
 ## Allowlist

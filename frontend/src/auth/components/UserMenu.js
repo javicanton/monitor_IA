@@ -126,11 +126,53 @@ const UserMenu = ({ onLogout }) => {
   };
 
   const handleCopyLink = async () => {
-    if (!inviteResult?.magic_link) return;
+    const text = inviteResult?.magic_link;
+    if (!text) return;
+
+    const copyWithFallback = () => {
+      const el = document.createElement('textarea');
+      el.value = text;
+      el.setAttribute('readonly', '');
+      el.style.position = 'fixed';
+      el.style.top = '0';
+      el.style.left = '0';
+      el.style.width = '1px';
+      el.style.height = '1px';
+      el.style.padding = '0';
+      el.style.border = 'none';
+      el.style.outline = 'none';
+      el.style.boxShadow = 'none';
+      el.style.background = 'transparent';
+      el.style.opacity = '0';
+      document.body.appendChild(el);
+      el.focus();
+      el.select();
+      el.setSelectionRange(0, text.length);
+      let ok = false;
+      try {
+        ok = document.execCommand('copy');
+      } catch {
+        ok = false;
+      }
+      document.body.removeChild(el);
+      return ok;
+    };
+
     try {
-      await navigator.clipboard.writeText(inviteResult.magic_link);
-      setCopied(true);
+      if (navigator.clipboard?.writeText && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        setInviteError('');
+        setCopied(true);
+        return;
+      }
     } catch {
+      // fallback below
+    }
+
+    if (copyWithFallback()) {
+      setInviteError('');
+      setCopied(true);
+    } else {
       setInviteError('No se pudo copiar. Selecciona el enlace manualmente.');
     }
   };

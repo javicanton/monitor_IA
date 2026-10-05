@@ -96,9 +96,31 @@ def login_request():
     return jsonify(payload), 200
 
 
-@auth_bp.route('/verify-magic-link/<path:token>', methods=['GET', 'POST'])
-def verify_magic_link(token):
+def _extract_magic_token(path_token: str | None = None) -> str:
+    """Token desde path, query ?token= o JSON {token}."""
+    if path_token:
+        return path_token.strip()
+    if request.method in ('POST', 'PUT', 'PATCH'):
+        data = request.get_json(silent=True) or {}
+        body_token = data.get('token')
+        if isinstance(body_token, str) and body_token.strip():
+            return body_token.strip()
+    q = request.args.get('token')
+    if isinstance(q, str) and q.strip():
+        return q.strip()
+    return ''
+
+
+def _verify_magic_token(token: str):
     """Valida el magic link, crea/actualiza el usuario y emite JWT."""
+    if not token:
+        return jsonify({'error': 'Enlace no válido'}), 400
+
+    # SES/awstrack a veces deja basura tras el token si el redirect falla
+    if '/1/' in token:
+        token = token.split('/1/', 1)[0]
+    token = token.strip()
+
     _purge_consumed_tokens()
     fp = _token_fingerprint(token)
     if fp in _consumed_tokens:
@@ -130,6 +152,18 @@ def verify_magic_link(token):
         db.session.rollback()
         logger.exception('Error verificando magic link: %s', exc)
         return jsonify({'error': 'No se pudo completar el acceso'}), 500
+
+
+@auth_bp.route('/verify-magic-link', methods=['GET', 'POST'])
+def verify_magic_link_body():
+    """Verificación preferida: POST JSON {token} o GET ?token=."""
+    return _verify_magic_token(_extract_magic_token())
+
+
+@auth_bp.route('/verify-magic-link/<path:token>', methods=['GET', 'POST'])
+def verify_magic_link(token):
+    """Compatibilidad: token en el path de la URL."""
+    return _verify_magic_token(_extract_magic_token(token))
 
 
 @auth_bp.route('/me', methods=['GET'])

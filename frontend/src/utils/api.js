@@ -187,7 +187,7 @@ export const authAPI = {
   },
 
   verifyMagicLink: async (token) => {
-    const response = await api.get(`/auth/verify-magic-link/${encodeURIComponent(token)}`);
+    const response = await api.post('/auth/verify-magic-link', { token });
     return response.data;
   },
 
