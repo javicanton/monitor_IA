@@ -91,6 +91,22 @@ ALLOWED_EMAILS=tu@email.com:admin
 
 La respuesta de `login-request` incluirá `dev_magic_link` para abrir el enlace en el navegador.
 
+## Staging (:8080)
+
+El `.env` del servidor suele tener `AUTH_FRONTEND_URL=https://app.monitoria.org` (producción).  
+`docker-compose.staging.yml` lo **sobrescribe** con `STAGING_PUBLIC_URL` (por defecto `http://localhost:8080`) y activa `AUTH_DEV_RETURN_LINK=1`.
+
+```bash
+# Si entras por IP pública del EC2:
+STAGING_PUBLIC_URL=http://x.x.x.x:8080 ./scripts/deploy-staging.sh --backend-only
+
+# Pedir enlace (dev_magic_link en el JSON):
+curl -s -X POST http://localhost:8080/api/auth/login-request \
+  -H 'Content-Type: application/json' -d '{"email":"TU@EMAIL"}' | python3 -m json.tool
+```
+
+**Sin redesplegar:** si el correo trae `https://app.monitoria.org/auth/verify?token=...`, cambia solo el host a `http://<IP>:8080/auth/verify?token=...` (mismo token).
+
 ## Frontend
 
 - `AuthProvider` + `ProtectedRoute` en `App.js`
