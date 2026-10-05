@@ -47,6 +47,7 @@ usuario@example.com
 | `ALLOWED_EMAILS` | Lista de correos (opcional si usas el archivo) |
 | `ALLOWED_EMAILS_FILE` | Ruta alternativa al archivo de allowlist |
 | `AUTH_FRONTEND_URL` | Base del frontend para el enlace (`https://app.monitoria.org`) |
+| `SES_CONFIGURATION_SET` | Configuration set SES **sin** click tracking (evita `awstrack.me`) |
 | `AUTH_DEV_RETURN_LINK` | `1` en desarrollo: incluye el magic link en la respuesta JSON |
 | `MAIL_*` / SES | Envío real del correo (si no hay mail, el enlace se registra en logs) |
 | `JWT_SECRET_KEY` | Firma de tokens |
