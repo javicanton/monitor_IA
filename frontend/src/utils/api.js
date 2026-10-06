@@ -116,6 +116,17 @@ export const messagesAPI = {
       throw error;
     }
   },
+
+  // Frescura de datos (min/max fecha en BD)
+  getDataStatus: async () => {
+    try {
+      const response = await api.get('/api/data_status');
+      return response.data;
+    } catch (error) {
+      console.error('Error al obtener estado de datos:', error);
+      throw error;
+    }
+  },
 };
 
 // Funciones de API para canales

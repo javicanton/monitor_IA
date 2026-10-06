@@ -25,6 +25,7 @@ import ChartErrorBoundary from './ChartErrorBoundary';
 import logo from '../assets/Logo_MonitorIA ajustado.png';
 import { useAuth } from '../auth/AuthContext';
 import UserMenu from '../auth/components/UserMenu';
+import { messagesAPI } from '../utils/api';
 
 const SCROLL_THRESHOLD = 180;
 const LOGO_SIZE = { xs: 210, sm: 270, md: 330 };
@@ -48,6 +49,7 @@ const Dashboard = () => {
     loading: false,
     onRefresh: () => {},
   });
+  const [dataFreshness, setDataFreshness] = useState({ maxDate: null, stale: false });
   const [scrollProgress, setScrollProgress] = useState(0);
   const logoRef = useRef(null);
   const [logoTransform, setLogoTransform] = useState({
@@ -69,6 +71,30 @@ const Dashboard = () => {
     handleScroll();
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadFreshness = async () => {
+      try {
+        const res = await messagesAPI.getDataStatus();
+        if (cancelled || !res?.success) return;
+        const maxDate = res.max_date || null;
+        let stale = false;
+        if (maxDate) {
+          const max = new Date(`${maxDate}T12:00:00`);
+          const today = new Date();
+          const diffDays = Math.floor((today - max) / (1000 * 60 * 60 * 24));
+          stale = diffDays >= 2;
+        }
+        setDataFreshness({ maxDate, stale });
+      } catch (err) {
+        // Silencioso: no bloquear el dashboard si falla el indicador
+        console.warn('No se pudo cargar frescura de datos:', err?.message || err);
+      }
+    };
+    loadFreshness();
+    return () => { cancelled = true; };
   }, []);
 
   useLayoutEffect(() => {
@@ -271,6 +297,19 @@ const Dashboard = () => {
             {filters.search && (
               <Typography variant="caption" color="primary" display="block" sx={{ mt: 0.5 }}>
                 Búsqueda activa: «{filters.search}»
+              </Typography>
+            )}
+            {dataFreshness.maxDate && (
+              <Typography
+                variant="caption"
+                color={dataFreshness.stale ? 'warning.main' : 'text.secondary'}
+                display="block"
+                sx={{ mt: 0.5 }}
+              >
+                Último mensaje en base de datos: {dataFreshness.maxDate}
+                {dataFreshness.stale
+                  ? ' — la ingesta parece detenida (más de 2 días sin novedades).'
+                  : ''}
               </Typography>
             )}
           </Paper>

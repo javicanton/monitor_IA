@@ -279,43 +279,98 @@ const MessageList = ({ filters = {}, onLoadingChange, onStatsChange }) => {
     setSnackbar({ ...snackbar, open: false });
   };
 
+  const actionToolbar = (
+    <Box
+      display="grid"
+      gridTemplateColumns={{ xs: 'repeat(2, minmax(0, 1fr))', md: 'repeat(4, minmax(0, 1fr))' }}
+      gap={1}
+      alignItems="stretch"
+      mb={3}
+    >
+      <Button
+        variant="outlined"
+        size="small"
+        onClick={handleDownloadMessages}
+        startIcon={<DownloadIcon />}
+        disabled={loading}
+        sx={{ whiteSpace: 'nowrap', minWidth: 0 }}
+      >
+        Descargar mensajes
+      </Button>
+      <Button
+        variant="outlined"
+        size="small"
+        onClick={handleDownloadChannels}
+        startIcon={<DownloadIcon />}
+        disabled={loading}
+        sx={{ whiteSpace: 'nowrap', minWidth: 0 }}
+      >
+        Descargar canales
+      </Button>
+      <Button
+        variant="outlined"
+        size="small"
+        onClick={() => setShowNotRelevant((prev) => !prev)}
+        disabled={loading}
+        sx={{ whiteSpace: 'nowrap', minWidth: 0 }}
+      >
+        {showNotRelevant ? 'Ocultar no relevantes' : 'Mostrar no relevantes'}
+      </Button>
+      <Button
+        variant="contained"
+        color="secondary"
+        size="small"
+        onClick={handleExportRelevants}
+        disabled={loading}
+        sx={{ whiteSpace: 'nowrap', minWidth: 0 }}
+      >
+        Exportar Relevantes
+      </Button>
+    </Box>
+  );
+
   if (loading && messages.length === 0) {
     return (
-      <Box
-        display="flex"
-        flexDirection="column"
-        justifyContent="center"
-        alignItems="center"
-        minHeight="200px"
-        sx={{ mt: 4 }}
-      >
-        <CircularProgress />
-        <Typography variant="body1" sx={{ mt: 2 }}>
-          {getLoadingMessage(filters)}
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-          Puede tardar unos segundos con búsquedas o filtros amplios.
-        </Typography>
+      <Box sx={{ mt: 2 }}>
+        {actionToolbar}
+        <Box
+          display="flex"
+          flexDirection="column"
+          justifyContent="center"
+          alignItems="center"
+          minHeight="200px"
+        >
+          <CircularProgress />
+          <Typography variant="body1" sx={{ mt: 2 }}>
+            {getLoadingMessage(filters)}
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            Puede tardar unos segundos con búsquedas o filtros amplios.
+          </Typography>
+        </Box>
       </Box>
     );
   }
 
   if (error && messages.length === 0) {
     return (
-      <Box display="flex" flexDirection="column" alignItems="center" minHeight="200px">
-        <Typography color="error" variant="h6" gutterBottom>
-          Error al cargar los mensajes
-        </Typography>
-        <Typography color="textSecondary" gutterBottom>
-          {error}
-        </Typography>
-        <Button 
-          variant="contained" 
-          onClick={handleRefresh}
-          startIcon={<RefreshIcon />}
-        >
-          Reintentar
-        </Button>
+      <Box sx={{ mt: 2 }}>
+        {actionToolbar}
+        <Box display="flex" flexDirection="column" alignItems="center" minHeight="200px">
+          <Typography color="error" variant="h6" gutterBottom>
+            Error al cargar los mensajes
+          </Typography>
+          <Typography color="textSecondary" gutterBottom>
+            {error}
+          </Typography>
+          <Button
+            variant="contained"
+            onClick={handleRefresh}
+            startIcon={<RefreshIcon />}
+          >
+            Reintentar
+          </Button>
+        </Box>
       </Box>
     );
   }
@@ -335,54 +390,8 @@ const MessageList = ({ filters = {}, onLoadingChange, onStatsChange }) => {
           </Box>
         </Alert>
       )}
-      {/* Acciones debajo del buscador y del recuento: una sola fila */}
-      <Box
-        display="grid"
-        gridTemplateColumns="repeat(4, minmax(0, 1fr))"
-        gap={1}
-        alignItems="stretch"
-        mb={3}
-      >
-          <Button
-            variant="outlined"
-            size="small"
-            onClick={handleDownloadMessages}
-            startIcon={<DownloadIcon />}
-            disabled={loading}
-            sx={{ whiteSpace: 'nowrap', minWidth: 0 }}
-          >
-            Descargar mensajes
-          </Button>
-          <Button
-            variant="outlined"
-            size="small"
-            onClick={handleDownloadChannels}
-            startIcon={<DownloadIcon />}
-            disabled={loading}
-            sx={{ whiteSpace: 'nowrap', minWidth: 0 }}
-          >
-            Descargar canales
-          </Button>
-          <Button
-            variant="outlined"
-            size="small"
-            onClick={() => setShowNotRelevant((prev) => !prev)}
-            disabled={loading}
-            sx={{ whiteSpace: 'nowrap', minWidth: 0 }}
-          >
-            {showNotRelevant ? 'Ocultar no relevantes' : 'Mostrar no relevantes'}
-          </Button>
-          <Button
-            variant="contained"
-            color="secondary"
-            size="small"
-            onClick={handleExportRelevants}
-            disabled={loading}
-            sx={{ whiteSpace: 'nowrap', minWidth: 0 }}
-          >
-            Exportar Relevantes
-          </Button>
-      </Box>
+      {/* Acciones debajo del buscador y del recuento: una sola fila en desktop */}
+      {actionToolbar}
 
       {/* Lista de mensajes */}
       <Grid container spacing={2}>

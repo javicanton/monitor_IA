@@ -19,10 +19,13 @@ export SCRAPER_MAX_MESSAGES="${SCRAPER_MAX_MESSAGES:-500}"
 export SCRAPER_CHANNEL_DELAY="${SCRAPER_CHANNEL_DELAY:-5}"
 
 LOG_FILE="${LOG_DIR}/scraper_daily_$(date -u +%Y%m%d).log"
+STATUS_FILE="${LOG_DIR}/scraper_last_status.json"
+STARTED_AT="$(date -u -Iseconds)"
 
-echo "==> Escrapeo DIARIO → PostgreSQL ($(date -u -Iseconds))" | tee -a "$LOG_FILE"
+echo "==> Escrapeo DIARIO → PostgreSQL (${STARTED_AT})" | tee -a "$LOG_FILE"
 echo "    Últimos ${SCRAPER_DAYS} días, máx ${SCRAPER_MAX_MESSAGES} msg/canal, pausa ${SCRAPER_CHANNEL_DELAY}s" | tee -a "$LOG_FILE"
 
+set +e
 cd backend
 "$PYTHON" scraper.py \
   --postgres \
@@ -30,5 +33,30 @@ cd backend
   --days "$SCRAPER_DAYS" \
   --max-messages "$SCRAPER_MAX_MESSAGES" \
   "$@" >> "$LOG_FILE" 2>&1
+EXIT_CODE=$?
+set -e
 
-echo "==> Fin escrapeo diario $(date -u -Iseconds)" >> "$LOG_FILE"
+FINISHED_AT="$(date -u -Iseconds)"
+if [[ "$EXIT_CODE" -eq 0 ]]; then
+  STATUS="ok"
+  echo "==> Fin escrapeo diario ${FINISHED_AT} (OK)" | tee -a "$LOG_FILE"
+else
+  STATUS="error"
+  echo "==> Fin escrapeo diario ${FINISHED_AT} (FALLÓ, código ${EXIT_CODE})" | tee -a "$LOG_FILE"
+fi
+
+# Estado legible para scraper_status.sh / operadores (sin secretos)
+cat > "$STATUS_FILE" <<EOF
+{
+  "status": "${STATUS}",
+  "exit_code": ${EXIT_CODE},
+  "mode": "daily",
+  "started_at": "${STARTED_AT}",
+  "finished_at": "${FINISHED_AT}",
+  "days": ${SCRAPER_DAYS},
+  "max_messages": ${SCRAPER_MAX_MESSAGES},
+  "log_file": "${LOG_FILE}"
+}
+EOF
+
+exit "$EXIT_CODE"
