@@ -56,6 +56,16 @@ else
 fi
 
 echo ""
+echo "==> Último log catch-up (manual)"
+LATEST_CATCHUP="$(ls -t "${LOG_DIR}"/scraper_catchup_*.log 2>/dev/null | head -1 || true)"
+if [[ -n "$LATEST_CATCHUP" ]]; then
+  echo "    Archivo: $LATEST_CATCHUP"
+  tail -3 "$LATEST_CATCHUP" | sed 's/^/    /'
+else
+  echo "    (sin logs scraper_catchup_*)"
+fi
+
+echo ""
 echo "==> Último estado del scraper diario"
 STATUS_FILE="${LOG_DIR}/scraper_last_status.json"
 if [[ -f "$STATUS_FILE" ]]; then
