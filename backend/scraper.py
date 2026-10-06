@@ -12,8 +12,18 @@ from typing import List, Optional, Dict, Any, Union, cast
 import asyncio
 import json
 
+# Paquetes importables (módulo) que el scraper necesita. asyncio es stdlib: no va aquí.
+REQUIRED_IMPORTS = (
+    'pandas',
+    'telethon',
+    'openpyxl',
+    'dotenv',  # paquete pip: python-dotenv
+    'boto3',
+)
+
+
 def install_package(package_name):
-    """Instala un paquete específico."""
+    """Instala un paquete pip concreto (solo si SCRAPER_AUTO_INSTALL=1)."""
     print(f"\nInstalando {package_name}...")
     try:
         subprocess.check_call([sys.executable, "-m", "pip", "install", package_name])
@@ -23,37 +33,53 @@ def install_package(package_name):
         print(f"Error al instalar {package_name}: {e}")
         return False
 
+
 def check_and_install_dependencies():
-    """Verifica e instala las dependencias necesarias."""
-    required_packages = [
-        'pandas',
-        'telethon',
-        'openpyxl',
-        'python-dotenv',
-        'asyncio',
-        'boto3'
-    ]
-    
-    # Primero actualizar pip
-    print("\nActualizando pip...")
-    try:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "pip"])
-    except subprocess.CalledProcessError:
-        print("Advertencia: No se pudo actualizar pip, continuando...")
+    """Comprueba dependencias. En cron/producción NO instala sola (falla claro).
 
-    # Verificar e instalar cada paquete individualmente
-    for package in required_packages:
-        if importlib.util.find_spec(package) is None:
-            if not install_package(package):
-                print(f"\nError: No se pudo instalar {package}")
-                print(f"Por favor, instala manualmente ejecutando:")
-                print(f"pip install {package}")
-                sys.exit(1)
+    Auto-install solo con SCRAPER_AUTO_INSTALL=1 (uso interactivo local).
+    """
+    missing = [name for name in REQUIRED_IMPORTS if importlib.util.find_spec(name) is None]
+    if not missing:
+        return
 
-# Verificar e instalar dependencias
+    auto = os.environ.get('SCRAPER_AUTO_INSTALL', '').lower() in ('1', 'true', 'yes')
+    print(f"Python en uso: {sys.executable}", flush=True)
+    print(f"Faltan módulos: {', '.join(missing)}", flush=True)
+
+    if not auto:
+        print(
+            "\nError: dependencias del scraper no instaladas en este Python.\n"
+            "En el EC2 usa el venv del repo (no instales con el python del sistema):\n"
+            "  cd ~/monitor_IA\n"
+            "  python3 -m venv .venv   # solo si no existe\n"
+            "  .venv/bin/pip install -r requirements.txt -r backend/requirements.txt\n"
+            "  ./scripts/run_scraper_daily.sh\n"
+            "O fuerza auto-install (no recomendado en cron): SCRAPER_AUTO_INSTALL=1 ...",
+            flush=True,
+        )
+        sys.exit(7)
+
+    # Solo bajo petición explícita
+    pip_names = {
+        'dotenv': 'python-dotenv',
+        'pandas': 'pandas',
+        'telethon': 'telethon',
+        'openpyxl': 'openpyxl',
+        'boto3': 'boto3',
+    }
+    for name in missing:
+        pkg = pip_names.get(name, name)
+        if not install_package(pkg):
+            print(f"\nError: No se pudo instalar {pkg}")
+            print(f"Instala manualmente: {sys.executable} -m pip install {pkg}")
+            sys.exit(7)
+
+
+# Verificar dependencias (sin pip install silencioso en cron)
 check_and_install_dependencies()
 
-# Importar las dependencias después de la instalación
+# Importar las dependencias después de la comprobación
 import pandas as pd
 from telethon import TelegramClient
 from telethon.errors import ChannelInvalidError, ChatAdminRequiredError, FloodWaitError
