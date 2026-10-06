@@ -39,17 +39,16 @@ La primera petición puede tardar (descarga JSON + parquet en caché).
 
 ## Scraper → PostgreSQL
 
-```bash
-chmod +x scripts/run_scraper_postgres.sh
-# Cron: 0 3 * * * /home/ubuntu/monitor_IA/scripts/run_scraper_postgres.sh
-```
-
-O manualmente:
+Guía completa (cron, catch-up, venv, códigos de salida): **`docs/SCRAPER.md`**.
 
 ```bash
-cd backend
-export DATABASE_URL=...
-python3 scraper.py --postgres --non-interactive --days 7 --max-messages 500
+# Diario (cron 03:00 UTC, últimos 3 días)
+./scripts/run_scraper_daily.sh
+
+# Manual: recuperar hueco con ventana mayor (p. ej. tras días sin ingesta)
+tmux new -s scraper-catchup
+./scripts/run_scraper_catchup.sh
+# SCRAPER_DAYS=14 SCRAPER_MAX_MESSAGES=800 ./scripts/run_scraper_catchup.sh
 ```
 
 ## Credenciales AWS en Docker
