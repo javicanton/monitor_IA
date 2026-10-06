@@ -42,4 +42,13 @@ else
 fi
 
 echo ""
+echo "==> Último estado del scraper diario"
+STATUS_FILE="${LOG_DIR}/scraper_last_status.json"
+if [[ -f "$STATUS_FILE" ]]; then
+  cat "$STATUS_FILE" | sed 's/^/    /'
+else
+  echo "    (sin scraper_last_status.json — aún no ha corrido run_scraper_daily.sh con el fix de códigos de salida)"
+fi
+
+echo ""
 scraper_print_status

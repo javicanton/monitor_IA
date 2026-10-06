@@ -367,6 +367,25 @@ def health_check():
     return jsonify({"status": "healthy"}), 200
 
 
+@app.route('/api/data_status', methods=['GET'])
+@allowed_email_required
+def data_status():
+    """Frescura de datos: fechas min/max de mensajes en la BD (para detectar ingesta parada)."""
+    try:
+        if not USE_POSTGRES or not hasattr(data_store, 'get_date_bounds'):
+            return jsonify(success=True, min_date=None, max_date=None, mode='parquet')
+        min_date, max_date = data_store.get_date_bounds()
+        return jsonify(
+            success=True,
+            min_date=min_date,
+            max_date=max_date,
+            mode='postgres',
+        )
+    except Exception as e:
+        logger.exception("Error en /api/data_status")
+        return jsonify(success=False, error=str(e)), 500
+
+
 def save_data(df):
     """Guarda los datos en S3."""
     try:

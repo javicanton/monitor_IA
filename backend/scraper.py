@@ -615,6 +615,7 @@ def upsert_channel_rows_to_postgres(
         return upsert_records(rows, batch_size=batch_size, preserve_labels=True)
 
 async def main(args):
+    """Ejecuta el scraper. Devuelve 0 si termina bien, >0 si falla (para cron/CI)."""
     print("1. Iniciando script...")
     
     # Cargar credenciales
@@ -626,7 +627,7 @@ async def main(args):
     )
     if not creds:
         print("Error: No se pudieron cargar las credenciales")
-        return
+        return 2
     
     # Cargar canales
     print("3. Cargando lista de canales...")
@@ -638,7 +639,7 @@ async def main(args):
     )
     if not channels:
         print("Error: No se pudieron cargar los canales")
-        return
+        return 3
     print(f"4. Se encontraron {len(channels)} canales para procesar")
     
     # Obtener configuración del usuario
@@ -664,7 +665,7 @@ async def main(args):
     pg_app = None
     if use_postgres and not os.environ.get("DATABASE_URL"):
         print("Error: --postgres requiere DATABASE_URL en el entorno")
-        return
+        return 4
     if use_postgres:
         from pg_upsert import clear_channel_cache, create_app
 
@@ -689,6 +690,8 @@ async def main(args):
     if session_dir and not os.path.exists(session_dir):
         os.makedirs(session_dir, exist_ok=True)
     client = TelegramClient(session_path, creds['API_ID'], creds['API_HASH'])
+    exit_code = 0
+    session_fatal = False
     
     try:
         # Conectar
@@ -703,8 +706,16 @@ async def main(args):
             print("   - Busca un mensaje con un código de verificación")
             print("   - Ingresa el código cuando se te solicite")
             if args.non_interactive:
-                print("Error: No hay sesión autorizada y el modo es no interactivo.")
-                return
+                print(
+                    "Error: No hay sesión autorizada y el modo es no interactivo. "
+                    "Reautoriza Telethon en el EC2 (sesión en ~/.telethon/) y relanza.",
+                    flush=True,
+                )
+                try:
+                    await client.disconnect()
+                except Exception:
+                    pass
+                return 5
             await client.start()
         
         print("12. Conexión exitosa!")
@@ -868,22 +879,42 @@ async def main(args):
             except Exception as e:
                 err_text = str(e)
                 print(f"Error al procesar {channel}: {err_text}", flush=True)
+                # Session errors abort the whole run (cron must see non-zero exit)
+                check_session = None
+                if graph_helpers:
+                    check_session = is_telegram_session_error
+                else:
+                    try:
+                        from channel_graph import is_telegram_session_error as check_session
+                    except Exception:
+                        check_session = None
+                if check_session and check_session(e):
+                    print(
+                        "✗ Error de sesión Telethon. "
+                        "Deteniendo scraper: reinicia la sesión (~/.telethon/) y vuelve a lanzar.",
+                        flush=True,
+                    )
+                    session_fatal = True
+                    exit_code = 6
+                    break
                 if graph_helpers and pg_app is not None:
                     if graph_helpers["is_channel_invalid_error"](e):
                         with pg_app.app_context():
                             graph_helpers["mark_error"](channel, err_text)
-                    elif is_telegram_session_error(e):
-                        print(
-                            "✗ Error de sesión Telethon (wrong session ID). "
-                            "Deteniendo scraper: reinicia la sesión y vuelve a lanzar.",
-                            flush=True,
-                        )
-                        break
                 continue
             else:
                 delay = _channel_delay_seconds()
                 if delay > 0:
                     await asyncio.sleep(delay)
+
+        if session_fatal:
+            print("18. Cerrando conexión tras error de sesión...")
+            try:
+                await client.disconnect()
+            except Exception:
+                pass
+            print("19. Script detenido por error de sesión Telethon (código 6).", flush=True)
+            return exit_code
 
         if use_postgres and forward_pairs and graph_helpers and pg_app is not None:
             with pg_app.app_context():
@@ -1049,13 +1080,20 @@ async def main(args):
         try:
             if client:
                 await client.disconnect()
-        except:
+        except Exception:
             pass
         print("19. Script completado!")
+        return exit_code
     except Exception as e:
-        print(f"Error: {str(e)}")
+        print(f"Error: {str(e)}", flush=True)
+        try:
+            if client:
+                await client.disconnect()
+        except Exception:
+            pass
+        return 1
 
 if __name__ == '__main__':
     print("Iniciando ejecución...")
     args = parse_args()
-    asyncio.run(main(args))
+    raise SystemExit(asyncio.run(main(args)) or 0)

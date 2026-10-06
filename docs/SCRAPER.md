@@ -91,11 +91,32 @@ Recomendaciones:
 - Para muchos canales nuevos: `SCRAPER_CHANNEL_DELAY=10 SCRAPER_MAX_MESSAGES=3000 ./scripts/run_scraper_full.sh`
 - Canales inválidos (no FloodWait) → `discontinued=true` y se omiten en siguientes pasadas.
 
+## Códigos de salida (cron)
+
+`scraper.py` / `run_scraper_daily.sh` ahora fallan con código ≠ 0 cuando algo va mal
+(antes muchos errores salían con exit 0 y el cron parecía “OK”):
+
+| Código | Significado |
+|--------|-------------|
+| 0 | OK |
+| 1 | Error inesperado |
+| 2 | Credenciales Telegram no cargadas |
+| 3 | Sin canales |
+| 4 | Falta `DATABASE_URL` con `--postgres` |
+| 5 | Sesión Telethon no autorizada (modo no interactivo) |
+| 6 | Sesión Telethon rota a mitad de ejecución |
+
+Tras cada corrida diaria se escribe `logs/scraper_last_status.json`
+(visible con `./scripts/scraper_status.sh`).
+
 ## Comprobar resultado
 
 ```bash
+./scripts/scraper_status.sh
+
 psql "$DATABASE_URL" -c "
   SELECT count(*) AS mensajes FROM messages;
+  SELECT max(date_sent) AS ultimo_mensaje FROM messages;
   SELECT count(*) AS aristas FROM channel_edges;
   SELECT status, discontinued, count(*) FROM monitored_channels GROUP BY 1,2;
 "
