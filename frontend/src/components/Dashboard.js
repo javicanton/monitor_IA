@@ -10,8 +10,13 @@ import {
   InputAdornment,
   Typography,
   CircularProgress,
+  Tooltip,
 } from '@mui/material';
-import { Search as SearchIcon } from '@mui/icons-material';
+import {
+  Search as SearchIcon,
+  Article as ArticleIcon,
+  Campaign as CampaignIcon,
+} from '@mui/icons-material';
 import FilterBar from './FilterBar';
 import MessageList from './MessageList';
 import ScoreExplanation from './ScoreExplanation';
@@ -20,10 +25,17 @@ import ChartErrorBoundary from './ChartErrorBoundary';
 import logo from '../assets/Logo_MonitorIA ajustado.png';
 import { useAuth } from '../auth/AuthContext';
 import UserMenu from '../auth/components/UserMenu';
+import { messagesAPI } from '../utils/api';
 
 const SCROLL_THRESHOLD = 180;
 const LOGO_SIZE = { xs: 210, sm: 270, md: 330 };
 const LOGO_SIZE_SMALL = 88;
+
+const formatPublicationCount = (count) => {
+  const n = Number(count);
+  if (!Number.isFinite(n)) return '0';
+  return new Intl.NumberFormat('es-ES').format(n);
+};
 
 const Dashboard = () => {
   const { logout } = useAuth();
@@ -31,6 +43,13 @@ const Dashboard = () => {
   const [filters, setFilters] = useState({});
   const [searchInput, setSearchInput] = useState('');
   const [searchPending, setSearchPending] = useState(false);
+  const [listStats, setListStats] = useState({
+    totalMessages: 0,
+    totalChannels: 0,
+    loading: false,
+    onRefresh: () => {},
+  });
+  const [dataFreshness, setDataFreshness] = useState({ maxDate: null, stale: false });
   const [scrollProgress, setScrollProgress] = useState(0);
   const logoRef = useRef(null);
   const [logoTransform, setLogoTransform] = useState({
@@ -52,6 +71,30 @@ const Dashboard = () => {
     handleScroll();
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadFreshness = async () => {
+      try {
+        const res = await messagesAPI.getDataStatus();
+        if (cancelled || !res?.success) return;
+        const maxDate = res.max_date || null;
+        let stale = false;
+        if (maxDate) {
+          const max = new Date(`${maxDate}T12:00:00`);
+          const today = new Date();
+          const diffDays = Math.floor((today - max) / (1000 * 60 * 60 * 24));
+          stale = diffDays >= 2;
+        }
+        setDataFreshness({ maxDate, stale });
+      } catch (err) {
+        // Silencioso: no bloquear el dashboard si falla el indicador
+        console.warn('No se pudo cargar frescura de datos:', err?.message || err);
+      }
+    };
+    loadFreshness();
+    return () => { cancelled = true; };
   }, []);
 
   useLayoutEffect(() => {
@@ -206,6 +249,44 @@ const Dashboard = () => {
               >
                 {searchPending ? 'Buscando…' : 'Buscar'}
               </Button>
+              <Tooltip
+                title={`${formatPublicationCount(listStats.totalMessages)} publicaciones · ${formatPublicationCount(listStats.totalChannels)} canales (clic para actualizar)`}
+              >
+                <Button
+                  variant="outlined"
+                  onClick={listStats.onRefresh}
+                  disabled={listStats.loading}
+                  aria-label={`${listStats.totalMessages} publicaciones, ${listStats.totalChannels} canales`}
+                  sx={{
+                    textTransform: 'none',
+                    color: 'text.secondary',
+                    borderColor: 'divider',
+                    px: 2,
+                    py: 1,
+                    flexShrink: 0,
+                  }}
+                >
+                  <Box display="flex" alignItems="center" gap={1.5}>
+                    <Box display="flex" alignItems="center" gap={0.5} component="span">
+                      <ArticleIcon fontSize="small" color="action" aria-hidden />
+                      <Typography variant="body1" component="span" fontWeight={500}>
+                        {formatPublicationCount(listStats.totalMessages)}
+                      </Typography>
+                    </Box>
+                    <Box
+                      component="span"
+                      sx={{ width: '1px', height: 20, bgcolor: 'divider' }}
+                      aria-hidden
+                    />
+                    <Box display="flex" alignItems="center" gap={0.5} component="span">
+                      <CampaignIcon fontSize="small" color="action" aria-hidden />
+                      <Typography variant="body1" component="span" fontWeight={500}>
+                        {formatPublicationCount(listStats.totalChannels)}
+                      </Typography>
+                    </Box>
+                  </Box>
+                </Button>
+              </Tooltip>
             </Box>
             <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
               Busca en el texto almacenado del mensaje y su enlace (URL), no en el nombre del canal ni en el widget visible.
@@ -218,12 +299,26 @@ const Dashboard = () => {
                 Búsqueda activa: «{filters.search}»
               </Typography>
             )}
+            {dataFreshness.maxDate && (
+              <Typography
+                variant="caption"
+                color={dataFreshness.stale ? 'warning.main' : 'text.secondary'}
+                display="block"
+                sx={{ mt: 0.5 }}
+              >
+                Último mensaje en base de datos: {dataFreshness.maxDate}
+                {dataFreshness.stale
+                  ? ' — la ingesta parece detenida (más de 2 días sin novedades).'
+                  : ''}
+              </Typography>
+            )}
           </Paper>
 
           {/* Lista de mensajes */}
           <MessageList 
             filters={filters}
             onLoadingChange={setSearchPending}
+            onStatsChange={setListStats}
           />
         </Grid>
 

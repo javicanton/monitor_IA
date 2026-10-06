@@ -44,10 +44,11 @@ api.interceptors.response.use(
 
 // Funciones de API para mensajes
 export const messagesAPI = {
-  // Evoluci?n de mensajes por d?a (respeta todos los filtros activos, incluida la fecha)
+  // Evolución de mensajes por día (canal, temas, etc.; sin fecha para no recortar el brush)
   getMessagesOverTime: async (filters = {}) => {
     try {
-      const body = filters && Object.keys(filters).length ? filters : {};
+      const { dateStart, dateEnd, ...rest } = filters || {};
+      const body = Object.keys(rest).length ? rest : {};
       const response = Object.keys(body).length
         ? await api.post('/messages_over_time', body)
         : await api.get('/messages_over_time');
@@ -112,6 +113,17 @@ export const messagesAPI = {
       return response;
     } catch (error) {
       console.error('Error al descargar mensajes:', error);
+      throw error;
+    }
+  },
+
+  // Frescura de datos (min/max fecha en BD)
+  getDataStatus: async () => {
+    try {
+      const response = await api.get('/api/data_status');
+      return response.data;
+    } catch (error) {
+      console.error('Error al obtener estado de datos:', error);
       throw error;
     }
   },

@@ -7,23 +7,14 @@ import {
   Button, 
   Alert,
   Snackbar,
-  Tooltip,
 } from '@mui/material';
 import {
   Refresh as RefreshIcon,
   Download as DownloadIcon,
-  Article as ArticleIcon,
-  Campaign as CampaignIcon,
 } from '@mui/icons-material';
 import MessageCard from './MessageCard';
 import { messagesAPI, channelsAPI } from '../utils/api';
 import config from '../config';
-
-const formatPublicationCount = (count) => {
-  const n = Number(count);
-  if (!Number.isFinite(n)) return '0';
-  return new Intl.NumberFormat('es-ES').format(n);
-};
 
 const DEBOUNCE_MS = 500;
 
@@ -41,7 +32,7 @@ const getLoadingMessage = (filters = {}) => {
   return 'Cargando mensajes…';
 };
 
-const MessageList = ({ filters = {}, onLoadingChange }) => {
+const MessageList = ({ filters = {}, onLoadingChange, onStatsChange }) => {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -174,14 +165,23 @@ const MessageList = ({ filters = {}, onLoadingChange }) => {
     }
   };
 
-  const handleRefresh = () => {
+  const handleRefresh = useCallback(() => {
     fetchChannelCount();
     fetchMessages(1, false);
-  };
+  }, [fetchChannelCount, fetchMessages]);
 
   useEffect(() => {
     fetchChannelCount();
   }, [fetchChannelCount]);
+
+  useEffect(() => {
+    onStatsChange?.({
+      totalMessages,
+      totalChannels,
+      loading,
+      onRefresh: handleRefresh,
+    });
+  }, [totalMessages, totalChannels, loading, onStatsChange, handleRefresh]);
 
   const handleExportRelevants = async () => {
     try {
@@ -279,49 +279,104 @@ const MessageList = ({ filters = {}, onLoadingChange }) => {
     setSnackbar({ ...snackbar, open: false });
   };
 
+  const actionToolbar = (
+    <Box
+      display="grid"
+      gridTemplateColumns={{ xs: 'repeat(2, minmax(0, 1fr))', md: 'repeat(4, minmax(0, 1fr))' }}
+      gap={1}
+      alignItems="stretch"
+      mb={3}
+    >
+      <Button
+        variant="outlined"
+        size="small"
+        onClick={handleDownloadMessages}
+        startIcon={<DownloadIcon />}
+        disabled={loading}
+        sx={{ whiteSpace: 'nowrap', minWidth: 0 }}
+      >
+        Descargar mensajes
+      </Button>
+      <Button
+        variant="outlined"
+        size="small"
+        onClick={handleDownloadChannels}
+        startIcon={<DownloadIcon />}
+        disabled={loading}
+        sx={{ whiteSpace: 'nowrap', minWidth: 0 }}
+      >
+        Descargar canales
+      </Button>
+      <Button
+        variant="outlined"
+        size="small"
+        onClick={() => setShowNotRelevant((prev) => !prev)}
+        disabled={loading}
+        sx={{ whiteSpace: 'nowrap', minWidth: 0 }}
+      >
+        {showNotRelevant ? 'Ocultar no relevantes' : 'Mostrar no relevantes'}
+      </Button>
+      <Button
+        variant="contained"
+        color="secondary"
+        size="small"
+        onClick={handleExportRelevants}
+        disabled={loading}
+        sx={{ whiteSpace: 'nowrap', minWidth: 0 }}
+      >
+        Exportar Relevantes
+      </Button>
+    </Box>
+  );
+
   if (loading && messages.length === 0) {
     return (
-      <Box
-        display="flex"
-        flexDirection="column"
-        justifyContent="center"
-        alignItems="center"
-        minHeight="200px"
-        sx={{ mt: 4 }}
-      >
-        <CircularProgress />
-        <Typography variant="body1" sx={{ mt: 2 }}>
-          {getLoadingMessage(filters)}
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-          Puede tardar unos segundos con búsquedas o filtros amplios.
-        </Typography>
+      <Box sx={{ mt: 2 }}>
+        {actionToolbar}
+        <Box
+          display="flex"
+          flexDirection="column"
+          justifyContent="center"
+          alignItems="center"
+          minHeight="200px"
+        >
+          <CircularProgress />
+          <Typography variant="body1" sx={{ mt: 2 }}>
+            {getLoadingMessage(filters)}
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            Puede tardar unos segundos con búsquedas o filtros amplios.
+          </Typography>
+        </Box>
       </Box>
     );
   }
 
   if (error && messages.length === 0) {
     return (
-      <Box display="flex" flexDirection="column" alignItems="center" minHeight="200px">
-        <Typography color="error" variant="h6" gutterBottom>
-          Error al cargar los mensajes
-        </Typography>
-        <Typography color="textSecondary" gutterBottom>
-          {error}
-        </Typography>
-        <Button 
-          variant="contained" 
-          onClick={handleRefresh}
-          startIcon={<RefreshIcon />}
-        >
-          Reintentar
-        </Button>
+      <Box sx={{ mt: 2 }}>
+        {actionToolbar}
+        <Box display="flex" flexDirection="column" alignItems="center" minHeight="200px">
+          <Typography color="error" variant="h6" gutterBottom>
+            Error al cargar los mensajes
+          </Typography>
+          <Typography color="textSecondary" gutterBottom>
+            {error}
+          </Typography>
+          <Button
+            variant="contained"
+            onClick={handleRefresh}
+            startIcon={<RefreshIcon />}
+          >
+            Reintentar
+          </Button>
+        </Box>
       </Box>
     );
   }
 
   return (
-    <Box sx={{ mt: 4 }}>
+    <Box>
       {loading && (
         <Alert severity="info" sx={{ mb: 2 }}>
           <Box display="flex" alignItems="flex-start" gap={1.5}>
@@ -335,80 +390,8 @@ const MessageList = ({ filters = {}, onLoadingChange }) => {
           </Box>
         </Alert>
       )}
-      {/* Header con estadísticas y botones */}
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Tooltip
-          title={`${formatPublicationCount(totalMessages)} publicaciones · ${formatPublicationCount(totalChannels)} canales (clic para actualizar)`}
-        >
-          <Button
-            variant="outlined"
-            onClick={handleRefresh}
-            disabled={loading}
-            aria-label={`${totalMessages} publicaciones, ${totalChannels} canales`}
-            sx={{
-              textTransform: 'none',
-              color: 'text.secondary',
-              borderColor: 'divider',
-              px: 2,
-              py: 1,
-            }}
-          >
-            <Box display="flex" alignItems="center" gap={1.5}>
-              <Box display="flex" alignItems="center" gap={0.5} component="span">
-                <ArticleIcon fontSize="small" color="action" aria-hidden />
-                <Typography variant="body1" component="span" fontWeight={500}>
-                  {formatPublicationCount(totalMessages)}
-                </Typography>
-              </Box>
-              <Box
-                component="span"
-                sx={{ width: '1px', height: 20, bgcolor: 'divider' }}
-                aria-hidden
-              />
-              <Box display="flex" alignItems="center" gap={0.5} component="span">
-                <CampaignIcon fontSize="small" color="action" aria-hidden />
-                <Typography variant="body1" component="span" fontWeight={500}>
-                  {formatPublicationCount(totalChannels)}
-                </Typography>
-              </Box>
-            </Box>
-          </Button>
-        </Tooltip>
-        
-        <Box display="flex" gap={2}>
-          <Button
-            variant="outlined"
-            onClick={handleDownloadMessages}
-            startIcon={<DownloadIcon />}
-            disabled={loading}
-          >
-            Descargar mensajes
-          </Button>
-          <Button
-            variant="outlined"
-            onClick={handleDownloadChannels}
-            startIcon={<DownloadIcon />}
-            disabled={loading}
-          >
-            Descargar canales
-          </Button>
-          <Button
-            variant="outlined"
-            onClick={() => setShowNotRelevant((prev) => !prev)}
-            disabled={loading}
-          >
-            {showNotRelevant ? 'Ocultar no relevantes' : 'Mostrar no relevantes'}
-          </Button>
-          <Button
-            variant="contained"
-            color="secondary"
-            onClick={handleExportRelevants}
-            disabled={loading}
-          >
-            Exportar Relevantes
-          </Button>
-        </Box>
-      </Box>
+      {/* Acciones debajo del buscador y del recuento: una sola fila en desktop */}
+      {actionToolbar}
 
       {/* Lista de mensajes */}
       <Grid container spacing={2}>

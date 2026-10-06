@@ -156,8 +156,18 @@ def is_channel_invalid_error(exc: Exception) -> bool:
 
 
 def is_telegram_session_error(exc: Exception) -> bool:
+    """Detecta fallos de sesión Telethon que deben abortar el scraper (no solo un canal)."""
+    name = type(exc).__name__.lower()
     text = str(exc).lower()
-    return "wrong session id" in text or "security error while unpacking" in text
+    if any(token in name for token in ("authkey", "sessionrevoked", "userdeactivated", "sessionexpired")):
+        return True
+    return (
+        "wrong session id" in text
+        or "security error while unpacking" in text
+        or "authorization key" in text
+        or "the key is not registered" in text
+        or "session revoked" in text
+    )
 
 
 async def resolve_forward_username(message, client) -> Optional[str]:
