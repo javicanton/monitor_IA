@@ -58,6 +58,21 @@ function FilterBar({ onFilterChange, onChannelsLoad, currentFilters = {} }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Sincronizar canal (y fechas) cuando llegan desde fuera (p.ej. /?channel=…)
+  useEffect(() => {
+    const externalChannel = currentFilters.channel;
+    if (!externalChannel) return;
+    const nextChannel = Array.isArray(externalChannel)
+      ? externalChannel
+      : [externalChannel];
+    setFilters((prev) => {
+      if (JSON.stringify(prev.channel) === JSON.stringify(nextChannel)) return prev;
+      const merged = { ...prev, channel: nextChannel };
+      setAppliedFilters((applied) => ({ ...applied, channel: nextChannel }));
+      return merged;
+    });
+  }, [currentFilters.channel]);
+
   const fetchChannels = async () => {
     try {
       setLoading(true);
