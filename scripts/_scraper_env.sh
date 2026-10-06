@@ -25,10 +25,26 @@ scraper_load_env() {
 
     PYTHON="${ROOT}/.venv/bin/python"
     if [[ ! -x "$PYTHON" ]]; then
-        PYTHON=python3
+        echo "ERROR: no existe ${ROOT}/.venv/bin/python"
+        echo "Crea el venv e instala deps del scraper (una vez):"
+        echo "  cd ${ROOT}"
+        echo "  python3 -m venv .venv"
+        echo "  .venv/bin/pip install -U pip"
+        echo "  .venv/bin/pip install -r requirements.txt -r backend/requirements.txt"
+        echo "Luego: ./scripts/run_scraper_daily.sh"
+        exit 7
     fi
 
     export PYTHONUNBUFFERED=1
+    echo "==> Python scraper: ${PYTHON}" >&2
+
+    # Comprobación rápida antes de lanzar scraper.py (mensaje más claro que el pip auto-install)
+    if ! "$PYTHON" -c "import pandas, telethon, openpyxl, dotenv, boto3" 2>/dev/null; then
+        echo "ERROR: el venv existe pero faltan paquetes del scraper (p.ej. pandas/telethon)."
+        echo "Repara con:"
+        echo "  ${PYTHON} -m pip install -r ${ROOT}/requirements.txt -r ${ROOT}/backend/requirements.txt"
+        exit 7
+    fi
 
     LOG_DIR="${ROOT}/logs"
   mkdir -p "$LOG_DIR"

@@ -74,6 +74,18 @@ SCRAPER_MAX_MESSAGES=500
 - `DATABASE_URL` en `.env`
 - Sesión Telethon autorizada (`~/.telethon/monitorIA.session`)
 - `credentials.txt` o `TELEGRAM_API_ID` / `TELEGRAM_API_HASH`
+- **Venv del repo** con deps instaladas (el cron **no** hace `pip install` solo):
+
+```bash
+cd ~/monitor_IA
+python3 -m venv .venv          # solo si no existe
+.venv/bin/pip install -U pip
+.venv/bin/pip install -r requirements.txt -r backend/requirements.txt
+```
+
+Si ves `Error: No se pudo instalar pandas` o código **7**, el cron está usando un Python
+sin deps (o no hay `.venv`). Repara con los comandos de arriba y relanza
+`./scripts/run_scraper_daily.sh`.
 
 ## Límites de Telegram (FloodWait)
 
@@ -105,6 +117,7 @@ Recomendaciones:
 | 4 | Falta `DATABASE_URL` con `--postgres` |
 | 5 | Sesión Telethon no autorizada (modo no interactivo) |
 | 6 | Sesión Telethon rota a mitad de ejecución |
+| 7 | Falta `.venv` o dependencias (pandas/telethon/…) |
 
 Tras cada corrida diaria se escribe `logs/scraper_last_status.json`
 (visible con `./scripts/scraper_status.sh`).
