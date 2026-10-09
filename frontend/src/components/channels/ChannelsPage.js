@@ -5,8 +5,12 @@ import {
   Box,
   Button,
   Container,
+  FormControl,
   FormControlLabel,
+  InputLabel,
+  MenuItem,
   Paper,
+  Select,
   Stack,
   Switch,
   TextField,
@@ -21,26 +25,32 @@ import { useTheme } from '@mui/material/styles';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import DownloadIcon from '@mui/icons-material/Download';
 import CloseIcon from '@mui/icons-material/Close';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import { useAuth } from '../../auth/AuthContext';
 import UserMenu from '../../auth/components/UserMenu';
 import { channelsAPI } from '../../utils/api';
-import ChannelGraph from './ChannelGraph';
+import ChannelGraph, { LAYOUT_OPTIONS } from './ChannelGraph';
 import ChannelDetailPanel from './ChannelDetailPanel';
 import logo from '../../assets/Logo_MonitorIA ajustado.png';
 
 const ChannelsPage = () => {
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const isAdmin = user?.role === 'admin';
 
   const [graph, setGraph] = useState({ nodes: [], edges: [], meta: null });
   const [loadingGraph, setLoadingGraph] = useState(true);
   const [graphError, setGraphError] = useState('');
   const [search, setSearch] = useState('');
+  const [filterBySearch, setFilterBySearch] = useState(false);
   const [minForwards, setMinForwards] = useState(1);
   const [onlyMonitored, setOnlyMonitored] = useState(false);
   const [includeDiscontinued, setIncludeDiscontinued] = useState(true);
+  const [layout, setLayout] = useState('forceAtlas2');
+  const [reheatOnSelect, setReheatOnSelect] = useState(false);
+  const [reheatToken, setReheatToken] = useState(0);
 
   const [selectedId, setSelectedId] = useState(null);
   const [detail, setDetail] = useState(null);
@@ -48,6 +58,12 @@ const ChannelsPage = () => {
   const [days, setDays] = useState(30);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [monitorBusy, setMonitorBusy] = useState(false);
+  const [monitorMsg, setMonitorMsg] = useState('');
+
+  const graphHeight = isMobile
+    ? Math.max(420, Math.min(window.innerHeight * 0.55, 640))
+    : Math.max(560, Math.min(window.innerHeight - 220, 820));
 
   const handleLogout = async () => {
     await logout();
@@ -84,10 +100,27 @@ const ChannelsPage = () => {
     if (onlyMonitored) {
       nodes = nodes.filter((n) => n.monitored);
     }
+    const q = search.trim().toLowerCase();
+    if (filterBySearch && q) {
+      const matched = new Set(
+        nodes
+          .filter((n) =>
+            (n.username || '').toLowerCase().includes(q)
+            || (n.title || '').toLowerCase().includes(q)
+          )
+          .map((n) => n.id)
+      );
+      // Incluir vecinos de matches para no romper el contexto
+      graph.edges.forEach((e) => {
+        if (matched.has(e.source)) matched.add(e.target);
+        if (matched.has(e.target)) matched.add(e.source);
+      });
+      nodes = nodes.filter((n) => matched.has(n.id));
+    }
     const ids = new Set(nodes.map((n) => n.id));
     const edges = graph.edges.filter((e) => ids.has(e.source) && ids.has(e.target));
     return { nodes, edges };
-  }, [graph, onlyMonitored]);
+  }, [graph, onlyMonitored, filterBySearch, search]);
 
   const loadDetail = useCallback(async (username, daysWindow) => {
     if (!username) {
@@ -117,18 +150,62 @@ const ChannelsPage = () => {
   const handleSelectNode = (node) => {
     const id = node?.id || node?.username || null;
     setSelectedId(id);
+    setMonitorMsg('');
+    if (reheatOnSelect) {
+      setReheatToken((t) => t + 1);
+    }
     if (isMobile && id) setDrawerOpen(true);
   };
 
   const handleSelectNeighbor = (username) => {
     setSelectedId(username);
+    setMonitorMsg('');
     if (isMobile) setDrawerOpen(true);
+  };
+
+  const handleSearchApply = () => {
+    const q = search.trim().toLowerCase();
+    if (!q) return;
+    const match = visibleGraph.nodes.find(
+      (n) =>
+        (n.username || '').toLowerCase().includes(q)
+        || (n.title || '').toLowerCase().includes(q)
+    ) || graph.nodes.find(
+      (n) =>
+        (n.username || '').toLowerCase().includes(q)
+        || (n.title || '').toLowerCase().includes(q)
+    );
+    if (match) {
+      setSelectedId(match.id);
+      if (isMobile) setDrawerOpen(true);
+    }
   };
 
   const handleViewMessages = (channel) => {
     const title = channel?.title || channel?.username;
     if (!title) return;
     navigate(`/?channel=${encodeURIComponent(title)}`);
+  };
+
+  const handleMonitor = async (channel) => {
+    if (!channel?.username) return;
+    try {
+      setMonitorBusy(true);
+      setMonitorMsg('');
+      const res = await channelsAPI.monitorChannel({
+        username: channel.username,
+        title: channel.title,
+      });
+      setMonitorMsg(res.message || (res.action === 'added' ? 'Añadido' : 'Propuesta enviada'));
+      if (res.action === 'added') {
+        await loadGraph();
+        await loadDetail(channel.username, days);
+      }
+    } catch (err) {
+      setMonitorMsg(err.response?.data?.error || err.message || 'No se pudo completar');
+    } finally {
+      setMonitorBusy(false);
+    }
   };
 
   const handleDownload = async () => {
@@ -165,32 +242,32 @@ const ChannelsPage = () => {
       onDaysChange={setDays}
       onSelectNeighbor={handleSelectNeighbor}
       onViewMessages={handleViewMessages}
+      onMonitor={handleMonitor}
+      monitorBusy={monitorBusy}
+      monitorMsg={monitorMsg}
+      isAdmin={isAdmin}
     />
   );
 
   return (
-    <Container maxWidth="xl" sx={{ py: 3 }}>
+    <Container maxWidth={false} sx={{ py: 2, px: { xs: 1.5, md: 3 } }}>
       <UserMenu onLogout={handleLogout} />
 
-      <Stack direction="row" alignItems="center" spacing={2} mb={2} flexWrap="wrap">
+      <Stack direction="row" alignItems="center" spacing={2} mb={1.5} flexWrap="wrap">
         <Box
           component="img"
           src={logo}
           alt="MonitorIA"
-          sx={{ width: 56, height: 'auto', cursor: 'pointer' }}
+          sx={{ width: 48, height: 'auto', cursor: 'pointer' }}
           onClick={() => navigate('/')}
         />
-        <Box flex={1} minWidth={180}>
+        <Box flex={1} minWidth={160}>
           <Typography variant="h5" sx={{ fontWeight: 600 }}>Canales</Typography>
           <Typography variant="body2" color="text.secondary">
-            Grafo de reenvíos y estadísticas por canal
+            Grafo de reenvíos · layout {LAYOUT_OPTIONS.find((o) => o.value === layout)?.label}
           </Typography>
         </Box>
-        <Button
-          startIcon={<ArrowBackIcon />}
-          onClick={() => navigate('/')}
-          size="small"
-        >
+        <Button startIcon={<ArrowBackIcon />} onClick={() => navigate('/')} size="small">
           Mensajes
         </Button>
         <Button
@@ -204,21 +281,50 @@ const ChannelsPage = () => {
         </Button>
       </Stack>
 
-      <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+      <Paper variant="outlined" sx={{ p: 1.5, mb: 1.5 }}>
         <Stack
           direction={{ xs: 'column', md: 'row' }}
-          spacing={2}
+          spacing={1.5}
           alignItems={{ md: 'center' }}
+          flexWrap="wrap"
         >
           <TextField
             size="small"
             label="Buscar canal"
-            placeholder="@username o título"
+            placeholder="@username o título · Enter para ir"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSearchApply()}
             sx={{ minWidth: { md: 220 }, flex: 1 }}
           />
-          <Box sx={{ width: { xs: '100%', md: 200 }, px: 1 }}>
+          <Button size="small" variant="contained" onClick={handleSearchApply}>
+            Ir
+          </Button>
+          <FormControl size="small" sx={{ minWidth: 160 }}>
+            <InputLabel id="layout-label">Layout</InputLabel>
+            <Select
+              labelId="layout-label"
+              label="Layout"
+              value={layout}
+              onChange={(e) => {
+                setLayout(e.target.value);
+                setReheatToken((t) => t + 1);
+              }}
+            >
+              {LAYOUT_OPTIONS.map((opt) => (
+                <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<RefreshIcon />}
+            onClick={() => setReheatToken((t) => t + 1)}
+          >
+            Recalcular
+          </Button>
+          <Box sx={{ width: { xs: '100%', md: 160 }, px: 1 }}>
             <Typography variant="caption" color="text.secondary">
               Mín. reenvíos: {minForwards}
             </Typography>
@@ -231,6 +337,16 @@ const ChannelsPage = () => {
               valueLabelDisplay="auto"
             />
           </Box>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={filterBySearch}
+                onChange={(e) => setFilterBySearch(e.target.checked)}
+                size="small"
+              />
+            }
+            label="Filtrar búsqueda"
+          />
           <FormControlLabel
             control={
               <Switch
@@ -249,7 +365,17 @@ const ChannelsPage = () => {
                 size="small"
               />
             }
-            label="Incluir descontinuados"
+            label="Descontinuados"
+          />
+          <FormControlLabel
+            control={
+              <Switch
+                checked={reheatOnSelect}
+                onChange={(e) => setReheatOnSelect(e.target.checked)}
+                size="small"
+              />
+            }
+            label="Recalcular al pulsar"
           />
         </Stack>
       </Paper>
@@ -261,15 +387,25 @@ const ChannelsPage = () => {
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: '1fr', md: '1fr 340px' },
+          gridTemplateColumns: { xs: '1fr', md: 'minmax(0,1fr) 360px' },
           gap: 2,
           alignItems: 'stretch',
-          minHeight: 540,
+          minHeight: graphHeight,
         }}
       >
-        <Paper variant="outlined" sx={{ p: 1, position: 'relative', overflow: 'hidden' }}>
+        <Paper
+          variant="outlined"
+          sx={{
+            p: 1,
+            position: 'relative',
+            overflow: 'hidden',
+            aspectRatio: { md: '1 / 1' },
+            maxHeight: { md: graphHeight + 40 },
+            minHeight: graphHeight,
+          }}
+        >
           {loadingGraph ? (
-            <Box display="flex" justifyContent="center" alignItems="center" height={520}>
+            <Box display="flex" justifyContent="center" alignItems="center" height="100%" minHeight={graphHeight}>
               <CircularProgress />
             </Box>
           ) : (
@@ -278,31 +414,45 @@ const ChannelsPage = () => {
               edges={visibleGraph.edges}
               selectedId={selectedId}
               highlightQuery={search}
+              layout={layout}
+              reheatToken={reheatToken}
               onSelectNode={handleSelectNode}
-              height={520}
+              height={graphHeight}
             />
           )}
           {!loadingGraph && visibleGraph.nodes.length === 0 && (
-            <Box position="absolute" inset={0} display="flex" alignItems="center" justifyContent="center" p={3}>
+            <Box
+              position="absolute"
+              top={0}
+              left={0}
+              right={0}
+              bottom={0}
+              display="flex"
+              alignItems="center"
+              justifyContent="center"
+              p={3}
+            >
               <Typography color="text.secondary" align="center">
-                No hay nodos para mostrar. Comprueba que el scraper haya rellenado
-                monitored_channels / channel_edges.
+                No hay nodos para mostrar con los filtros actuales.
               </Typography>
             </Box>
           )}
         </Paper>
 
         {!isMobile && (
-          <Paper variant="outlined" sx={{ p: 2, overflow: 'auto', maxHeight: 560 }}>
+          <Paper variant="outlined" sx={{ p: 2, overflow: 'auto', maxHeight: graphHeight + 48 }}>
             {panel}
           </Paper>
         )}
       </Box>
 
-      <Stack direction="row" spacing={2} mt={1.5} flexWrap="wrap">
+      <Stack direction="row" spacing={2} mt={1.5} flexWrap="wrap" alignItems="center">
         <LegendDot color="#1976d2" label="Activo" />
         <LegendDot color="#d32f2f" label="Error / descontinuado" />
         <LegendDot color="#ed6c02" label="Solo en grafo" />
+        <Typography variant="caption" color="text.secondary">
+          Por defecto: ForceAtlas2 (aprox.). «Force» = muelles + repulsión. El click no recalcula salvo que actives la opción.
+        </Typography>
       </Stack>
 
       <Drawer
