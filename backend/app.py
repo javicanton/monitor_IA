@@ -24,10 +24,12 @@ from auth import auth_bp, admin_required, allowed_email_required
 from auth.activity import register_activity_tracking
 from models import Channel, ChannelEdge, MonitoredChannel, db
 from channel_graph import (
+    add_or_reactivate_monitored_channel,
     build_channel_graph_payload,
     build_channel_stats_payload,
     normalize_username,
 )
+from auth.session import load_user_by_identity
 from config import Config
 import boto3
 from botocore.exceptions import ClientError
@@ -979,6 +981,87 @@ def api_channel_stats(username):
         return jsonify(success=True, **payload)
     except Exception as e:
         logger.exception('Error en /api/channels/%s/stats', username)
+        return jsonify(success=False, error=str(e)), 500
+
+
+@app.route('/api/channels/monitor', methods=['POST'])
+@allowed_email_required
+def api_channels_monitor():
+    """
+    Incluir canal en monitorización:
+    - admin → alta/reactivación inmediata en monitored_channels
+    - resto → propuesta por email (mismo flujo que /api/channels/suggest)
+    """
+    if not USE_POSTGRES:
+        return jsonify(success=False, error='Requiere PostgreSQL'), 501
+    try:
+        data = request.get_json(silent=True) or {}
+        username = normalize_username(data.get('username') or data.get('channel') or '')
+        title = (data.get('title') or '').strip() or None
+        note = (data.get('note') or data.get('comment') or '').strip()
+        if not username:
+            return jsonify(success=False, error='Indica el username del canal'), 400
+
+        user = load_user_by_identity(get_jwt_identity())
+        is_admin = bool(user and user.role == 'admin')
+
+        if is_admin:
+            row = add_or_reactivate_monitored_channel(
+                username,
+                title=title,
+                source='manual',
+            )
+            return jsonify(
+                success=True,
+                action='added',
+                message=f'@{row.username} añadido a monitorización.',
+                channel={
+                    'username': row.username,
+                    'title': row.title,
+                    'status': row.status,
+                    'discontinued': row.discontinued,
+                    'monitored': True,
+                },
+            )
+
+        # Usuario basic: propuesta por correo
+        contact_email = (user.email if user else '') or (data.get('email') or '').strip()
+        subject = f'[Monitor IA] Propuesta de canal: @{username}'
+        body_lines = [
+            'Se ha recibido una propuesta para incluir un canal en la monitorización.',
+            '',
+            f'Canal: @{username}',
+            f'URL: https://t.me/{username}',
+        ]
+        if title:
+            body_lines.append(f'Título: {title}')
+        if note:
+            body_lines.extend(['', f'Comentario: {note}'])
+        if contact_email:
+            body_lines.extend(['', f'Contacto: {contact_email}'])
+        body_lines.extend(['', f'Fecha: {datetime.utcnow().isoformat()}Z'])
+        try:
+            msg = MailMessage(
+                subject=subject,
+                recipients=[CHANNEL_SUGGEST_EMAIL],
+                body='\n'.join(body_lines),
+            )
+            if contact_email:
+                msg.reply_to = contact_email
+            mail.send(msg)
+        except Exception as mail_err:
+            logger.exception('No se pudo enviar propuesta de canal')
+            return jsonify(
+                success=False,
+                error=f'No se pudo enviar el correo ({mail_err})',
+            ), 503
+        return jsonify(
+            success=True,
+            action='proposed',
+            message='Propuesta enviada. El equipo la revisará pronto.',
+        )
+    except Exception as e:
+        logger.exception('Error en /api/channels/monitor')
         return jsonify(success=False, error=str(e)), 500
 
 @app.route('/topics', methods=['GET'])
