@@ -70,8 +70,9 @@ function ChannelGraph({
     if (!el) return undefined;
     const update = () => {
       const rect = el.getBoundingClientRect();
-      const w = Math.max(320, rect.width);
-      const h = Math.max(height, Math.min(w, height));
+      // Usar todo el ancho del contenedor (sin forzar cuadrado → hueco blanco)
+      const w = Math.max(320, Math.floor(rect.width));
+      const h = Math.max(360, Math.floor(height || rect.height || 560));
       setSize({ width: w, height: h });
     };
     update();
@@ -257,19 +258,35 @@ function ChannelGraph({
     const maxTicks = layout === 'circular' ? 2 : 280;
 
     const softBound = (node, width, h, r) => {
-      // Margen amplio; fuerza suave hacia el interior (no clamp a esquina)
-      const margin = Math.max(40, r + 20);
-      const strength = 0.08;
-      if (node.x < margin) node.vx += (margin - node.x) * strength;
-      if (node.x > width - margin) node.vx -= (node.x - (width - margin)) * strength;
-      if (node.y < margin) node.vy += (margin - node.y) * strength;
-      if (node.y > h - margin) node.vy -= (node.y - (h - margin)) * strength;
-      // Nunca dejar fuera del canvas con un soft clamp (sin pegar a 0,0)
-      const hard = 8;
-      if (node.x < hard) node.x = hard + Math.random() * 4;
-      if (node.y < hard) node.y = hard + Math.random() * 4;
-      if (node.x > width - hard) node.x = width - hard - Math.random() * 4;
-      if (node.y > h - hard) node.y = h - hard - Math.random() * 4;
+      // Margen amplio + fuerza hacia el centro si se acerca al borde (evita esquinas)
+      const margin = Math.max(48, r + 28);
+      const strength = 0.14;
+      const cx = width / 2;
+      const cy = h / 2;
+      if (node.x < margin) {
+        node.vx += (margin - node.x) * strength + (cx - node.x) * 0.002;
+      }
+      if (node.x > width - margin) {
+        node.vx -= (node.x - (width - margin)) * strength - (cx - node.x) * 0.002;
+      }
+      if (node.y < margin) {
+        node.vy += (margin - node.y) * strength + (cy - node.y) * 0.002;
+      }
+      if (node.y > h - margin) {
+        node.vy -= (node.y - (h - margin)) * strength - (cy - node.y) * 0.002;
+      }
+      // Si está en esquina, empujar fuerte al centro
+      const nearL = node.x < margin * 1.2;
+      const nearR = node.x > width - margin * 1.2;
+      const nearT = node.y < margin * 1.2;
+      const nearB = node.y > h - margin * 1.2;
+      if ((nearL || nearR) && (nearT || nearB)) {
+        node.vx += (cx - node.x) * 0.05;
+        node.vy += (cy - node.y) * 0.05;
+      }
+      const hard = margin * 0.5;
+      node.x = Math.min(width - hard, Math.max(hard, node.x));
+      node.y = Math.min(h - hard, Math.max(hard, node.y));
     };
 
     const collide = (simNodes) => {
@@ -518,7 +535,10 @@ function ChannelGraph({
   };
 
   return (
-    <div ref={containerRef} style={{ position: 'relative', width: '100%', height: size.height }}>
+    <div
+      ref={containerRef}
+      style={{ position: 'relative', width: '100%', height: '100%', minHeight: size.height }}
+    >
       <canvas
         ref={canvasRef}
         onPointerDown={handlePointerDown}

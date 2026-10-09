@@ -62,7 +62,7 @@ const ChannelsPage = () => {
 
   const graphHeight = isMobile
     ? Math.max(420, Math.min(window.innerHeight * 0.55, 640))
-    : Math.max(560, Math.min(window.innerHeight - 220, 820));
+    : Math.max(620, Math.min(window.innerHeight - 200, 900));
 
   const handleLogout = async () => {
     await logout();
@@ -399,10 +399,10 @@ const ChannelsPage = () => {
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: '1fr', md: 'minmax(0,1fr) 360px' },
+          gridTemplateColumns: { xs: '1fr', md: 'minmax(0,1fr) 340px' },
           gap: 2,
           alignItems: 'stretch',
-          minHeight: graphHeight,
+          width: '100%',
         }}
       >
         <Paper
@@ -411,13 +411,13 @@ const ChannelsPage = () => {
             p: 1,
             position: 'relative',
             overflow: 'hidden',
-            aspectRatio: { md: '1 / 1' },
-            maxHeight: { md: graphHeight + 40 },
-            minHeight: graphHeight,
+            width: '100%',
+            minWidth: 0,
+            height: graphHeight,
           }}
         >
           {loadingGraph ? (
-            <Box display="flex" justifyContent="center" alignItems="center" height="100%" minHeight={graphHeight}>
+            <Box display="flex" justifyContent="center" alignItems="center" height="100%">
               <CircularProgress />
             </Box>
           ) : (
@@ -453,7 +453,10 @@ const ChannelsPage = () => {
         </Paper>
 
         {!isMobile && (
-          <Paper variant="outlined" sx={{ p: 2, overflow: 'auto', maxHeight: graphHeight + 48 }}>
+          <Paper
+            variant="outlined"
+            sx={{ p: 2, overflow: 'auto', height: graphHeight, minWidth: 0 }}
+          >
             {panel}
           </Paper>
         )}
