@@ -1,4 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  CLUSTER_COLORS,
+  LAYOUT_OPTIONS,
+  detectCommunities,
+  nodeRadiusBase,
+} from './graphLayout';
+
+export { LAYOUT_OPTIONS };
 
 const STATUS_COLORS = {
   active: '#1976d2',
@@ -7,23 +15,10 @@ const STATUS_COLORS = {
   discovered: '#ed6c02',
 };
 
-export const LAYOUT_OPTIONS = [
-  { value: 'force', label: 'Force (muelles)' },
-  { value: 'forceAtlas2', label: 'ForceAtlas2' },
-  { value: 'circular', label: 'Circular' },
-];
-
-function nodeColor(node) {
+function statusColor(node) {
   if (node.discontinued || node.status === 'error') return STATUS_COLORS.error;
   if (!node.monitored) return STATUS_COLORS.discovered;
   return STATUS_COLORS[node.status] || STATUS_COLORS.active;
-}
-
-function nodeRadius(node) {
-  const base = 7;
-  const byDegree = Math.min(16, Math.sqrt(node.degree || 0) * 2.4);
-  const byMsgs = Math.min(10, Math.sqrt(node.message_count || 0) / 7);
-  return base + byDegree + byMsgs * 0.35;
 }
 
 function matchesQuery(node, q) {
@@ -35,12 +30,10 @@ function matchesQuery(node, q) {
 }
 
 /**
- * Grafo canvas con varios layouts.
- * Algoritmo por defecto: force-directed (repulsión + muelles), estilo Fruchterman–Reingold.
- * ForceAtlas2: aproximación (atracción ∝ distancia, repulsión por grado, gravedad).
- * Circular: anillo ordenado por grado.
- *
- * La simulación NO se reinicia al cambiar selectedId / highlight (solo redibuja).
+ * Grafo canvas.
+ * - Preserva posiciones al filtrar (solo elimina nodos; no reinicia layout).
+ * - Soft-bound (sin pegar a esquinas).
+ * - Clusters por modularidad (label propagation).
  */
 function ChannelGraph({
   nodes = [],
@@ -48,24 +41,29 @@ function ChannelGraph({
   selectedId = null,
   highlightQuery = '',
   layout = 'forceAtlas2',
-  reheatToken = 0,
+  nodeSizeScale = 1,
+  showClusters = false,
   onSelectNode,
   height = 640,
 }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const simRef = useRef({ nodes: [], edges: [], width: 600, height, layout });
+  const posCacheRef = useRef(new Map()); // id → {x,y} persistente entre filtros
   const dragRef = useRef(null);
   const hoverRef = useRef(null);
   const drawRef = useRef(() => {});
-  const runningRef = useRef(false);
+  const layoutRef = useRef(layout);
   const [tooltip, setTooltip] = useState(null);
   const [size, setSize] = useState({ width: 600, height });
+  const [communityVersion, setCommunityVersion] = useState(0);
 
-  const graphKey = useMemo(
-    () => `${nodes.length}|${edges.length}|${nodes.map((n) => n.id).join(',')}`,
-    [nodes, edges]
-  );
+  const communities = useMemo(() => {
+    if (!showClusters) return new Map();
+    return detectCommunities(nodes, edges);
+    // communityVersion fuerza recálculo manual si se necesita
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodes, edges, showClusters, communityVersion]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -73,7 +71,6 @@ function ChannelGraph({
     const update = () => {
       const rect = el.getBoundingClientRect();
       const w = Math.max(320, rect.width);
-      // Preferir área cuadrada aprovechando el alto disponible
       const h = Math.max(height, Math.min(w, height));
       setSize({ width: w, height: h });
     };
@@ -87,74 +84,52 @@ function ChannelGraph({
     };
   }, [height]);
 
-  const initPositions = useCallback((simNodes, width, h, layoutMode) => {
+  const placeNewNode = (node, width, h, layoutMode, index, total) => {
     const cx = width / 2;
     const cy = h / 2;
-    const n = simNodes.length || 1;
     if (layoutMode === 'circular') {
-      const ranked = [...simNodes].sort((a, b) => (b.degree || 0) - (a.degree || 0));
-      const R = Math.min(width, h) * 0.38;
-      ranked.forEach((node, i) => {
-        const angle = (2 * Math.PI * i) / n - Math.PI / 2;
-        node.x = cx + Math.cos(angle) * R;
-        node.y = cy + Math.sin(angle) * R;
-        node.vx = 0;
-        node.vy = 0;
-      });
-      return;
+      const R = Math.min(width, h) * 0.36;
+      const angle = (2 * Math.PI * index) / Math.max(total, 1) - Math.PI / 2;
+      node.x = cx + Math.cos(angle) * R;
+      node.y = cy + Math.sin(angle) * R;
+    } else {
+      const R = Math.min(width, h) * 0.22;
+      const angle = (2 * Math.PI * index) / Math.max(total, 1);
+      node.x = cx + Math.cos(angle) * R * (0.6 + Math.random() * 0.5);
+      node.y = cy + Math.sin(angle) * R * (0.6 + Math.random() * 0.5);
     }
-    // force / forceAtlas2: círculo inicial + jitter
-    const R = Math.min(width, h) * 0.28;
-    simNodes.forEach((node, i) => {
-      const angle = (2 * Math.PI * i) / n;
-      node.x = cx + Math.cos(angle) * R + (Math.random() - 0.5) * 30;
-      node.y = cy + Math.sin(angle) * R + (Math.random() - 0.5) * 30;
-      node.vx = 0;
-      node.vy = 0;
-    });
-  }, []);
+    node.vx = 0;
+    node.vy = 0;
+  };
 
-  // Inicializa / reinicia solo cuando cambian nodos, tamaño, layout o reheatToken
+  // Sync nodos/aristas: PRESERVAR posiciones; solo colocar nodos nuevos.
+  // Reinicio completo solo si cambia el algoritmo de layout.
   useEffect(() => {
     const width = size.width;
     const h = size.height;
-    const prevById = Object.fromEntries(
-      (simRef.current.nodes || []).map((n) => [n.id, n])
-    );
-    const canReuse = (
-      reheatToken === 0
-      && simRef.current.layout === layout
-      && simRef.current.width === width
-      && Math.abs(simRef.current.height - h) < 8
-      && simRef.current.nodes?.length === nodes.length
-    );
+    const layoutChanged = layoutRef.current !== layout;
+    layoutRef.current = layout;
+
+    if (layoutChanged) {
+      posCacheRef.current.clear();
+    }
 
     const simNodes = nodes.map((n, i) => {
-      const prev = prevById[n.id];
-      if (canReuse && prev && Number.isFinite(prev.x)) {
-        return {
-          ...n,
-          x: prev.x,
-          y: prev.y,
-          vx: 0,
-          vy: 0,
-          mass: 1 + Math.sqrt(n.degree || 0),
-        };
-      }
-      return {
+      const cached = posCacheRef.current.get(n.id);
+      const node = {
         ...n,
-        x: 0,
-        y: 0,
+        x: cached?.x,
+        y: cached?.y,
         vx: 0,
         vy: 0,
-        mass: 1 + Math.sqrt(n.degree || 0),
-        _i: i,
+        mass: 1 + Math.sqrt((n.degree || 0) + 1),
+        community: communities.get(n.id) ?? -1,
       };
+      if (!Number.isFinite(node.x) || !Number.isFinite(node.y) || layoutChanged) {
+        placeNewNode(node, width, h, layout, i, nodes.length);
+      }
+      return node;
     });
-
-    if (!(canReuse && simNodes.every((n) => n.x !== 0 || n.y !== 0))) {
-      initPositions(simNodes, width, h, layout);
-    }
 
     const byId = Object.fromEntries(simNodes.map((n) => [n.id, n]));
     const simEdges = edges
@@ -171,9 +146,23 @@ function ChannelGraph({
       width,
       height: h,
       layout,
-      ticks: 0,
+      cool: layout === 'circular' ? 1 : 0,
     };
-  }, [graphKey, size.width, size.height, layout, reheatToken, nodes, edges, initPositions]);
+
+    // Guardar cache actualizado (solo ids visibles)
+    const nextCache = new Map();
+    simNodes.forEach((n) => nextCache.set(n.id, { x: n.x, y: n.y }));
+    // Conservar también posiciones de nodos filtrados por si vuelven
+    posCacheRef.current.forEach((pos, id) => {
+      if (!nextCache.has(id)) nextCache.set(id, pos);
+    });
+    posCacheRef.current = nextCache;
+  }, [nodes, edges, size.width, size.height, layout, communities]);
+
+  const radiusOf = useCallback(
+    (node) => nodeRadiusBase(node, nodeSizeScale),
+    [nodeSizeScale]
+  );
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -195,41 +184,30 @@ function ChannelGraph({
     const maxFwd = Math.max(1, ...simEdges.map((e) => e.forward_count || 1));
 
     for (const e of simEdges) {
-      const w = 0.7 + (3.2 * (e.forward_count || 1)) / maxFwd;
+      const w = 0.4 + (2.2 * (e.forward_count || 1)) / maxFwd;
       const connected =
         !selectedId || e.source.id === selectedId || e.target.id === selectedId;
+      const sameCluster = showClusters
+        && e.source.community >= 0
+        && e.source.community === e.target.community;
       const edgeMatches = !q || matchesQuery(e.source, q) || matchesQuery(e.target, q);
       ctx.beginPath();
       ctx.moveTo(e.source.x, e.source.y);
       ctx.lineTo(e.target.x, e.target.y);
-      ctx.strokeStyle = connected && edgeMatches
-        ? 'rgba(25, 118, 210, 0.5)'
-        : 'rgba(0,0,0,0.05)';
-      ctx.lineWidth = connected ? w : Math.max(0.4, w * 0.35);
-      ctx.stroke();
-
       if (connected && edgeMatches) {
-        const dx = e.target.x - e.source.x;
-        const dy = e.target.y - e.source.y;
-        const len = Math.hypot(dx, dy) || 1;
-        const ux = dx / len;
-        const uy = dy / len;
-        const tr = nodeRadius(e.target);
-        const ax = e.target.x - ux * (tr + 2);
-        const ay = e.target.y - uy * (tr + 2);
-        const ah = 5;
-        ctx.beginPath();
-        ctx.moveTo(ax, ay);
-        ctx.lineTo(ax - ux * ah - uy * ah * 0.6, ay - uy * ah + ux * ah * 0.6);
-        ctx.lineTo(ax - ux * ah + uy * ah * 0.6, ay - uy * ah - ux * ah * 0.6);
-        ctx.closePath();
-        ctx.fillStyle = 'rgba(25, 118, 210, 0.55)';
-        ctx.fill();
+        ctx.strokeStyle = sameCluster
+          ? `${CLUSTER_COLORS[e.source.community % CLUSTER_COLORS.length]}99`
+          : 'rgba(25, 118, 210, 0.35)';
+        ctx.lineWidth = w;
+      } else {
+        ctx.strokeStyle = 'rgba(0,0,0,0.04)';
+        ctx.lineWidth = Math.max(0.3, w * 0.3);
       }
+      ctx.stroke();
     }
 
     for (const n of simNodes) {
-      const r = nodeRadius(n);
+      const r = radiusOf(n);
       const isSelected = selectedId === n.id;
       const isHover = hoverRef.current === n.id;
       const isMatch = matchesQuery(n, q);
@@ -238,47 +216,74 @@ function ChannelGraph({
           && (e.source.id === n.id || e.target.id === n.id)
       )) || (q && !isMatch);
 
+      let fill = statusColor(n);
+      if (showClusters && n.community >= 0) {
+        fill = CLUSTER_COLORS[n.community % CLUSTER_COLORS.length];
+      }
+
       ctx.beginPath();
-      ctx.arc(n.x, n.y, r + (isSelected || isHover || isMatch ? 2.5 : 0), 0, Math.PI * 2);
-      ctx.fillStyle = dimmed ? '#cfd8dc' : nodeColor(n);
-      ctx.globalAlpha = dimmed ? 0.28 : 1;
+      ctx.arc(n.x, n.y, r + (isSelected || isHover || isMatch ? 1.5 : 0), 0, Math.PI * 2);
+      ctx.fillStyle = fill;
+      ctx.globalAlpha = dimmed ? 0.22 : 0.92;
       ctx.fill();
       ctx.globalAlpha = 1;
-      ctx.lineWidth = isSelected || isMatch ? 2.5 : 1;
+      ctx.lineWidth = isSelected || isMatch ? 2 : 0.8;
       ctx.strokeStyle = isSelected || isMatch ? '#0d47a1' : '#ffffff';
       ctx.stroke();
 
-      if (isSelected || isMatch || isHover || (!q && simNodes.length < 50)) {
-        ctx.font = `${isMatch || isSelected ? 12 : 11}px system-ui, sans-serif`;
-        ctx.fillStyle = isMatch ? '#0d47a1' : '#263238';
+      if (isSelected || isMatch || isHover || (!q && simNodes.length < 35 && r > 4)) {
+        ctx.font = `${isMatch || isSelected ? 11 : 10}px system-ui, sans-serif`;
+        ctx.fillStyle = isMatch ? '#0d47a1' : '#37474f';
         ctx.textAlign = 'center';
         const label = n.title && n.title.toLowerCase() !== n.username
-          ? n.title.slice(0, 22)
+          ? n.title.slice(0, 18)
           : `@${n.username}`;
-        ctx.fillText(label, n.x, n.y + r + 13);
+        ctx.fillText(label, n.x, n.y + r + 11);
       }
     }
-  }, [highlightQuery, selectedId]);
+
+    // Persistir posiciones tras dibujar
+    for (const n of simNodes) {
+      posCacheRef.current.set(n.id, { x: n.x, y: n.y });
+    }
+  }, [highlightQuery, selectedId, showClusters, radiusOf]);
 
   drawRef.current = draw;
 
-  // Simulación: solo depende de graph/layout/size/reheat — NO de selectedId
+  // Simulación continua suave: se reactiva al cambiar nodos/edges/layout/tamaño
   useEffect(() => {
     let raf = 0;
     let ticks = 0;
-    const maxTicks = layout === 'circular' ? 1 : 320;
-    runningRef.current = true;
+    const maxTicks = layout === 'circular' ? 2 : 280;
+
+    const softBound = (node, width, h, r) => {
+      // Margen amplio; fuerza suave hacia el interior (no clamp a esquina)
+      const margin = Math.max(40, r + 20);
+      const strength = 0.08;
+      if (node.x < margin) node.vx += (margin - node.x) * strength;
+      if (node.x > width - margin) node.vx -= (node.x - (width - margin)) * strength;
+      if (node.y < margin) node.vy += (margin - node.y) * strength;
+      if (node.y > h - margin) node.vy -= (node.y - (h - margin)) * strength;
+      // Nunca dejar fuera del canvas con un soft clamp (sin pegar a 0,0)
+      const hard = 8;
+      if (node.x < hard) node.x = hard + Math.random() * 4;
+      if (node.y < hard) node.y = hard + Math.random() * 4;
+      if (node.x > width - hard) node.x = width - hard - Math.random() * 4;
+      if (node.y > h - hard) node.y = h - hard - Math.random() * 4;
+    };
 
     const collide = (simNodes) => {
       const m = simNodes.length;
-      for (let i = 0; i < m; i += 1) {
-        for (let j = i + 1; j < m; j += 1) {
+      // Muestreo si hay demasiados nodos (rendimiento)
+      const step = m > 800 ? 2 : 1;
+      for (let i = 0; i < m; i += step) {
+        for (let j = i + step; j < m; j += step) {
           const a = simNodes[i];
           const b = simNodes[j];
           const dx = b.x - a.x;
           const dy = b.y - a.y;
           let dist = Math.hypot(dx, dy) || 0.01;
-          const minDist = nodeRadius(a) + nodeRadius(b) + 6;
+          const minDist = radiusOf(a) + radiusOf(b) + 3;
           if (dist < minDist) {
             const push = (minDist - dist) / 2;
             const ux = dx / dist;
@@ -294,14 +299,15 @@ function ChannelGraph({
 
     const stepForce = (simNodes, simEdges, width, h, alpha) => {
       const n = simNodes.length;
-      const kRep = 2800;
-      for (let i = 0; i < n; i += 1) {
-        for (let j = i + 1; j < n; j += 1) {
+      const kRep = n > 600 ? 900 : 1800;
+      const stride = n > 900 ? 3 : n > 500 ? 2 : 1;
+      for (let i = 0; i < n; i += stride) {
+        for (let j = i + stride; j < n; j += stride) {
           const a = simNodes[i];
           const b = simNodes[j];
           let dx = a.x - b.x;
           let dy = a.y - b.y;
-          let dist2 = dx * dx + dy * dy || 0.01;
+          const dist2 = dx * dx + dy * dy || 0.01;
           const dist = Math.sqrt(dist2);
           const force = kRep / dist2;
           dx = (dx / dist) * force;
@@ -316,8 +322,8 @@ function ChannelGraph({
         const dx = e.target.x - e.source.x;
         const dy = e.target.y - e.source.y;
         const dist = Math.hypot(dx, dy) || 1;
-        const ideal = 90 + Math.min(100, (e.forward_count || 1) * 2);
-        const f = (dist - ideal) * 0.025;
+        const ideal = 55 + Math.min(60, (e.forward_count || 1));
+        const f = (dist - ideal) * 0.02;
         const fx = (dx / dist) * f;
         const fy = (dy / dist) * f;
         e.source.vx += fx;
@@ -333,21 +339,22 @@ function ChannelGraph({
           node.vy = 0;
           continue;
         }
-        node.vx += (cx - node.x) * 0.008;
-        node.vy += (cy - node.y) * 0.008;
-        node.vx *= 0.82;
-        node.vy *= 0.82;
-        node.x += node.vx * alpha * 9;
-        node.y += node.vy * alpha * 9;
+        node.vx += (cx - node.x) * 0.01;
+        node.vy += (cy - node.y) * 0.01;
+        node.vx *= 0.84;
+        node.vy *= 0.84;
+        node.x += node.vx * alpha * 8;
+        node.y += node.vy * alpha * 8;
+        softBound(node, width, h, radiusOf(node));
       }
     };
 
     const stepFA2 = (simNodes, simEdges, width, h, alpha) => {
-      // Aproximación ForceAtlas2: repulsión ∝ (mass_i * mass_j)/d², atracción ∝ d
       const n = simNodes.length;
-      const kRep = 800;
-      for (let i = 0; i < n; i += 1) {
-        for (let j = i + 1; j < n; j += 1) {
+      const kRep = n > 600 ? 350 : 650;
+      const stride = n > 900 ? 3 : n > 500 ? 2 : 1;
+      for (let i = 0; i < n; i += stride) {
+        for (let j = i + stride; j < n; j += stride) {
           const a = simNodes[i];
           const b = simNodes[j];
           let dx = a.x - b.x;
@@ -368,13 +375,28 @@ function ChannelGraph({
         const dy = e.target.y - e.source.y;
         const dist = Math.hypot(dx, dy) || 1;
         const weight = Math.log2(2 + (e.forward_count || 1));
-        const f = dist * 0.012 * weight;
+        const f = dist * 0.01 * weight;
         const fx = (dx / dist) * f;
         const fy = (dy / dist) * f;
         e.source.vx += fx;
         e.source.vy += fy;
         e.target.vx -= fx;
         e.target.vy -= fy;
+      }
+      // Atracción intra-cluster si hay comunidades
+      if (showClusters) {
+        for (const e of simEdges) {
+          if (e.source.community >= 0 && e.source.community === e.target.community) {
+            const dx = e.target.x - e.source.x;
+            const dy = e.target.y - e.source.y;
+            const dist = Math.hypot(dx, dy) || 1;
+            const f = dist * 0.004;
+            e.source.vx += (dx / dist) * f;
+            e.source.vy += (dy / dist) * f;
+            e.target.vx -= (dx / dist) * f;
+            e.target.vy -= (dy / dist) * f;
+          }
+        }
       }
       const cx = width / 2;
       const cy = h / 2;
@@ -384,13 +406,13 @@ function ChannelGraph({
           node.vy = 0;
           continue;
         }
-        // gravedad central débil (FA2)
-        node.vx += (cx - node.x) * 0.012 * (node.mass || 1);
-        node.vy += (cy - node.y) * 0.012 * (node.mass || 1);
-        node.vx *= 0.8;
-        node.vy *= 0.8;
-        node.x += node.vx * alpha * 7;
-        node.y += node.vy * alpha * 7;
+        node.vx += (cx - node.x) * 0.015 * (node.mass || 1);
+        node.vy += (cy - node.y) * 0.015 * (node.mass || 1);
+        node.vx *= 0.82;
+        node.vy *= 0.82;
+        node.x += node.vx * alpha * 6.5;
+        node.y += node.vy * alpha * 6.5;
+        softBound(node, width, h, radiusOf(node));
       }
     };
 
@@ -401,53 +423,35 @@ function ChannelGraph({
         drawRef.current();
         return;
       }
-
       if (layout !== 'circular') {
-        const alpha = Math.max(0.015, 1 - ticks / maxTicks);
-        if (layout === 'forceAtlas2') {
-          stepFA2(simNodes, simEdges, width, h, alpha);
-        } else {
-          stepForce(simNodes, simEdges, width, h, alpha);
-        }
-        collide(simNodes);
-        const pad = 28;
-        for (const node of simNodes) {
-          node.x = Math.min(width - pad, Math.max(pad, node.x));
-          node.y = Math.min(h - pad, Math.max(pad, node.y));
-        }
+        const alpha = Math.max(0.02, 1 - ticks / maxTicks);
+        if (layout === 'forceAtlas2') stepFA2(simNodes, simEdges, width, h, alpha);
+        else stepForce(simNodes, simEdges, width, h, alpha);
+        if (ticks % 2 === 0) collide(simNodes);
       }
-
       ticks += 1;
       drawRef.current();
       if (ticks < maxTicks || dragRef.current) {
         raf = requestAnimationFrame(step);
-      } else {
-        runningRef.current = false;
       }
     };
 
     raf = requestAnimationFrame(step);
-    return () => {
-      cancelAnimationFrame(raf);
-      runningRef.current = false;
-    };
-  }, [graphKey, size.width, size.height, layout, reheatToken]);
+    return () => cancelAnimationFrame(raf);
+  }, [nodes, edges, size.width, size.height, layout, showClusters, radiusOf]);
 
-  // Solo redibujar al cambiar selección / búsqueda (sin reiniciar física)
+  useEffect(() => {
+    // Actualizar community en nodos sim sin resetear posiciones
+    const simNodes = simRef.current.nodes || [];
+    for (const n of simNodes) {
+      n.community = communities.get(n.id) ?? -1;
+    }
+    draw();
+  }, [communities, draw]);
+
   useEffect(() => {
     draw();
-  }, [draw, selectedId, highlightQuery]);
-
-  // Centrar/seleccionar primer match al buscar
-  useEffect(() => {
-    const q = (highlightQuery || '').trim().toLowerCase();
-    if (!q) return;
-    const simNodes = simRef.current.nodes || [];
-    const match = simNodes.find((n) => matchesQuery(n, q));
-    if (match) {
-      draw();
-    }
-  }, [highlightQuery, draw]);
+  }, [draw, selectedId, highlightQuery, nodeSizeScale]);
 
   const findNodeAt = (clientX, clientY) => {
     const canvas = canvasRef.current;
@@ -458,7 +462,7 @@ function ChannelGraph({
     let found = null;
     let best = Infinity;
     for (const n of simRef.current.nodes) {
-      const r = nodeRadius(n) + 4;
+      const r = radiusOf(n) + 4;
       const d2 = (n.x - x) ** 2 + (n.y - y) ** 2;
       if (d2 <= r * r && d2 < best) {
         best = d2;
@@ -476,12 +480,6 @@ function ChannelGraph({
     }
     dragRef.current = { id: node.id };
     if (onSelectNode) onSelectNode(node);
-    // Si la simulación paró, redibuja al arrastrar
-    if (!runningRef.current) {
-      runningRef.current = true;
-      // reheat ligero sin reset de posiciones: el effect de sim no se relanza;
-      // arrastre manual basta.
-    }
   };
 
   const handlePointerMove = (event) => {
@@ -500,7 +498,6 @@ function ChannelGraph({
       setTooltip(null);
       if (canvasRef.current) canvasRef.current.style.cursor = 'default';
     }
-
     if (dragRef.current) {
       const canvas = canvasRef.current;
       const rect = canvas.getBoundingClientRect();
@@ -508,9 +505,10 @@ function ChannelGraph({
       if (dragged) {
         dragged.x = event.clientX - rect.left;
         dragged.y = event.clientY - rect.top;
+        posCacheRef.current.set(dragged.id, { x: dragged.x, y: dragged.y });
         drawRef.current();
       }
-    } else if (hoverRef.current) {
+    } else if (hoverRef.current !== undefined) {
       drawRef.current();
     }
   };
@@ -554,8 +552,30 @@ function ChannelGraph({
           <div>@{tooltip.node.username}</div>
           <div>
             grado {tooltip.node.degree} · {tooltip.node.message_count} msgs
+            {showClusters && tooltip.node.community >= 0
+              ? ` · cluster ${tooltip.node.community + 1}`
+              : ''}
           </div>
         </div>
+      )}
+      {showClusters && communities.size > 0 && (
+        <button
+          type="button"
+          onClick={() => setCommunityVersion((v) => v + 1)}
+          style={{
+            position: 'absolute',
+            right: 8,
+            bottom: 8,
+            fontSize: 11,
+            padding: '4px 8px',
+            borderRadius: 6,
+            border: '1px solid #cfd8dc',
+            background: '#fff',
+            cursor: 'pointer',
+          }}
+        >
+          Rehacer clusters
+        </button>
       )}
     </div>
   );
