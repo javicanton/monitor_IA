@@ -23,6 +23,9 @@ services:
     volumes:
       - staging-backend-cache:/app/data/cache
       - staging-backend-instance:/app/instance
+      # Allowlist del host (no va en Git). Sin este mount, el contenedor no ve
+      # backend/allowed_emails.txt salvo que se haya copiado en el build.
+      - ./backend/allowed_emails.txt:/app/allowed_emails.txt:ro
 
   frontend:
     container_name: monitoria-staging-frontend
