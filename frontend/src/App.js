@@ -7,6 +7,7 @@ import ProtectedRoute from './auth/ProtectedRoute';
 import LoginForm from './auth/components/LoginForm';
 import VerifyMagicLinkPage from './auth/pages/VerifyMagicLinkPage';
 import Dashboard from './components/Dashboard';
+import ChannelsPage from './components/channels/ChannelsPage';
 
 const theme = createTheme({
   palette: {
@@ -33,6 +34,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <Dashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/canales"
+              element={
+                <ProtectedRoute>
+                  <ChannelsPage />
                 </ProtectedRoute>
               }
             />

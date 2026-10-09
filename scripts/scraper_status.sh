@@ -15,6 +15,20 @@ else
 fi
 
 echo ""
+echo "==> Venv / dependencias"
+VENV_PY="${ROOT}/.venv/bin/python"
+if [[ -x "$VENV_PY" ]]; then
+  echo "    Python: $VENV_PY"
+  if "$VENV_PY" -c "import pandas, telethon" 2>/dev/null; then
+    "$VENV_PY" -c "import pandas, telethon; print('    imports OK (pandas', pandas.__version__ + ', telethon', telethon.__version__ + ')')"
+  else
+    echo "    ERROR: faltan pandas/telethon en el venv → ./scripts/ensure_scraper_venv.sh"
+  fi
+else
+  echo "    ERROR: no existe .venv/bin/python → ./scripts/ensure_scraper_venv.sh"
+fi
+
+echo ""
 echo "==> Último log de backfill"
 LATEST_FULL="$(ls -t "${LOG_DIR}"/scraper_full_*.log 2>/dev/null | head -1 || true)"
 if [[ -n "$LATEST_FULL" ]]; then
@@ -39,6 +53,16 @@ if [[ -f "$LATEST_DAILY" ]]; then
   tail -3 "$LATEST_DAILY" | sed 's/^/    /'
 else
   echo "    (sin log de hoy)"
+fi
+
+echo ""
+echo "==> Último log catch-up (manual)"
+LATEST_CATCHUP="$(ls -t "${LOG_DIR}"/scraper_catchup_*.log 2>/dev/null | head -1 || true)"
+if [[ -n "$LATEST_CATCHUP" ]]; then
+  echo "    Archivo: $LATEST_CATCHUP"
+  tail -3 "$LATEST_CATCHUP" | sed 's/^/    /'
+else
+  echo "    (sin logs scraper_catchup_*)"
 fi
 
 echo ""

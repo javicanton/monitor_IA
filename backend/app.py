@@ -23,7 +23,11 @@ from s3_client import get_s3_client
 from auth import auth_bp, admin_required, allowed_email_required
 from auth.activity import register_activity_tracking
 from models import Channel, ChannelEdge, MonitoredChannel, db
-from channel_graph import normalize_username
+from channel_graph import (
+    build_channel_graph_payload,
+    build_channel_stats_payload,
+    normalize_username,
+)
 from config import Config
 import boto3
 from botocore.exceptions import ClientError
@@ -932,6 +936,49 @@ def download_channel_graph():
         )
     except Exception as e:
         logger.exception('Error en download_channel_graph')
+        return jsonify(success=False, error=str(e)), 500
+
+
+@app.route('/api/channels/graph', methods=['GET'])
+@allowed_email_required
+def api_channels_graph():
+    """Grafo de reenvíos entre canales (nodos + aristas + meta)."""
+    if not USE_POSTGRES:
+        return jsonify(success=False, error='Requiere PostgreSQL'), 501
+    try:
+        min_forwards = request.args.get('min_forwards', 1, type=int) or 1
+        include_disc = request.args.get('include_discontinued', '1').lower() not in ('0', 'false', 'no')
+        payload = build_channel_graph_payload(
+            min_forwards=min_forwards,
+            include_discontinued=include_disc,
+        )
+        return jsonify(success=True, **payload)
+    except Exception as e:
+        logger.exception('Error en /api/channels/graph')
+        return jsonify(success=False, error=str(e)), 500
+
+
+@app.route('/api/channels/<username>/stats', methods=['GET'])
+@allowed_email_required
+def api_channel_stats(username):
+    """Estadísticas y vecinos de un canal."""
+    if not USE_POSTGRES:
+        return jsonify(success=False, error='Requiere PostgreSQL'), 501
+    try:
+        days_raw = request.args.get('days', '30')
+        if str(days_raw).lower() in ('all', '0', 'none'):
+            days = None
+        else:
+            try:
+                days = int(days_raw)
+            except (TypeError, ValueError):
+                days = 30
+        payload = build_channel_stats_payload(username, days=days)
+        if not payload:
+            return jsonify(success=False, error='Canal no encontrado'), 404
+        return jsonify(success=True, **payload)
+    except Exception as e:
+        logger.exception('Error en /api/channels/%s/stats', username)
         return jsonify(success=False, error=str(e)), 500
 
 @app.route('/topics', methods=['GET'])

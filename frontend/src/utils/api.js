@@ -172,6 +172,34 @@ export const channelsAPI = {
       throw error;
     }
   },
+
+  // Grafo interactivo (nodos + aristas)
+  getGraph: async ({ min_forwards = 1, include_discontinued = true } = {}) => {
+    const params = {
+      min_forwards,
+      include_discontinued: include_discontinued ? '1' : '0',
+    };
+    const response = await api.get('/api/channels/graph', { params });
+    if (!response.data?.success) {
+      throw new Error(response.data?.error || 'No se pudo cargar el grafo');
+    }
+    return response.data;
+  },
+
+  // Estadísticas de un canal
+  getChannelStats: async (username, { days = 30 } = {}) => {
+    const params = {
+      days: days == null ? 'all' : days,
+    };
+    const response = await api.get(
+      `/api/channels/${encodeURIComponent(username)}/stats`,
+      { params }
+    );
+    if (!response.data?.success) {
+      throw new Error(response.data?.error || 'No se pudieron cargar las estadísticas');
+    }
+    return response.data;
+  },
 };
 
 // Funciones de API para topics

@@ -20,6 +20,7 @@ _TRACKED_EXACT = {
     ('GET', '/export_relevants'): 'export_relevants',
     ('POST', '/download_filtered_messages'): 'download_filtered_messages',
     ('GET', '/download_channel_graph'): 'download_channel_graph',
+    ('GET', '/api/channels/graph'): 'channels_graph',
     ('GET', '/messages_over_time'): 'messages_over_time',
     ('POST', '/messages_over_time'): 'messages_over_time',
     ('POST', '/admin/run_topics'): 'admin_run_topics',
@@ -82,6 +83,11 @@ def resolve_action(method: str, path: str) -> str | None:
         path.startswith('/load_more/') or path.startswith('/api/load_more/')
     ):
         return 'load_more'
+
+    if method == 'GET' and (
+        path.startswith('/api/channels/') and path.endswith('/stats')
+    ):
+        return 'channel_stats'
 
     return None
 

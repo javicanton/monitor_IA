@@ -26,6 +26,8 @@ import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import DownloadIcon from '@mui/icons-material/Download';
 import PersonAddAltIcon from '@mui/icons-material/PersonAddAlt';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import HubOutlinedIcon from '@mui/icons-material/HubOutlined';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import {
   getAvatarUrl,
@@ -37,6 +39,7 @@ import { authAPI } from '../../utils/api';
 
 const UserMenu = ({ onLogout }) => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [anchorEl, setAnchorEl] = useState(null);
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState('');
@@ -262,6 +265,21 @@ const UserMenu = ({ onLogout }) => {
           )}
         </Box>
         <Divider />
+        <MenuItem
+          onClick={() => {
+            handleClose();
+            navigate('/canales');
+          }}
+        >
+          <ListItemIcon>
+            <HubOutlinedIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText
+            primary="Canales"
+            secondary="Grafo y estadísticas"
+            secondaryTypographyProps={{ variant: 'caption' }}
+          />
+        </MenuItem>
         <MenuItem disabled>
           <ListItemIcon>
             <SettingsOutlinedIcon fontSize="small" />
