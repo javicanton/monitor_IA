@@ -22,6 +22,49 @@ logger = logging.getLogger(__name__)
 _URL_RE = re.compile(r"https?://\S+|www\.\S+", re.IGNORECASE)
 _TG_LINK_RE = re.compile(r"(?:t\.me|telegram\.me)/\S+", re.IGNORECASE)
 _WHITESPACE_RE = re.compile(r"\s+")
+# Ruido típico de captions / reenvíos (inglés)
+_COPYRIGHT_BOILERPLATE_RE = re.compile(
+    r"copyright\s+infringement|"
+    r"displayed\s+on\s+(?:this\s+)?device|"
+    r"couldn'?t\s+be\s+displayed|"
+    r"this\s+content\s+isn'?t\s+available|"
+    r"media\s+could\s+not\s+be\s+loaded|"
+    r"galaxy\s+ai|"
+    r"samsung\s+galaxy",
+    re.IGNORECASE,
+)
+# CTAs de canal Telegram (español/inglés) que monopolizan clusters
+_CHANNEL_CTA_RE = re.compile(
+    r"\búnete\b|"
+    r"\bunete\b|"
+    r"\bsuscr[ií]bete\b|"
+    r"\benlace\s+al\s+canal\b|"
+    r"\bcanal\s+de\s+telegram\b|"
+    r"\btelegram\s+channel\b|"
+    r"\bjoin\s+(?:our|the)\s+channel\b|"
+    r"\bfollow\s+(?:us|our\s+channel)\b|"
+    r"\bs[ií]guenos\b|"
+    r"\bs[ií]gueme\b|"
+    r"\bcompart[ea]\b|"
+    r"\binvita\s+a\s+(?:tus\s+)?amig",
+    re.IGNORECASE,
+)
+# Promo corto típico: "si … españa … telegram/canal" (sin decir únete)
+_PROMO_CHANNEL_RE = re.compile(r"\btelegram\b|\bcanal\b", re.IGNORECASE)
+_PROMO_HOOK_RE = re.compile(
+    r"\bespa[nñ]a\b|\benlace\b|\btrend\b|\bstellar\b|\bsemilla\b|"
+    r"\bwhatsapp\b|\bgroup\b|\bgrupo\b",
+    re.IGNORECASE,
+)
+_EMOJI_RE = re.compile(
+    "["
+    "\U0001F300-\U0001FAFF"
+    "\U00002700-\U000027BF"
+    "\U0001F1E0-\U0001F1FF"
+    "]+",
+    flags=re.UNICODE,
+)
+_NON_WORD_RE = re.compile(r"[^a-z0-9áéíóúüñ\s]+", re.IGNORECASE)
 # Tipos de media que suelen ser “solo archivo” sin narrativa si el caption es vacío/ruido
 _MEDIA_ONLY_TYPES = {
     "photo",
@@ -107,8 +150,53 @@ def clean_topic_text(raw):
     return text_val
 
 
+def is_boilerplate_topic_text(raw_or_cleaned):
+    """
+    Detecta plantillas que rompen BERTopic: copyright/device en inglés,
+    CTAs de canal (únete / telegram / canal…), saludos vacíos.
+    """
+    cleaned = clean_topic_text(raw_or_cleaned)
+    if not cleaned:
+        return True
+    low = cleaned.lower()
+    alpha = sum(1 for ch in cleaned if ch.isalpha())
+
+    if _COPYRIGHT_BOILERPLATE_RE.search(low):
+        return True
+
+    # CTA explícito
+    if _CHANNEL_CTA_RE.search(low):
+        if len(cleaned) < 280 or alpha < 100:
+            return True
+
+    # Promo corto "… España … Telegram/canal …" (el cluster si_españa_telegram)
+    if len(cleaned) < 320 and _PROMO_CHANNEL_RE.search(low) and _PROMO_HOOK_RE.search(low):
+        return True
+
+    # Mención a telegram/canal en textos muy cortos (casi siempre promo)
+    if len(cleaned) < 140 and _PROMO_CHANNEL_RE.search(low):
+        return True
+
+    # Pocas palabras significativas + telegram/canal → plantilla
+    tokens = [w for w in _NON_WORD_RE.sub(" ", low).split() if len(w) > 2]
+    if _PROMO_CHANNEL_RE.search(low) and len(set(tokens)) <= 12 and len(cleaned) < 400:
+        return True
+
+    # Saludos genéricos muy cortos
+    if len(cleaned) < 80 and re.search(
+        r"\bfeliz\s*(lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)\b|"
+        r"\bviva\s+espa[nñ]a\b|"
+        r"\bbuenos\s+d[ií]as\b|"
+        r"\bbuenas\s+noches\b",
+        low,
+    ):
+        return True
+
+    return False
+
+
 def is_usable_topic_text(raw, min_text_len=None, min_alpha=None):
-    """True si, tras limpiar URLs, queda texto narrativo suficiente."""
+    """True si, tras limpiar URLs, queda texto narrativo suficiente (sin plantillas)."""
     min_text_len = Config.TOPICS_MIN_TEXT_LEN if min_text_len is None else min_text_len
     min_alpha = Config.TOPICS_MIN_ALPHA_CHARS if min_alpha is None else min_alpha
     cleaned = clean_topic_text(raw)
@@ -120,7 +208,35 @@ def is_usable_topic_text(raw, min_text_len=None, min_alpha=None):
     # Evitar cadenas casi solo puntuación / menciones
     if alpha_chars / max(len(cleaned), 1) < 0.35:
         return False
+    if getattr(Config, "TOPICS_EXCLUDE_BOILERPLATE", True) and is_boilerplate_topic_text(cleaned):
+        return False
     return True
+
+
+def _normalize_for_dedupe(text_val):
+    """Huella estable: minúsculas, sin emoji/puntuación, primeras 20 palabras >2 chars."""
+    t = str(text_val or "").lower()
+    t = _EMOJI_RE.sub(" ", t)
+    t = _URL_RE.sub(" ", t)
+    t = _TG_LINK_RE.sub(" ", t)
+    t = _NON_WORD_RE.sub(" ", t)
+    tokens = [w for w in _WHITESPACE_RE.sub(" ", t).strip().split() if len(w) > 2]
+    return " ".join(tokens[:20])
+
+
+def _dedupe_docs_for_training(df, text_col="_topic_text"):
+    """Deja una fila por huella normalizada (variantes de CTA no saturan el modelo)."""
+    if df.empty or text_col not in df.columns:
+        return df
+    keys = df[text_col].map(_normalize_for_dedupe)
+    # Descartar huellas vacías / casi vacías
+    valid = keys.str.len() >= 8
+    before = len(df)
+    out = df.loc[valid].copy()
+    keys = keys.loc[valid]
+    out = out.loc[~keys.duplicated(keep="first")].copy()
+    logger.info("Deduplicación train: %d -> %d docs únicos (near-hash)", before, len(out))
+    return out
 
 
 def _postgres_base_query(days_window=None, min_text_len=None, exclude_media_only=None):
@@ -569,11 +685,25 @@ def train_sample_topics(
     if df.empty:
         return {"status": "empty", "mode": "train_sample", "reason": "no_usable_text"}
 
+    raw_usable = int(len(df))
+    train_df = df
+    if getattr(Config, "TOPICS_TRAIN_DEDUPE", True):
+        train_df = _dedupe_docs_for_training(df, text_col="_topic_text")
+    if train_df.empty:
+        return {"status": "empty", "mode": "train_sample", "reason": "no_unique_text"}
+
+    logger.info(
+        "train-sample docs: usable=%s unique_for_train=%s boilerplate_filter=%s",
+        raw_usable,
+        len(train_df),
+        getattr(Config, "TOPICS_EXCLUDE_BOILERPLATE", True),
+    )
+
     s3_client = get_s3_client()
     with tempfile.TemporaryDirectory() as tmpdir:
         model_path = os.path.join(tmpdir, "model.pkl")
         _train_model_with_pytopicgram(
-            df["_topic_text"].tolist(),
+            train_df["_topic_text"].tolist(),
             model_path,
             apply_sample_ratio=False,
         )
@@ -581,6 +711,7 @@ def train_sample_topics(
         _upload_model(s3_client, model_path)
         _save_topics_metadata(s3_client, model)
 
+        # Asignar a toda la submuestra usable (no solo a los únicos del train)
         topics, probs = _assign_topics(model, df["_topic_text"].tolist())
         if probs is None:
             probs = [None] * len(topics)
@@ -609,7 +740,8 @@ def train_sample_topics(
     return {
         "status": "ok",
         "mode": "train_sample",
-        "sample_size": int(len(df)),
+        "sample_size": int(raw_usable),
+        "train_unique_docs": int(len(train_df)),
         "topics_found": int(n_topics),
         "postgres_rows": int(written),
         "days_window": days_window or None,
