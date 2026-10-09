@@ -102,6 +102,12 @@ function ChannelDetailPanel({
               <strong>{formatNum(meta.node_count)}</strong> nodos ·{' '}
               <strong>{formatNum(meta.edge_count)}</strong> aristas
             </Typography>
+            {(meta.visible_nodes != null) && (
+              <Typography variant="body2" color="text.secondary">
+                Visibles ahora: <strong>{formatNum(meta.visible_nodes)}</strong> /{' '}
+                <strong>{formatNum(meta.visible_edges)}</strong>
+              </Typography>
+            )}
             <Typography variant="body2">
               Monitorizados activos: <strong>{formatNum(meta.active_count)}</strong>
             </Typography>

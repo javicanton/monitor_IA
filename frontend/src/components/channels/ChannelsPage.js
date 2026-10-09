@@ -25,7 +25,6 @@ import { useTheme } from '@mui/material/styles';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import DownloadIcon from '@mui/icons-material/Download';
 import CloseIcon from '@mui/icons-material/Close';
-import RefreshIcon from '@mui/icons-material/Refresh';
 import { useAuth } from '../../auth/AuthContext';
 import UserMenu from '../../auth/components/UserMenu';
 import { channelsAPI } from '../../utils/api';
@@ -44,13 +43,13 @@ const ChannelsPage = () => {
   const [loadingGraph, setLoadingGraph] = useState(true);
   const [graphError, setGraphError] = useState('');
   const [search, setSearch] = useState('');
-  const [filterBySearch, setFilterBySearch] = useState(false);
+  const [filterBySearch, setFilterBySearch] = useState(true);
   const [minForwards, setMinForwards] = useState(1);
+  const [nodeSizeScale, setNodeSizeScale] = useState(0.7);
   const [onlyMonitored, setOnlyMonitored] = useState(false);
   const [includeDiscontinued, setIncludeDiscontinued] = useState(true);
   const [layout, setLayout] = useState('forceAtlas2');
-  const [reheatOnSelect, setReheatOnSelect] = useState(false);
-  const [reheatToken, setReheatToken] = useState(0);
+  const [showClusters, setShowClusters] = useState(false);
 
   const [selectedId, setSelectedId] = useState(null);
   const [detail, setDetail] = useState(null);
@@ -63,7 +62,7 @@ const ChannelsPage = () => {
 
   const graphHeight = isMobile
     ? Math.max(420, Math.min(window.innerHeight * 0.55, 640))
-    : Math.max(560, Math.min(window.innerHeight - 220, 820));
+    : Math.max(620, Math.min(window.innerHeight - 200, 900));
 
   const handleLogout = async () => {
     await logout();
@@ -95,6 +94,7 @@ const ChannelsPage = () => {
     loadGraph();
   }, [loadGraph]);
 
+  // Filtros cliente: quitan nodos sin cambiar el algoritmo de layout
   const visibleGraph = useMemo(() => {
     let nodes = graph.nodes;
     if (onlyMonitored) {
@@ -102,20 +102,11 @@ const ChannelsPage = () => {
     }
     const q = search.trim().toLowerCase();
     if (filterBySearch && q) {
-      const matched = new Set(
-        nodes
-          .filter((n) =>
-            (n.username || '').toLowerCase().includes(q)
-            || (n.title || '').toLowerCase().includes(q)
-          )
-          .map((n) => n.id)
+      nodes = nodes.filter(
+        (n) =>
+          (n.username || '').toLowerCase().includes(q)
+          || (n.title || '').toLowerCase().includes(q)
       );
-      // Incluir vecinos de matches para no romper el contexto
-      graph.edges.forEach((e) => {
-        if (matched.has(e.source)) matched.add(e.target);
-        if (matched.has(e.target)) matched.add(e.source);
-      });
-      nodes = nodes.filter((n) => matched.has(n.id));
     }
     const ids = new Set(nodes.map((n) => n.id));
     const edges = graph.edges.filter((e) => ids.has(e.source) && ids.has(e.target));
@@ -147,13 +138,17 @@ const ChannelsPage = () => {
     }
   }, [selectedId, days, loadDetail]);
 
+  // Si el nodo seleccionado desaparece del filtro, limpiar selección
+  useEffect(() => {
+    if (selectedId && !visibleGraph.nodes.some((n) => n.id === selectedId)) {
+      setSelectedId(null);
+    }
+  }, [visibleGraph.nodes, selectedId]);
+
   const handleSelectNode = (node) => {
     const id = node?.id || node?.username || null;
     setSelectedId(id);
     setMonitorMsg('');
-    if (reheatOnSelect) {
-      setReheatToken((t) => t + 1);
-    }
     if (isMobile && id) setDrawerOpen(true);
   };
 
@@ -166,11 +161,9 @@ const ChannelsPage = () => {
   const handleSearchApply = () => {
     const q = search.trim().toLowerCase();
     if (!q) return;
-    const match = visibleGraph.nodes.find(
-      (n) =>
-        (n.username || '').toLowerCase().includes(q)
-        || (n.title || '').toLowerCase().includes(q)
-    ) || graph.nodes.find(
+    // Activar filtro (elimina nodos del grafo, sin cambiar layout)
+    setFilterBySearch(true);
+    const match = graph.nodes.find(
       (n) =>
         (n.username || '').toLowerCase().includes(q)
         || (n.title || '').toLowerCase().includes(q)
@@ -234,7 +227,11 @@ const ChannelsPage = () => {
 
   const panel = (
     <ChannelDetailPanel
-      meta={graph.meta}
+      meta={{
+        ...graph.meta,
+        visible_nodes: visibleGraph.nodes.length,
+        visible_edges: visibleGraph.edges.length,
+      }}
       selectedUsername={selectedId}
       detail={detail}
       loading={loadingDetail}
@@ -264,7 +261,8 @@ const ChannelsPage = () => {
         <Box flex={1} minWidth={160}>
           <Typography variant="h5" sx={{ fontWeight: 600 }}>Canales</Typography>
           <Typography variant="body2" color="text.secondary">
-            Grafo de reenvíos · layout {LAYOUT_OPTIONS.find((o) => o.value === layout)?.label}
+            Grafo de reenvíos · {LAYOUT_OPTIONS.find((o) => o.value === layout)?.label}
+            {showClusters ? ' · clusters' : ''}
           </Typography>
         </Box>
         <Button startIcon={<ArrowBackIcon />} onClick={() => navigate('/')} size="small">
@@ -291,7 +289,7 @@ const ChannelsPage = () => {
           <TextField
             size="small"
             label="Buscar canal"
-            placeholder="@username o título · Enter para ir"
+            placeholder="@username o título · Enter filtra"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSearchApply()}
@@ -300,31 +298,31 @@ const ChannelsPage = () => {
           <Button size="small" variant="contained" onClick={handleSearchApply}>
             Ir
           </Button>
+          <Button
+            size="small"
+            variant="text"
+            disabled={!search && !filterBySearch}
+            onClick={() => {
+              setSearch('');
+              setFilterBySearch(false);
+            }}
+          >
+            Limpiar filtro
+          </Button>
           <FormControl size="small" sx={{ minWidth: 160 }}>
             <InputLabel id="layout-label">Layout</InputLabel>
             <Select
               labelId="layout-label"
               label="Layout"
               value={layout}
-              onChange={(e) => {
-                setLayout(e.target.value);
-                setReheatToken((t) => t + 1);
-              }}
+              onChange={(e) => setLayout(e.target.value)}
             >
               {LAYOUT_OPTIONS.map((opt) => (
                 <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
               ))}
             </Select>
           </FormControl>
-          <Button
-            size="small"
-            variant="outlined"
-            startIcon={<RefreshIcon />}
-            onClick={() => setReheatToken((t) => t + 1)}
-          >
-            Recalcular
-          </Button>
-          <Box sx={{ width: { xs: '100%', md: 160 }, px: 1 }}>
+          <Box sx={{ width: { xs: '100%', md: 150 }, px: 1 }}>
             <Typography variant="caption" color="text.secondary">
               Mín. reenvíos: {minForwards}
             </Typography>
@@ -337,6 +335,20 @@ const ChannelsPage = () => {
               valueLabelDisplay="auto"
             />
           </Box>
+          <Box sx={{ width: { xs: '100%', md: 150 }, px: 1 }}>
+            <Typography variant="caption" color="text.secondary">
+              Tamaño nodos: {nodeSizeScale.toFixed(1)}
+            </Typography>
+            <Slider
+              size="small"
+              min={0.3}
+              max={2}
+              step={0.1}
+              value={nodeSizeScale}
+              onChange={(_, v) => setNodeSizeScale(v)}
+              valueLabelDisplay="auto"
+            />
+          </Box>
           <FormControlLabel
             control={
               <Switch
@@ -346,6 +358,16 @@ const ChannelsPage = () => {
               />
             }
             label="Filtrar búsqueda"
+          />
+          <FormControlLabel
+            control={
+              <Switch
+                checked={showClusters}
+                onChange={(e) => setShowClusters(e.target.checked)}
+                size="small"
+              />
+            }
+            label="Clusters"
           />
           <FormControlLabel
             control={
@@ -367,16 +389,6 @@ const ChannelsPage = () => {
             }
             label="Descontinuados"
           />
-          <FormControlLabel
-            control={
-              <Switch
-                checked={reheatOnSelect}
-                onChange={(e) => setReheatOnSelect(e.target.checked)}
-                size="small"
-              />
-            }
-            label="Recalcular al pulsar"
-          />
         </Stack>
       </Paper>
 
@@ -387,10 +399,10 @@ const ChannelsPage = () => {
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: '1fr', md: 'minmax(0,1fr) 360px' },
+          gridTemplateColumns: { xs: '1fr', md: 'minmax(0,1fr) 340px' },
           gap: 2,
           alignItems: 'stretch',
-          minHeight: graphHeight,
+          width: '100%',
         }}
       >
         <Paper
@@ -399,13 +411,13 @@ const ChannelsPage = () => {
             p: 1,
             position: 'relative',
             overflow: 'hidden',
-            aspectRatio: { md: '1 / 1' },
-            maxHeight: { md: graphHeight + 40 },
-            minHeight: graphHeight,
+            width: '100%',
+            minWidth: 0,
+            height: graphHeight,
           }}
         >
           {loadingGraph ? (
-            <Box display="flex" justifyContent="center" alignItems="center" height="100%" minHeight={graphHeight}>
+            <Box display="flex" justifyContent="center" alignItems="center" height="100%">
               <CircularProgress />
             </Box>
           ) : (
@@ -413,9 +425,10 @@ const ChannelsPage = () => {
               nodes={visibleGraph.nodes}
               edges={visibleGraph.edges}
               selectedId={selectedId}
-              highlightQuery={search}
+              highlightQuery={filterBySearch ? '' : search}
               layout={layout}
-              reheatToken={reheatToken}
+              nodeSizeScale={nodeSizeScale}
+              showClusters={showClusters}
               onSelectNode={handleSelectNode}
               height={graphHeight}
             />
@@ -433,25 +446,38 @@ const ChannelsPage = () => {
               p={3}
             >
               <Typography color="text.secondary" align="center">
-                No hay nodos para mostrar con los filtros actuales.
+                No hay nodos con los filtros actuales. Prueba «Limpiar filtro» o baja el mínimo de reenvíos.
               </Typography>
             </Box>
           )}
         </Paper>
 
         {!isMobile && (
-          <Paper variant="outlined" sx={{ p: 2, overflow: 'auto', maxHeight: graphHeight + 48 }}>
+          <Paper
+            variant="outlined"
+            sx={{ p: 2, overflow: 'auto', height: graphHeight, minWidth: 0 }}
+          >
             {panel}
           </Paper>
         )}
       </Box>
 
       <Stack direction="row" spacing={2} mt={1.5} flexWrap="wrap" alignItems="center">
-        <LegendDot color="#1976d2" label="Activo" />
-        <LegendDot color="#d32f2f" label="Error / descontinuado" />
-        <LegendDot color="#ed6c02" label="Solo en grafo" />
+        {!showClusters && (
+          <>
+            <LegendDot color="#1976d2" label="Activo" />
+            <LegendDot color="#d32f2f" label="Error / descontinuado" />
+            <LegendDot color="#ed6c02" label="Solo en grafo" />
+          </>
+        )}
+        {showClusters && (
+          <Typography variant="caption" color="text.secondary">
+            Colores = clusters (modularidad / label propagation).
+          </Typography>
+        )}
         <Typography variant="caption" color="text.secondary">
-          Por defecto: ForceAtlas2 (aprox.). «Force» = muelles + repulsión. El click no recalcula salvo que actives la opción.
+          Filtrar quita nodos y mantiene posiciones. Cambiar layout sí redistribuye.
+          Visible: {visibleGraph.nodes.length} nodos / {visibleGraph.edges.length} aristas.
         </Typography>
       </Stack>
 
