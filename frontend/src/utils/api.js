@@ -200,6 +200,20 @@ export const channelsAPI = {
     }
     return response.data;
   },
+
+  // Admin: alta inmediata. Usuario: propuesta por email.
+  monitorChannel: async ({ username, title, note, email } = {}) => {
+    const response = await api.post('/api/channels/monitor', {
+      username,
+      title,
+      note,
+      email,
+    });
+    if (!response.data?.success) {
+      throw new Error(response.data?.error || 'No se pudo incluir el canal');
+    }
+    return response.data;
+  },
 };
 
 // Funciones de API para topics

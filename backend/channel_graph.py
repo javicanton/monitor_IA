@@ -197,6 +197,91 @@ def _message_date_expr():
     return func.coalesce(Message.date_sent, Message.creation_date)
 
 
+def resolve_channel_row(username: str) -> Optional[Channel]:
+    """
+    Resuelve la fila `channels` asociada a un username de grafo/monitorización.
+
+    A menudo el username de monitored_channels no coincide exactamente con
+    channels.username (p.ej. título distinto, mayúsculas, o el scraper guardó
+    el título como identidad). Probamos varias claves para poder calcular stats
+    cuando sí hay mensajes.
+    """
+    username = normalize_username(username)
+    if not username:
+        return None
+
+    channel = Channel.query.filter_by(username=username).first()
+    if channel:
+        return channel
+
+    channel = (
+        Channel.query.filter(func.lower(Channel.username) == username).first()
+    )
+    if channel:
+        return channel
+
+    mon = MonitoredChannel.query.filter(
+        func.lower(MonitoredChannel.username) == username
+    ).first()
+    if mon and mon.title:
+        title = mon.title.strip()
+        channel = Channel.query.filter(Channel.title == title).first()
+        if channel:
+            return channel
+        channel = (
+            Channel.query.filter(func.lower(Channel.title) == title.lower()).first()
+        )
+        if channel:
+            return channel
+
+    # Título o username que contenga el handle (p.ej. "Alvise …")
+    channel = (
+        Channel.query.filter(func.lower(Channel.title).like(f"%{username}%"))
+        .order_by(Channel.id)
+        .first()
+    )
+    if channel:
+        return channel
+
+    return None
+
+
+def add_or_reactivate_monitored_channel(
+    username: str,
+    title: Optional[str] = None,
+    source: str = "manual",
+) -> MonitoredChannel:
+    """Alta o reactivación en monitored_channels (uso admin)."""
+    username = normalize_username(username)
+    if not username:
+        raise ValueError("username vacío")
+    row = MonitoredChannel.query.filter(
+        func.lower(MonitoredChannel.username) == username
+    ).first()
+    now = datetime.utcnow()
+    if not row:
+        row = MonitoredChannel(
+            username=username,
+            title=title or username,
+            status="active",
+            discontinued=False,
+            source=source or "manual",
+            last_error=None,
+        )
+        db.session.add(row)
+    else:
+        row.status = "active"
+        row.discontinued = False
+        row.last_error = None
+        row.source = source or row.source or "manual"
+        if title:
+            row.title = title
+        row.updated_at = now
+    get_or_create_channel_row(username, title=title or (row.title if row else username))
+    db.session.commit()
+    return row
+
+
 def build_channel_graph_payload(
     min_forwards: int = 1,
     include_discontinued: bool = True,
@@ -209,16 +294,23 @@ def build_channel_graph_payload(
         normalize_username(row.username): row for row in monitored_rows if row.username
     }
 
-    msg_counts = {
-        normalize_username(username): int(count or 0)
-        for username, count in (
-            db.session.query(Channel.username, func.count(Message.id))
-            .outerjoin(Message, Message.channel_id == Channel.id)
-            .group_by(Channel.username)
+    # Conteos por channel_id → luego se indexan por username resuelto
+    msg_counts_by_id = {
+        int(channel_id): int(count or 0)
+        for channel_id, count in (
+            db.session.query(Message.channel_id, func.count(Message.id))
+            .group_by(Message.channel_id)
             .all()
         )
-        if username
+        if channel_id is not None
     }
+    msg_counts: Dict[str, int] = {}
+    if msg_counts_by_id:
+        for ch in Channel.query.filter(Channel.id.in_(list(msg_counts_by_id.keys()))).all():
+            u = normalize_username(ch.username)
+            if not u:
+                continue
+            msg_counts[u] = msg_counts.get(u, 0) + int(msg_counts_by_id.get(ch.id, 0) or 0)
 
     edge_q = ChannelEdge.query.filter(ChannelEdge.forward_count >= min_forwards)
     edges_raw = edge_q.all()
@@ -279,12 +371,17 @@ def build_channel_graph_payload(
             continue
         status = mon.status if mon else "discovered"
         discontinued = bool(mon.discontinued) if mon else False
+        resolved = resolve_channel_row(username)
+        msg_count = int(msg_counts.get(username, 0) or 0)
+        if msg_count <= 0 and resolved:
+            msg_count = int(msg_counts_by_id.get(resolved.id, 0) or 0)
         nodes.append(
             {
                 "id": username,
                 "username": username,
                 "title": (mon.title if mon and mon.title else None)
                 or title_by_user.get(username)
+                or (resolved.title if resolved else None)
                 or username,
                 "status": status,
                 "discontinued": discontinued,
@@ -292,7 +389,7 @@ def build_channel_graph_payload(
                 "source": mon.source if mon else None,
                 "last_scraped_at": mon.last_scraped_at.isoformat() if mon and mon.last_scraped_at else None,
                 "degree": degree.get(username, 0),
-                "message_count": int(msg_counts.get(username, 0) or 0),
+                "message_count": msg_count,
             }
         )
 
@@ -334,12 +431,20 @@ def build_channel_stats_payload(username: str, days: Optional[int] = 30) -> Opti
     if not username:
         return None
 
-    channel = Channel.query.filter_by(username=username).first()
-    mon = MonitoredChannel.query.filter_by(username=username).first()
+    mon = MonitoredChannel.query.filter(
+        func.lower(MonitoredChannel.username) == username
+    ).first()
+    channel = resolve_channel_row(username)
     if not channel and not mon:
         return None
 
-    title = (mon.title if mon and mon.title else None) or (channel.title if channel else username) or username
+    # Si hay mensajes bajo otro username pero mismo título, usar ese channel.id
+    resolved_username = normalize_username(channel.username) if channel else username
+    title = (
+        (mon.title if mon and mon.title else None)
+        or (channel.title if channel else None)
+        or username
+    )
 
     since = None
     days_window = None
@@ -474,10 +579,11 @@ def build_channel_stats_payload(username: str, days: Optional[int] = 30) -> Opti
     return {
         "channel": {
             "username": username,
+            "resolved_username": resolved_username,
             "title": title,
             "status": mon.status if mon else ("active" if channel else "unknown"),
             "discontinued": bool(mon.discontinued) if mon else False,
-            "monitored": mon is not None,
+            "monitored": mon is not None and not bool(getattr(mon, "discontinued", False)),
             "source": mon.source if mon else None,
             "last_error": mon.last_error if mon else None,
             "last_scraped_at": mon.last_scraped_at.isoformat() if mon and mon.last_scraped_at else None,

@@ -14,6 +14,9 @@ import {
 } from '@mui/material';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import ArticleIcon from '@mui/icons-material/Article';
+import AddIcon from '@mui/icons-material/Add';
+import MailOutlineIcon from '@mui/icons-material/MailOutline';
+import Alert from '@mui/material/Alert';
 
 const formatNum = (value, digits = 0) => {
   const n = Number(value);
@@ -81,6 +84,10 @@ function ChannelDetailPanel({
   onDaysChange,
   onSelectNeighbor,
   onViewMessages,
+  onMonitor,
+  monitorBusy = false,
+  monitorMsg = '',
+  isAdmin = false,
 }) {
   if (!selectedUsername) {
     return (
@@ -173,7 +180,27 @@ function ChannelDetailPanel({
         >
           Telegram
         </Button>
+        {(!channel.monitored || channel.discontinued) && (
+          <Button
+            size="small"
+            variant="outlined"
+            color={isAdmin ? 'success' : 'primary'}
+            startIcon={isAdmin ? <AddIcon /> : <MailOutlineIcon />}
+            disabled={monitorBusy}
+            onClick={() => onMonitor && onMonitor(channel)}
+          >
+            {monitorBusy
+              ? '…'
+              : isAdmin
+                ? 'Añadir a monitorización'
+                : 'Proponer monitorización'}
+          </Button>
+        )}
       </Stack>
+
+      {monitorMsg && (
+        <Alert severity="info" sx={{ mb: 2 }}>{monitorMsg}</Alert>
+      )}
 
       <Stack direction="row" spacing={1} mb={2}>
         {[7, 30, 90].map((d) => (
