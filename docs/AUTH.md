@@ -93,6 +93,39 @@ ALLOWED_EMAILS=tu@email.com:admin
 
 La respuesta de `login-request` incluirá `dev_magic_link` para abrir el enlace en el navegador.
 
+## Staging (:8080)
+
+El `.env` del servidor suele tener `AUTH_FRONTEND_URL=https://app.monitoria.org` (producción).  
+`docker-compose.staging.yml` lo **sobrescribe** con `STAGING_PUBLIC_URL` (por defecto `http://localhost:8080`) y activa `AUTH_DEV_RETURN_LINK=1`.
+
+Staging necesita en el **host** (mismo `~/monitor_IA` que producción):
+
+1. `.env` con al menos `DATABASE_URL`, `JWT_SECRET_KEY`, `SECRET_KEY` y mail/SES si quieres correo.
+2. `backend/allowed_emails.txt` (o `ALLOWED_EMAILS` en el `.env`).
+
+`docker-compose.staging.yml` monta `./backend/allowed_emails.txt` en el contenedor. Si el archivo no existe, `compose up` falla: créalo antes.
+
+```bash
+cd ~/monitor_IA
+
+# .env: reutilizar el de producción si ya existe en la máquina
+test -f .env || cp .env.example .env
+# Edita .env: DATABASE_URL, JWT_*, ALLOWED_EMAILS=tu@email.com:admin, mail/SES…
+
+# Allowlist (obligatoria para login)
+test -f backend/allowed_emails.txt || cp backend/allowed_emails.example.txt backend/allowed_emails.txt
+nano backend/allowed_emails.txt   # tu email + rol admin
+
+# Si entras por IP pública del EC2:
+STAGING_PUBLIC_URL=http://x.x.x.x:8080 ./scripts/deploy-staging.sh --backend-only
+
+# Pedir enlace (dev_magic_link en el JSON):
+curl -s -X POST http://localhost:8080/api/auth/login-request \
+  -H 'Content-Type: application/json' -d '{"email":"TU@EMAIL"}' | python3 -m json.tool
+```
+
+**Sin redesplegar:** si el correo trae `https://app.monitoria.org/auth/verify?code=...`, cambia solo el host a `http://<IP>:8080/auth/verify?code=...` (mismo código; misma BD).
+
 ## Frontend
 
 - `AuthProvider` + `ProtectedRoute` en `App.js`
