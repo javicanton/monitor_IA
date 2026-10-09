@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   Container, 
   Box, 
@@ -40,7 +40,11 @@ const formatPublicationCount = (count) => {
 const Dashboard = () => {
   const { logout } = useAuth();
   const navigate = useNavigate();
-  const [filters, setFilters] = useState({});
+  const [searchParams] = useSearchParams();
+  const channelFromUrl = (searchParams.get('channel') || '').trim();
+  const [filters, setFilters] = useState(() => (
+    channelFromUrl ? { channel: [channelFromUrl] } : {}
+  ));
   const [searchInput, setSearchInput] = useState('');
   const [searchPending, setSearchPending] = useState(false);
   const [listStats, setListStats] = useState({
@@ -62,6 +66,16 @@ const Dashboard = () => {
     await logout();
     navigate('/login', { replace: true });
   };
+
+  useEffect(() => {
+    const channel = (searchParams.get('channel') || '').trim();
+    if (!channel) return;
+    setFilters((prev) => {
+      const current = prev.channel || [];
+      if (current.length === 1 && current[0] === channel) return prev;
+      return { ...prev, channel: [channel] };
+    });
+  }, [searchParams]);
 
   useEffect(() => {
     const handleScroll = () => {
