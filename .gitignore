@@ -500,3 +500,12 @@ credentials.txt
 *.key
 scripts/canales*.csv
 scripts/*channels*.csv
+
+# Corpus RECO: credenciales y salidas generadas. La semilla documentada sí se versiona.
+.env.reco
+.env.reco.*
+!aws/env.reco.example
+!metodologia/01_canales_semilla.csv
+aws/reco_monitored.csv
+aws/reco_canales_insert.sql
+/out/

@@ -1,0 +1,22 @@
+# Léxico de dos capas (versión 0.1, 16-oct-2026). Los patrones son regex sobre texto NORMALIZADO
+# (minúsculas, sin diacríticos, leetspeak resuelto). Revisar con muestra real antes de congelar.
+capa_A:
+  agenda_2030: ['agenda ?2030', 'a2030', 'objetivos de desarrollo sostenible', '\bods\b']
+  organismos: ['\bonu\b', 'naciones unidas', '\bcmnucc\b', '\bipcc\b', 'unesco', '\bg20\b', 'davos', 'foro economico mundial']
+  cumbres: ['\bcop ?(29|30|31)\b', 'acuerdo de paris']
+  politicas: ['pacto verde', 'green deal', 'transicion energetica', 'neutralidad climatica', 'cero neto', 'net zero', 'descarbonizacion', 'emergencia climatica', 'financiacion climatica', 'mercados? de carbono', '\besg\b', '\bpniec\b', '\bzbe\b']
+capa_B:
+  arquitectura_conspirativa: ['gran reseteo', 'great reset', 'nuevo orden mundial', '\bnom\b', 'globalis(mo|ta)s?', 'schwab', 'soros', 'agenda ?21']
+  coercion_material: ['ciudades? de 15 minutos', 'confinamiento climatico', 'no tendras nada', 'guerra al campo', 'coche electrico obligatorio']
+  deslegitimacion_epistemica: ['estafa climatica', 'timo del clima', 'dictadura climatica', 'secta climatica', 'el co2 es vida', 'cambio climatico es (un )?(bulo|mentira|farsa)']
+  clima_energia: ['geoingenieria', 'chemtrails?', '\bhaarp\b', 'apagon provocado', 'culpa de las renovables']
+veto:
+  # Ruido típico de "2030"; se excluye si NO hay término de capa B (regla R4)
+  - 'mundial(es)? (de )?2030'
+  - 'copa del mundo'
+  - 'candidatura (para )?(el )?(mundial )?2030'
+  - 'expo 2030'
+  - 'vision 2030'
+  - 'juegos (olimpicos )?(de )?2030'
+  - 'elecciones (de )?2030'
+  - '(prevision|previsiones|prevemos|objetivo de (ventas|facturacion)).{0,40}2030'
