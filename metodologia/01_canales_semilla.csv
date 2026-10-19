@@ -1,27 +1,23 @@
 id_interno,nombre_documentado,tipo_provisional,pais_provisional,fuente_documental,handle_telegram,vigente_2024_25,suscriptores,mensajes_periodo,incluir,notas
-noticias_rafapal,Noticias Rafapal,T4,ES,Maldita.es 2022 (clan de 39 canales); Chequeado 2022,,,,,,"tipo y vigencia por confirmar al abrir el canal; nombre, no alias"
-el_diestro,El Diestro,T4,ES,Maldita.es 2022; Chequeado 2022,,,,,,"tipo y vigencia por confirmar al abrir el canal; nombre, no alias"
-opinion_en_libertad,Opinión en libertad,T4,ES,Maldita.es 2022,,,,,,"tipo y vigencia por confirmar al abrir el canal; nombre, no alias"
-euskalnews,euskalnews.com,T4,ES,Maldita.es 2022,,,,,,"tipo y vigencia por confirmar al abrir el canal; nombre, no alias"
-resistencia_espanola,Resistencia Española,T2,ES,Maldita.es 2022,,,,,,"tipo y vigencia por confirmar al abrir el canal; nombre, no alias"
-tsa_noticias,TSA Noticias,T4,ES,Maldita.es 2022,,,,,,"tipo y vigencia por confirmar al abrir el canal; nombre, no alias"
-ana_qtella,Ana Qtella,T2,ES,Maldita.es 2022,,,,,,"tipo y vigencia por confirmar al abrir el canal; nombre, no alias"
-lobo_basado_news,LOBO BASADO NEWS,T4,ES,Maldita.es 2022,,,,,,"tipo y vigencia por confirmar al abrir el canal; nombre, no alias"
-el_loco_de_la_corrala,EL LOCO DE LA CORRALA,T2,ES,Maldita.es 2022,,,,,,"tipo y vigencia por confirmar al abrir el canal; nombre, no alias"
-espiritu_templario_noticias,Espíritu Templario Noticias,T4,ES,Maldita.es 2022,,,,,,"tipo y vigencia por confirmar al abrir el canal; nombre, no alias"
-conciencia_colectiva_oficial,CONSCIENCIA COLECTIVA OFICIAL,T3,ES,Maldita.es 2022,,,,,,"tipo y vigencia por confirmar al abrir el canal; nombre, no alias"
-dr_ruiz_valdepenas_difusion,Dr. Ángel Ruiz-Valdepeñas Canal Difusión,T3,ES,Maldita.es 2022,,,,,,"tipo y vigencia por confirmar al abrir el canal; nombre, no alias"
-dignidad_para_todos,DIGNIDAD PARA TODOS,T2,ES,Maldita.es 2022,,,,,,"tipo y vigencia por confirmar al abrir el canal; nombre, no alias"
-resurgente_2020,RESURGENTE 2020,T3,ES,Maldita.es 2022,,,,,,"tipo y vigencia por confirmar al abrir el canal; nombre, no alias"
-pollo_frito_5g,Pollo frito 5G,T3,ES,Maldita.es 2022,,,,,,"tipo y vigencia por confirmar al abrir el canal; nombre, no alias"
-hijos_de_las_estrellas,Hijos de las Estrellas,T3,ES,Maldita.es 2022,,,,,,"tipo y vigencia por confirmar al abrir el canal; nombre, no alias"
-la_quinta_columna_tv,La Quinta Columna TV,T4,ES,Maldita.es 2022,,,,,,"tipo y vigencia por confirmar al abrir el canal; nombre, no alias"
-,,T1,ES,POR BUSCAR,,,,,,hueco: negacionismo climático explícito
-,,T1,LATAM,POR BUSCAR,,,,,,hueco: negacionismo climático explícito
-,,T5,ES,POR BUSCAR,,,,,,hueco: rural/agro
-,,T5,LATAM,POR BUSCAR,,,,,,hueco: rural/agro
-,,T6,ES,POR BUSCAR,,,,,,hueco: energía/motor
-,,T6,LATAM,POR BUSCAR,,,,,,hueco: energía/motor
-,,T2,LATAM,POR BUSCAR,,,,,,hueco: antiglobalismo/soberanismo LatAm
-,,T3,LATAM,POR BUSCAR,,,,,,hueco: salud alternativa LatAm
-,,T4,LATAM,POR BUSCAR,,,,,,hueco: agregadores LatAm
+rafapalreal,Noticias Rafapal,T4,ES,Maldita.es 2022,rafapalreal,,,,,monitorIA: status=active; tipo por confirmar al abrir el canal
+eldiestro,El Diestro. Opinión en libertad,T4,ES,Maldita.es 2022,eldiestro,,,,,monitorIA: status=active; fusiona las filas El Diestro y Opinión en libertad (mismo canal); tipo por confirmar al abrir el canal
+euskalnews,euskalnews.com,T4,ES,Maldita.es 2022,euskalnews,,,,,monitorIA: status=active; tipo por confirmar al abrir el canal
+resistenciaespanola,Resistencia Española,T2,ES,monitorIA (no figura en Maldita.es 2022),resistenciaespanola,,,,,monitorIA: status=active; tipo por confirmar al abrir el canal
+tsanoticias,TSA Noticias [The Spanish Army],T4,ES,Maldita.es 2022,tsanoticias,,,,,monitorIA: status=active; tipo por confirmar al abrir el canal
+anaqtella,Ana Qtella,T2,ES,Maldita.es 2022,anaqtella,,,,0,"monitorIA: status=error; handle caído, incluir=0; tipo por confirmar al abrir el canal"
+lobobasadonews,LOBO BASADO NEWS,T4,ES,monitorIA (no figura en Maldita.es 2022),lobobasadonews,,,,0,"monitorIA: status=error; handle caído, incluir=0; tipo por confirmar al abrir el canal"
+ellocodelacorralachannel,EL LOCO DE LA CORRALA,T2,ES,Maldita.es 2022,ellocodelacorralachannel,,,,,monitorIA: status=active; tipo por confirmar al abrir el canal
+espiritutemplario,Espíritu Templario Noticias,T4,ES,Maldita.es 2022,espiritutemplario,,,,,monitorIA: status=active; tipo por confirmar al abrir el canal
+conscienciacolectivacanal,CONSCIENCIA COLECTIVA OFICIAL,T3,ES,Maldita.es 2022,conscienciacolectivacanal,,,,,monitorIA: status=active; emparejamiento probable (en monitorIA el título es HC); tipo por confirmar al abrir el canal
+dr_angel_ruiz_valdepe_as,Dr. Angel Ruiz-Valdepeñas Canal Difusión,T3,ES,Maldita.es 2022,dr_angel_ruiz_valdepe_as,,,,,monitorIA: status=active; tipo por confirmar al abrir el canal
+drangelruizvaldepenasoficial,Dr. Angel Ruiz-Valdepeñas Canal Difusión,T3,ES,Maldita.es 2022,drangelruizvaldepenasoficial,,,,0,"monitorIA: status=error; handle caído, incluir=0; handle alternativo del mismo nombre; tipo por confirmar al abrir el canal"
+dignidadparato2,DIGNIDAD PARA TODOS,T2,ES,Maldita.es 2022,dignidadparato2,,,,,monitorIA: status=active; tipo por confirmar al abrir el canal
+resurgente2020,RESURGENTE 2020,T3,ES,Maldita.es 2022,resurgente2020,,,,,monitorIA: status=active; tipo por confirmar al abrir el canal
+laquintacolumna,La Quinta Columna TV,T4,ES,monitorIA (no figura en Maldita.es 2022),laquintacolumna,,,,,monitorIA: status=active; tipo por confirmar al abrir el canal
+paremosnuevoordenmundial,PAREMOS el NUEVO ORDEN mundial,,ES,Maldita.es 2022,paremosnuevoordenmundial,,,,0,"monitorIA: status=error; handle caído, incluir=0; añadido: figura en Maldita.es 2022; tipo por confirmar al abrir el canal"
+supercontagiadores,Conspiración Máxima 777,,ES,Maldita.es 2022,supercontagiadores,,,,,monitorIA: status=active; añadido: figura en Maldita.es 2022; tipo por confirmar al abrir el canal
+conspiraciomaxima777,Conspiración Máxima 777,,ES,Maldita.es 2022,conspiraciomaxima777,,,,0,"monitorIA: status=error; handle caído, incluir=0; handle antiguo del mismo nombre; tipo por confirmar al abrir el canal"
+plandemia_mundial_covid,PLANDEMIA MUNDIAL COVID 2021,,ES,Maldita.es 2022,plandemia_mundial_covid,,,,,monitorIA: status=active; añadido: figura en Maldita.es 2022; tipo por confirmar al abrir el canal
+guerrerosestoicos,Guerreros Estoicos,,ES,Maldita.es 2022,guerrerosestoicos,,,,,monitorIA: status=active; añadido: figura en Maldita.es 2022; tipo por confirmar al abrir el canal
+dranataliaprego,"Natalia Prego Cancelo MD, Dra, oficial Canal de difusión",,ES,Maldita.es 2022,dranataliaprego,,,,,monitorIA: status=active; añadido: figura en Maldita.es 2022; tipo por confirmar al abrir el canal
+cbknews,CBKNEWS,,ES,Maldita.es 2022,cbknews,,,,,monitorIA: status=active; añadido: figura en Maldita.es 2022; tipo por confirmar al abrir el canal
