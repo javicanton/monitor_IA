@@ -22,7 +22,7 @@ mkdir -p logs
 exec 9>"logs/reco_backfill.lock"
 flock -n 9 || { echo "Ya hay un backfill RECO en curso"; exit 8; }
 
-CANALES="$ROOT/aws/reco_monitored.csv"
+CANALES="${1:-$ROOT/aws/reco_monitored.csv}"
 [ -s "$CANALES" ] || { echo "ABORTO: falta $CANALES. Genera la lista con preparar_monitored.py"; exit 3; }
 
 n_db="$(psql "$DATABASE_URL" -t -A -c "SELECT count(*) FROM monitored_channels WHERE status='active' AND discontinued=false" | tr -d '[:space:]')"

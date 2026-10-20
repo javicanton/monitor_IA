@@ -71,9 +71,19 @@ pub_antes="$(reco_contar_public)" || { estado "abortado_conteo"; exit 9; }
 
 PY="$ROOT/.venv/bin/python"
 [ -x "$PY" ] || { echo "Falta .venv (ver docs/SCRAPER.md)"; estado "abortado_venv"; exit 7; }
+"$PY" -c "import yaml" || {
+  echo "Falta PyYAML en .venv. Instala con: $PY -m pip install 'PyYAML>=6.0'"
+  estado "abortado_yaml"
+  exit 7
+}
 
 estado "backfill"
-./aws/run_reco_backfill.sh
+if [ "$FASE" = "B" ]; then
+  # La semilla ya está en reco.messages. La ronda 1 solo baja los canales nuevos.
+  ./aws/run_reco_backfill.sh "$ROOT/aws/reco_monitored_ronda1.csv"
+else
+  ./aws/run_reco_backfill.sh
+fi
 estado "filtro"
 "$PY" aws/reco_filtro_db.py --lexico metodologia/02_lexico.yaml --version "${LEXICO_VERSION:-v0.1}"
 estado "exportar"

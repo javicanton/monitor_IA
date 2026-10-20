@@ -89,6 +89,9 @@ def test_filtra_handles_y_parametriza_el_esquema(tmp_path):
     lista = (out / "reco_monitored.csv").read_text(encoding="utf-8").strip().splitlines()
     assert lista[0].startswith("canaluno,")
     assert "caido" not in (out / "reco_monitored.csv").read_text(encoding="utf-8")
+    ronda = (out / "reco_monitored_ronda1.csv").read_text(encoding="utf-8")
+    assert "bolanieve," in ronda
+    assert "canaluno" not in ronda
     sql = (out / "reco_canales_insert.sql").read_text(encoding="utf-8")
     assert 'SET search_path TO "reco_test"' in sql
     assert "O''Higgins" in sql
@@ -103,6 +106,16 @@ def test_sin_handles_no_escribe_un_insert_roto(tmp_path):
     assert n == 0
     sql = (tmp_path / "out" / "reco_canales_insert.sql").read_text(encoding="utf-8")
     assert "INSERT INTO" not in sql
+
+
+def test_la_semilla_real_separa_ronda_1():
+    src = ROOT / "metodologia" / "01_canales_semilla.csv"
+    filas = list(PREP.filas_utiles(src))
+    semilla = [f for f in filas if f["origen"] == "semilla"]
+    ronda = [f for f in filas if f["origen"] == "snowball" and f["ronda"] == 1]
+    assert len(semilla) == 18
+    assert len(ronda) == 221
+    assert len({f["handle"] for f in filas}) == len(filas)
 
 
 def test_esquema_raro_se_rechaza(tmp_path):

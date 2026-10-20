@@ -506,6 +506,8 @@ scripts/*channels*.csv
 .env.reco.*
 !aws/env.reco.example
 !metodologia/01_canales_semilla.csv
+!metodologia/candidatos_ronda1_curados.csv
 aws/reco_monitored.csv
+aws/reco_monitored_ronda1.csv
 aws/reco_canales_insert.sql
 /out/

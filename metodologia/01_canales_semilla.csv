@@ -1,27 +1,246 @@
-id_interno,nombre_documentado,tipo_provisional,pais_provisional,fuente_documental,handle_telegram,vigente_2024_25,suscriptores,mensajes_periodo,incluir,notas
-noticias_rafapal,Noticias Rafapal,T4,ES,Maldita.es 2022 (clan de 39 canales); Chequeado 2022,,,,,,"tipo y vigencia por confirmar al abrir el canal; nombre, no alias"
-el_diestro,El Diestro,T4,ES,Maldita.es 2022; Chequeado 2022,,,,,,"tipo y vigencia por confirmar al abrir el canal; nombre, no alias"
-opinion_en_libertad,Opinión en libertad,T4,ES,Maldita.es 2022,,,,,,"tipo y vigencia por confirmar al abrir el canal; nombre, no alias"
-euskalnews,euskalnews.com,T4,ES,Maldita.es 2022,,,,,,"tipo y vigencia por confirmar al abrir el canal; nombre, no alias"
-resistencia_espanola,Resistencia Española,T2,ES,Maldita.es 2022,,,,,,"tipo y vigencia por confirmar al abrir el canal; nombre, no alias"
-tsa_noticias,TSA Noticias,T4,ES,Maldita.es 2022,,,,,,"tipo y vigencia por confirmar al abrir el canal; nombre, no alias"
-ana_qtella,Ana Qtella,T2,ES,Maldita.es 2022,,,,,,"tipo y vigencia por confirmar al abrir el canal; nombre, no alias"
-lobo_basado_news,LOBO BASADO NEWS,T4,ES,Maldita.es 2022,,,,,,"tipo y vigencia por confirmar al abrir el canal; nombre, no alias"
-el_loco_de_la_corrala,EL LOCO DE LA CORRALA,T2,ES,Maldita.es 2022,,,,,,"tipo y vigencia por confirmar al abrir el canal; nombre, no alias"
-espiritu_templario_noticias,Espíritu Templario Noticias,T4,ES,Maldita.es 2022,,,,,,"tipo y vigencia por confirmar al abrir el canal; nombre, no alias"
-conciencia_colectiva_oficial,CONSCIENCIA COLECTIVA OFICIAL,T3,ES,Maldita.es 2022,,,,,,"tipo y vigencia por confirmar al abrir el canal; nombre, no alias"
-dr_ruiz_valdepenas_difusion,Dr. Ángel Ruiz-Valdepeñas Canal Difusión,T3,ES,Maldita.es 2022,,,,,,"tipo y vigencia por confirmar al abrir el canal; nombre, no alias"
-dignidad_para_todos,DIGNIDAD PARA TODOS,T2,ES,Maldita.es 2022,,,,,,"tipo y vigencia por confirmar al abrir el canal; nombre, no alias"
-resurgente_2020,RESURGENTE 2020,T3,ES,Maldita.es 2022,,,,,,"tipo y vigencia por confirmar al abrir el canal; nombre, no alias"
-pollo_frito_5g,Pollo frito 5G,T3,ES,Maldita.es 2022,,,,,,"tipo y vigencia por confirmar al abrir el canal; nombre, no alias"
-hijos_de_las_estrellas,Hijos de las Estrellas,T3,ES,Maldita.es 2022,,,,,,"tipo y vigencia por confirmar al abrir el canal; nombre, no alias"
-la_quinta_columna_tv,La Quinta Columna TV,T4,ES,Maldita.es 2022,,,,,,"tipo y vigencia por confirmar al abrir el canal; nombre, no alias"
-,,T1,ES,POR BUSCAR,,,,,,hueco: negacionismo climático explícito
-,,T1,LATAM,POR BUSCAR,,,,,,hueco: negacionismo climático explícito
-,,T5,ES,POR BUSCAR,,,,,,hueco: rural/agro
-,,T5,LATAM,POR BUSCAR,,,,,,hueco: rural/agro
-,,T6,ES,POR BUSCAR,,,,,,hueco: energía/motor
-,,T6,LATAM,POR BUSCAR,,,,,,hueco: energía/motor
-,,T2,LATAM,POR BUSCAR,,,,,,hueco: antiglobalismo/soberanismo LatAm
-,,T3,LATAM,POR BUSCAR,,,,,,hueco: salud alternativa LatAm
-,,T4,LATAM,POR BUSCAR,,,,,,hueco: agregadores LatAm
+id_interno,nombre_documentado,tipo_provisional,pais_provisional,fuente_documental,handle_telegram,vigente_2024_25,suscriptores,mensajes_periodo,incluir,notas,origen,ronda_snowball
+rafapalreal,Noticias Rafapal,T4,ES,Maldita.es 2022,rafapalreal,,,,,monitorIA: status=active; tipo por confirmar al abrir el canal,semilla,0
+eldiestro,El Diestro. Opinión en libertad,T4,ES,Maldita.es 2022,eldiestro,,,,,monitorIA: status=active; fusiona las filas El Diestro y Opinión en libertad (mismo canal); tipo por confirmar al abrir el canal,semilla,0
+euskalnews,euskalnews.com,T4,ES,Maldita.es 2022,euskalnews,,,,,monitorIA: status=active; tipo por confirmar al abrir el canal,semilla,0
+resistenciaespanola,Resistencia Española,T2,ES,monitorIA (no figura en Maldita.es 2022),resistenciaespanola,,,,,monitorIA: status=active; tipo por confirmar al abrir el canal,semilla,0
+tsanoticias,TSA Noticias [The Spanish Army],T4,ES,Maldita.es 2022,tsanoticias,,,,,monitorIA: status=active; tipo por confirmar al abrir el canal,semilla,0
+anaqtella,Ana Qtella,T2,ES,Maldita.es 2022,anaqtella,,,,0,"monitorIA: status=error; handle caído, incluir=0; tipo por confirmar al abrir el canal",semilla,0
+lobobasadonews,LOBO BASADO NEWS,T4,ES,monitorIA (no figura en Maldita.es 2022),lobobasadonews,,,,0,"monitorIA: status=error; handle caído, incluir=0; tipo por confirmar al abrir el canal",semilla,0
+ellocodelacorralachannel,EL LOCO DE LA CORRALA,T2,ES,Maldita.es 2022,ellocodelacorralachannel,,,,,monitorIA: status=active; tipo por confirmar al abrir el canal,semilla,0
+espiritutemplario,Espíritu Templario Noticias,T4,ES,Maldita.es 2022,espiritutemplario,,,,,monitorIA: status=active; tipo por confirmar al abrir el canal,semilla,0
+conscienciacolectivacanal,CONSCIENCIA COLECTIVA OFICIAL,T3,ES,Maldita.es 2022,conscienciacolectivacanal,,,,,monitorIA: status=active; emparejamiento probable (en monitorIA el título es HC); tipo por confirmar al abrir el canal,semilla,0
+dr_angel_ruiz_valdepe_as,Dr. Angel Ruiz-Valdepeñas Canal Difusión,T3,ES,Maldita.es 2022,dr_angel_ruiz_valdepe_as,,,,,monitorIA: status=active; tipo por confirmar al abrir el canal,semilla,0
+drangelruizvaldepenasoficial,Dr. Angel Ruiz-Valdepeñas Canal Difusión,T3,ES,Maldita.es 2022,drangelruizvaldepenasoficial,,,,0,"monitorIA: status=error; handle caído, incluir=0; handle alternativo del mismo nombre; tipo por confirmar al abrir el canal",semilla,0
+dignidadparato2,DIGNIDAD PARA TODOS,T2,ES,Maldita.es 2022,dignidadparato2,,,,,monitorIA: status=active; tipo por confirmar al abrir el canal,semilla,0
+resurgente2020,RESURGENTE 2020,T3,ES,Maldita.es 2022,resurgente2020,,,,,monitorIA: status=active; tipo por confirmar al abrir el canal,semilla,0
+laquintacolumna,La Quinta Columna TV,T4,ES,monitorIA (no figura en Maldita.es 2022),laquintacolumna,,,,,monitorIA: status=active; tipo por confirmar al abrir el canal,semilla,0
+paremosnuevoordenmundial,PAREMOS el NUEVO ORDEN mundial,,ES,Maldita.es 2022,paremosnuevoordenmundial,,,,0,"monitorIA: status=error; handle caído, incluir=0; añadido: figura en Maldita.es 2022; tipo por confirmar al abrir el canal",semilla,0
+supercontagiadores,Conspiración Máxima 777,,ES,Maldita.es 2022,supercontagiadores,,,,,monitorIA: status=active; añadido: figura en Maldita.es 2022; tipo por confirmar al abrir el canal,semilla,0
+conspiraciomaxima777,Conspiración Máxima 777,,ES,Maldita.es 2022,conspiraciomaxima777,,,,0,"monitorIA: status=error; handle caído, incluir=0; handle antiguo del mismo nombre; tipo por confirmar al abrir el canal",semilla,0
+plandemia_mundial_covid,PLANDEMIA MUNDIAL COVID 2021,,ES,Maldita.es 2022,plandemia_mundial_covid,,,,,monitorIA: status=active; añadido: figura en Maldita.es 2022; tipo por confirmar al abrir el canal,semilla,0
+guerrerosestoicos,Guerreros Estoicos,,ES,Maldita.es 2022,guerrerosestoicos,,,,,monitorIA: status=active; añadido: figura en Maldita.es 2022; tipo por confirmar al abrir el canal,semilla,0
+dranataliaprego,"Natalia Prego Cancelo MD, Dra, oficial Canal de difusión",,ES,Maldita.es 2022,dranataliaprego,,,,,monitorIA: status=active; añadido: figura en Maldita.es 2022; tipo por confirmar al abrir el canal,semilla,0
+cbknews,CBKNEWS,,ES,Maldita.es 2022,cbknews,,,,,monitorIA: status=active; añadido: figura en Maldita.es 2022; tipo por confirmar al abrir el canal,semilla,0
+pollofrito5g,Pollo frito 5G,T3,ES,Maldita.es 2022,pollofrito5g,,,,0,canal privado (aprobación por admin); no se recolecta; handle POLLOFRITO5G,semilla,0
+hijosdelasestrellas,Resistencia Galáctica (Hijos de las Estrellas),T3,ES,Maldita.es 2022,hijosdelasestrellas,,,,,handle indicado por el usuario; en la semilla de 2022 figuraba como Hijos de las Estrellas,semilla,0
+aguaiuris,💦AGUAIURIS💦,,ES,snowball ronda 1,aguaiuris,,26970,,1,snowball ronda 1; citado por 10 semillas; 50 reenvíos,snowball,1
+alviseperez,Alvise Pérez ✔,,,snowball ronda 1,alviseperez,,605863,,1,snowball ronda 1; citado por 9 semillas; 362 reenvíos,snowball,1
+une80,𝑼𝑵𝑬 80 𝑰𝒏𝒇𝒐𝒓𝒎𝒂,,,snowball ronda 1,une80,,45941,,1,snowball ronda 1; citado por 8 semillas; 5385 reenvíos,snowball,1
+herqles,Herqles,,,snowball ronda 1,herqles,,47760,,1,snowball ronda 1; citado por 8 semillas; 1541 reenvíos,snowball,1
+elchicotriste,elchicotriste,,,snowball ronda 1,elchicotriste,,8141,,1,snowball ronda 1; citado por 8 semillas; 1042 reenvíos,snowball,1
+canal5informa,CANAL 5TV INFORMA,,,snowball ronda 1,canal5informa,,42155,,1,snowball ronda 1; citado por 8 semillas; 719 reenvíos,snowball,1
+cristinamartinjimenezescritora,Doctora Cristina Martín Jiménez,,,snowball ronda 1,cristinamartinjimenezescritora,,56303,,1,snowball ronda 1; citado por 8 semillas; 493 reenvíos,snowball,1
+inmaculadafdez,Inmaculada Fernández / Canal de Información ✨,,,snowball ronda 1,inmaculadafdez,,9168,,1,snowball ronda 1; citado por 8 semillas; 168 reenvíos,snowball,1
+elpalleter,El Palleter,,,snowball ronda 1,elpalleter,,15472,,1,snowball ronda 1; citado por 8 semillas; 133 reenvíos,snowball,1
+wallstwolverine,Wall Street Wolverine ✔,,,snowball ronda 1,wallstwolverine,,176153,,1,snowball ronda 1; citado por 8 semillas; 93 reenvíos,snowball,1
+maykomachin,Alicia en el país de las mascarillas,,,snowball ronda 1,maykomachin,,4207,,1,snowball ronda 1; citado por 8 semillas; 40 reenvíos,snowball,1
+no_plandemia,NO + SECRETOS,,,snowball ronda 1,no_plandemia,,43451,,1,snowball ronda 1; citado por 7 semillas; 297 reenvíos,snowball,1
+marcvidal_telegram,Marc Vidal,,,snowball ronda 1,marcvidal_telegram,,48393,,1,snowball ronda 1; citado por 7 semillas; 122 reenvíos,snowball,1
+joseppamiesoficial,Josep Pàmies Oficial,,,snowball ronda 1,joseppamiesoficial,,72852,,1,snowball ronda 1; citado por 7 semillas; 75 reenvíos,snowball,1
+canariasdespiertaunida,Canarias Despierta y Unida,,ES,snowball ronda 1,canariasdespiertaunida,,18471,,1,snowball ronda 1; citado por 7 semillas; 35 reenvíos,snowball,1
+espartanos300canaloficial,Espartanos300CanalOficial,,,snowball ronda 1,espartanos300canaloficial,,6460,,1,snowball ronda 1; citado por 7 semillas; 30 reenvíos,snowball,1
+alosojosdedios,✝️🇪🇸A los Ojos de DIOS🇪🇸✝️,,ES,snowball ronda 1,alosojosdedios,,2342,,1,snowball ronda 1; citado por 7 semillas; 20 reenvíos,snowball,1
+ultima_hora,🔴 ÚLTIMA HORA,,,snowball ronda 1,ultima_hora,,36606,,1,snowball ronda 1; citado por 6 semillas; 1041 reenvíos,snowball,1
+julioarizaeltoro,Julio Ariza,,,snowball ronda 1,julioarizaeltoro,,49953,,1,snowball ronda 1; citado por 6 semillas; 160 reenvíos,snowball,1
+vitoquilestelegram,Vito Quiles 🇪🇸,,ES,snowball ronda 1,vitoquilestelegram,,148625,,1,snowball ronda 1; citado por 6 semillas; 132 reenvíos,snowball,1
+monitoestepario2,Lobos Esteparios - Diario del Apocalipsis reloaded -,,,snowball ronda 1,monitoestepario2,,11607,,1,snowball ronda 1; citado por 6 semillas; 119 reenvíos,snowball,1
+virus_chino,COVID-1984 👁,,,snowball ronda 1,virus_chino,,14548,,1,snowball ronda 1; citado por 6 semillas; 108 reenvíos,snowball,1
+cienclim,Ciencia y clima sin engaño,,,snowball ronda 1,cienclim,,6057,,1,snowball ronda 1; citado por 6 semillas; 92 reenvíos,snowball,1
+afectadosporlasvacunas,🩸 AFECTADOS por las VACUNAS🩸,,,snowball ronda 1,afectadosporlasvacunas,,13859,,1,snowball ronda 1; citado por 6 semillas; 77 reenvíos,snowball,1
+liberumasociscion,LIBERUM ASOCIACION,,,snowball ronda 1,liberumasociscion,,37817,,1,snowball ronda 1; citado por 6 semillas; 52 reenvíos,snowball,1
+rubengisbertoficial,Ruben Gisbert ✔,,,snowball ronda 1,rubengisbertoficial,,72512,,1,snowball ronda 1; citado por 6 semillas; 39 reenvíos,snowball,1
+galodabouza,Galo Dabouza,,,snowball ronda 1,galodabouza,,10504,,1,snowball ronda 1; citado por 6 semillas; 28 reenvíos,snowball,1
+pilarbaselga,Pilar Baselga En Canal,,,snowball ronda 1,pilarbaselga,,15191,,1,snowball ronda 1; citado por 6 semillas; 17 reenvíos,snowball,1
+movimiento_asistencia_integral,Movimiento Asistencia Integral,,,snowball ronda 1,movimiento_asistencia_integral,,28026,,1,snowball ronda 1; citado por 6 semillas; 9 reenvíos,snowball,1
+eldiestrotv,El Diestro.TV,,,snowball ronda 1,eldiestrotv,,5801,,1,snowball ronda 1; citado por 5 semillas; 9046 reenvíos,snowball,1
+loquenotecuentanlastelevisiones,Lo que no te cuentan las televisiones,,,snowball ronda 1,loquenotecuentanlastelevisiones,,5325,,1,snowball ronda 1; citado por 5 semillas; 2375 reenvíos,snowball,1
+spain_denuncia,𝗘𝗦𝗣𝗔𝗡̃𝗔 𝗗𝗘𝗡𝗨𝗡𝗖𝗜𝗔,,ES,snowball ronda 1,spain_denuncia,,10515,,1,snowball ronda 1; citado por 5 semillas; 302 reenvíos,snowball,1
+akashacomunidad,Akasha Comunidad,,,snowball ronda 1,akashacomunidad,,49541,,1,snowball ronda 1; citado por 5 semillas; 218 reenvíos,snowball,1
+klatv_es,KlaTV - Español,,,snowball ronda 1,klatv_es,,4164,,1,snowball ronda 1; citado por 5 semillas; 198 reenvíos,snowball,1
+medicosporlaverdadesp,MÉDICOS POR LA VERDAD España (Oficial),,ES,snowball ronda 1,medicosporlaverdadesp,,12830,,1,snowball ronda 1; citado por 5 semillas; 191 reenvíos,snowball,1
+padresxlaverdade,Padres Por la Verdad España II.,,ES,snowball ronda 1,padresxlaverdade,,6423,,1,snowball ronda 1; citado por 5 semillas; 120 reenvíos,snowball,1
+ines_sainz,EL DISPARATE TV,,,snowball ronda 1,ines_sainz,,7967,,1,snowball ronda 1; citado por 5 semillas; 97 reenvíos,snowball,1
+poesiaexterior,Aarón García Peña,,,snowball ronda 1,poesiaexterior,,3010,,1,snowball ronda 1; citado por 5 semillas; 82 reenvíos,snowball,1
+elaullido,EL AULLIDO CANAL Fernando López-Mirones,,,snowball ronda 1,elaullido,,43364,,1,snowball ronda 1; citado por 5 semillas; 80 reenvíos,snowball,1
+iustitiaeuropa,IUSTITIA EUROPA,,,snowball ronda 1,iustitiaeuropa,,16195,,1,snowball ronda 1; citado por 5 semillas; 52 reenvíos,snowball,1
+asociacion_eleuteria,ELEUTERIA Libertad & derechos fundamentales,,,snowball ronda 1,asociacion_eleuteria,,2111,,1,snowball ronda 1; citado por 5 semillas; 42 reenvíos,snowball,1
+desdeeiger,Picos pardos 🏔,,,snowball ronda 1,desdeeiger,,7189,,1,snowball ronda 1; citado por 5 semillas; 35 reenvíos,snowball,1
+flippityflop_es,www.flippityflop.es,,,snowball ronda 1,flippityflop_es,,10744,,1,snowball ronda 1; citado por 5 semillas; 18 reenvíos,snowball,1
+rossellocm,GUERREROS DE LA PLANDEMIA,,,snowball ronda 1,rossellocm,,13691,,1,snowball ronda 1; citado por 5 semillas; 15 reenvíos,snowball,1
+verdadesofenden,Verdades Ofenden @VerdadesOfenden,,ES,snowball ronda 1,verdadesofenden,,13618,,1,snowball ronda 1; citado por 5 semillas; 13 reenvíos,snowball,1
+eladeptoiniciado,El Adepto Iniciado,,,snowball ronda 1,eladeptoiniciado,,17649,,1,snowball ronda 1; citado por 5 semillas; 11 reenvíos,snowball,1
+geosincen,Geopolitica Sin Censura en España y Latinoamerica,,,snowball ronda 1,geosincen,,17213,,1,snowball ronda 1; citado por 4 semillas; 5406 reenvíos,snowball,1
+ingenieriasocialarchivo,Ingeniería Social y Agenda 2030,,,snowball ronda 1,ingenieriasocialarchivo,,7898,,1,snowball ronda 1; citado por 4 semillas; 1267 reenvíos,snowball,1
+bycpoornamidam,📡 VIDA y CONSCIENCIA,,,snowball ronda 1,bycpoornamidam,,5384,,1,snowball ronda 1; citado por 4 semillas; 196 reenvíos,snowball,1
+elexpresodemedianoche,EL EXPRESO DE MEDIANOCHE RESUCITA (CABALLEROS EN RESISTENCIA),,,snowball ronda 1,elexpresodemedianoche,,9335,,1,snowball ronda 1; citado por 4 semillas; 119 reenvíos,snowball,1
+venganzav4,𝙑𝙀𝙉𝙂𝘼𝙉𝙕𝘼 (censurado),,,snowball ronda 1,venganzav4,,1417,,1,snowball ronda 1; citado por 4 semillas; 53 reenvíos,snowball,1
+defendamoscr,(Canal) Defendamos Costa Rica - Marco Albertazzi,,CR,snowball ronda 1,defendamoscr,,3143,,1,snowball ronda 1; citado por 4 semillas; 51 reenvíos,snowball,1
+miguelrix,Miguel Rix,,,snowball ronda 1,miguelrix,,7426,,1,snowball ronda 1; citado por 4 semillas; 45 reenvíos,snowball,1
+reirtehastadeti,Reírte hasta de tu Sombra 👌,,,snowball ronda 1,reirtehastadeti,,13129,,1,snowball ronda 1; citado por 4 semillas; 43 reenvíos,snowball,1
+salvemoseldinerofisico,SALVEMOS EL DINERO FÍSICO,,,snowball ronda 1,salvemoseldinerofisico,,4148,,1,snowball ronda 1; citado por 4 semillas; 41 reenvíos,snowball,1
+matria_militia,𝕄𝕒𝕥𝕣𝕚𝕒,,,snowball ronda 1,matria_militia,,7044,,1,snowball ronda 1; citado por 4 semillas; 32 reenvíos,snowball,1
+rafaelgazomedico,Rafael Gazo Médico,,,snowball ronda 1,rafaelgazomedico,,4665,,1,snowball ronda 1; citado por 4 semillas; 32 reenvíos,snowball,1
+silvanobg_elartedevivir,Silvano Baztán G - El Arte de Vivir,,,snowball ronda 1,silvanobg_elartedevivir,,2114,,1,snowball ronda 1; citado por 4 semillas; 24 reenvíos,snowball,1
+canal_vidamassana_eu,Canal Vida Mas Sana Europa,,,snowball ronda 1,canal_vidamassana_eu,,2301,,1,snowball ronda 1; citado por 4 semillas; 20 reenvíos,snowball,1
+lo_que_no_te_cuentan,😱 Lo que NO te cuentan,,,snowball ronda 1,lo_que_no_te_cuentan,,7863,,1,snowball ronda 1; citado por 4 semillas; 18 reenvíos,snowball,1
+divulgaciontotaloficial,DivulgacionTotal.com (Full Disclosure)   ✔,,,snowball ronda 1,divulgaciontotaloficial,,14849,,1,snowball ronda 1; citado por 4 semillas; 15 reenvíos,snowball,1
+revelionenlagranja,ReVelión en la granja (Fernando Vizcaíno Carles),,,snowball ronda 1,revelionenlagranja,,18894,,1,snowball ronda 1; citado por 4 semillas; 15 reenvíos,snowball,1
+altrightespana,Alt Right España Noticias,,ES,snowball ronda 1,altrightespana,,31011,,1,snowball ronda 1; citado por 4 semillas; 13 reenvíos,snowball,1
+marcelodanieloterocds,Marcelo Daniel Otero CDS,,,snowball ronda 1,marcelodanieloterocds,,21763,,1,snowball ronda 1; citado por 4 semillas; 12 reenvíos,snowball,1
+cambioclimaticoinfoalternativa,Cambio Climatico,,,snowball ronda 1,cambioclimaticoinfoalternativa,,2796,,1,snowball ronda 1; citado por 4 semillas; 12 reenvíos,snowball,1
+disidenteincontrolado,Disidente incontrolado,,,snowball ronda 1,disidenteincontrolado,,13100,,1,snowball ronda 1; citado por 4 semillas; 11 reenvíos,snowball,1
+colinrivas,Colin Rivas NoticiasⓂ️,,,snowball ronda 1,colinrivas,,10927,,1,snowball ronda 1; citado por 4 semillas; 10 reenvíos,snowball,1
+guerrasygeo,Guerras y Geopolíticas 🚀🔥,,,snowball ronda 1,guerrasygeo,,82813,,1,snowball ronda 1; citado por 4 semillas; 10 reenvíos,snowball,1
+divergenciadigital0,Divergente Digital,,,snowball ronda 1,divergenciadigital0,,7790,,1,snowball ronda 1; citado por 4 semillas; 9 reenvíos,snowball,1
+tirachinass,🪽Ƭɿɾꪖςհɿղꪖនⓢ 🇪🇸,,ES,snowball ronda 1,tirachinass,,2292,,1,snowball ronda 1; citado por 4 semillas; 8 reenvíos,snowball,1
+viejosterciosesp,𝗩𝗶𝗲𝗷𝗼𝘀 𝗧𝗲𝗿𝗰𝗶𝗼𝘀 𝗘𝗦𝗣 🇪🇦,,ES,snowball ronda 1,viejosterciosesp,,5623,,1,snowball ronda 1; citado por 4 semillas; 6 reenvíos,snowball,1
+exponiendolaelite,Exponiendo La Élite,,,snowball ronda 1,exponiendolaelite,,38428,,1,snowball ronda 1; citado por 4 semillas; 6 reenvíos,snowball,1
+noticias_viral,⚡𝗡𝗼𝘁𝗶𝗰𝗶𝗮𝘀 𝗩𝗶𝗿𝗮𝗹,,,snowball ronda 1,noticias_viral,,3585,,1,snowball ronda 1; citado por 4 semillas; 6 reenvíos,snowball,1
+dravlens,Dra Lens Viviana,,,snowball ronda 1,dravlens,,4387,,1,snowball ronda 1; citado por 4 semillas; 4 reenvíos,snowball,1
+alertaglobal,NOTICIAS ALERTA GLOBAL,,,snowball ronda 1,alertaglobal,,17213,,1,snowball ronda 1; citado por 4 semillas; 4 reenvíos,snowball,1
+elinvestigador_org,El Investigador.org,,,snowball ronda 1,elinvestigador_org,,31968,,1,snowball ronda 1; citado por 4 semillas; 4 reenvíos,snowball,1
+pancartasamarillassevilla,PANCARTAS AMARILLAS SEVILLA,,ES,snowball ronda 1,pancartasamarillassevilla,,1108,,1,snowball ronda 1; citado por 4 semillas; 4 reenvíos,snowball,1
+laguaridadeldisidente,𝓛𝓪 𝓰𝓾𝓪𝓻𝓲𝓭𝓪 𝓭𝓮𝓵 𝓭𝓲𝓼𝓲𝓭𝓮𝓷𝓽𝓮 🇪🇸,,ES,snowball ronda 1,laguaridadeldisidente,,4603,,1,snowball ronda 1; citado por 3 semillas; 3479 reenvíos,snowball,1
+amigosdisidentes,AMIGOS DISIDENTES✊,,,snowball ronda 1,amigosdisidentes,,10621,,1,snowball ronda 1; citado por 3 semillas; 1022 reenvíos,snowball,1
+lavacunaeugenesica,La vacuna eugenésica,,,snowball ronda 1,lavacunaeugenesica,,4328,,1,snowball ronda 1; citado por 3 semillas; 791 reenvíos,snowball,1
+geoingenieriageopolitica,GEOINGENIERÍA GEOPOLÍTICA,,,snowball ronda 1,geoingenieriageopolitica,,8659,,1,snowball ronda 1; citado por 3 semillas; 634 reenvíos,snowball,1
+aguerridos,𝐀𝐆𝐔𝐄𝐑𝐑𝐈𝐃𝐎𝐒,,,snowball ronda 1,aguerridos,,15808,,1,snowball ronda 1; citado por 3 semillas; 610 reenvíos,snowball,1
+casosaislados,CASOS AISLADOS 2026,,,snowball ronda 1,casosaislados,,19423,,1,snowball ronda 1; citado por 3 semillas; 369 reenvíos,snowball,1
+movimiento_disidente,𝗠𝗼𝘃𝗶𝗺𝗶𝗲𝗻𝘁𝗼 𝗗𝗶𝘀𝗶𝗱𝗲𝗻𝘁𝗲 ⚔️,,,snowball ronda 1,movimiento_disidente,,1104,,1,snowball ronda 1; citado por 3 semillas; 190 reenvíos,snowball,1
+cienciaclimatica,"Geoingeniería, meteorología y climatología ❄️🌬️⛅",,,snowball ronda 1,cienciaclimatica,,2507,,1,snowball ronda 1; citado por 3 semillas; 102 reenvíos,snowball,1
+europahasfallen,EuropaHasFallen,,,snowball ronda 1,europahasfallen,,8643,,1,snowball ronda 1; citado por 3 semillas; 89 reenvíos,snowball,1
+smolny7,mpr21.info,,,snowball ronda 1,smolny7,,3937,,1,snowball ronda 1; citado por 3 semillas; 56 reenvíos,snowball,1
+noticias_gr,Noticias GR,,ES,snowball ronda 1,noticias_gr,,2543,,1,snowball ronda 1; citado por 3 semillas; 41 reenvíos,snowball,1
+lareconquista_esp,LA RECONQUISTA ⚔️🇪🇸,,ES,snowball ronda 1,lareconquista_esp,,11490,,1,snowball ronda 1; citado por 3 semillas; 40 reenvíos,snowball,1
+conciencia_mundial,🌍 CONCIENCIA MUNDIAL 🇪🇸,,ES,snowball ronda 1,conciencia_mundial,,16558,,1,snowball ronda 1; citado por 3 semillas; 34 reenvíos,snowball,1
+rafabudo,Canal RAFA BUDO,,,snowball ronda 1,rafabudo,,5239,,1,snowball ronda 1; citado por 3 semillas; 32 reenvíos,snowball,1
+juezfernandopresencia,Juez Fernando Presencia   ✔,,,snowball ronda 1,juezfernandopresencia,,12015,,1,snowball ronda 1; citado por 3 semillas; 21 reenvíos,snowball,1
+periodistasporlaverdad,PERIODISTAS XLV | BIG KILL PHARMA,,,snowball ronda 1,periodistasporlaverdad,,10696,,1,snowball ronda 1; citado por 3 semillas; 20 reenvíos,snowball,1
+haarpgeoingenieriachemtrails,HAARP geoingenieria chemtrails y radiación,,,snowball ronda 1,haarpgeoingenieriachemtrails,,12665,,1,snowball ronda 1; citado por 3 semillas; 20 reenvíos,snowball,1
+ciudadanosdeuniforme,Ciudadanos de Uniforme,,,snowball ronda 1,ciudadanosdeuniforme,,28833,,1,snowball ronda 1; citado por 3 semillas; 18 reenvíos,snowball,1
+nauzetmorgadeoficial,Nauzet Morgade,,,snowball ronda 1,nauzetmorgadeoficial,,26255,,1,snowball ronda 1; citado por 3 semillas; 17 reenvíos,snowball,1
+liusivaya,Liu Sivaya   ✔,,,snowball ronda 1,liusivaya,,127832,,1,snowball ronda 1; citado por 3 semillas; 16 reenvíos,snowball,1
+bcnlegendsuncensored,Legends Uncensored,,,snowball ronda 1,bcnlegendsuncensored,,13360,,1,snowball ronda 1; citado por 3 semillas; 16 reenvíos,snowball,1
+drluismiguelbenito,Doctor Benito,,,snowball ronda 1,drluismiguelbenito,,7466,,1,snowball ronda 1; citado por 3 semillas; 14 reenvíos,snowball,1
+venganzav3,Entra en: @VenganzaV5,,,snowball ronda 1,venganzav3,,1889,,1,snowball ronda 1; citado por 3 semillas; 14 reenvíos,snowball,1
+counterpropaganda20,Counterpropaganda,,,snowball ronda 1,counterpropaganda20,,7367,,1,snowball ronda 1; citado por 3 semillas; 14 reenvíos,snowball,1
+uacde,Un Abogado contra la Demagogia,,,snowball ronda 1,uacde,,57569,,1,snowball ronda 1; citado por 3 semillas; 12 reenvíos,snowball,1
+franquista1992,Franquista,,,snowball ronda 1,franquista1992,,2284,,1,snowball ronda 1; citado por 3 semillas; 11 reenvíos,snowball,1
+mi_me_con_migo2,ARDI Arderán en el Infierno,,,snowball ronda 1,mi_me_con_migo2,,4557,,1,snowball ronda 1; citado por 3 semillas; 11 reenvíos,snowball,1
+elojoen,El Ojo 👁 Noticias |Guerra en Irán| Guerra entre Rusia y Ucrania | China | EE.UU. | Putin | Trump | Venezuela,,,snowball ronda 1,elojoen,,82215,,1,snowball ronda 1; citado por 3 semillas; 10 reenvíos,snowball,1
+laureanobeni,Laureano Benitez,,,snowball ronda 1,laureanobeni,,3786,,1,snowball ronda 1; citado por 3 semillas; 9 reenvíos,snowball,1
+centrifugadoexistencial,Centrifugado Existencial,,,snowball ronda 1,centrifugadoexistencial,,1860,,1,snowball ronda 1; citado por 3 semillas; 9 reenvíos,snowball,1
+xedlb,POR ENCIMA DE LA BESTIA,,,snowball ronda 1,xedlb,,7583,,1,snowball ronda 1; citado por 3 semillas; 8 reenvíos,snowball,1
+incorrecta_rodriguez,Incorrecta Rodríguez,,,snowball ronda 1,incorrecta_rodriguez,,1011,,1,snowball ronda 1; citado por 3 semillas; 8 reenvíos,snowball,1
+davidsantosvlog,David Santos   ✔,,,snowball ronda 1,davidsantosvlog,,31586,,1,snowball ronda 1; citado por 3 semillas; 8 reenvíos,snowball,1
+fraudelegal,🔑SOBERANIA HOLISTICA🔑,,,snowball ronda 1,fraudelegal,,8383,,1,snowball ronda 1; citado por 3 semillas; 5 reenvíos,snowball,1
+covideos_esp,COVIDEOS,,,snowball ronda 1,covideos_esp,,1708,,1,snowball ronda 1; citado por 3 semillas; 5 reenvíos,snowball,1
+policiasporlalibertad,Canal Policías por la Libertad,,,snowball ronda 1,policiasporlalibertad,,11837,,1,snowball ronda 1; citado por 3 semillas; 5 reenvíos,snowball,1
+prohibidoserfeliz,NUEVA NORMALIDAD = PROHIBIDO SER FELIZ,,,snowball ronda 1,prohibidoserfeliz,,1653,,1,snowball ronda 1; citado por 3 semillas; 4 reenvíos,snowball,1
+derribamosalestado,DERRIBEMOS AL ESTADO,,,snowball ronda 1,derribamosalestado,,6317,,1,snowball ronda 1; citado por 3 semillas; 4 reenvíos,snowball,1
+infopapaya,InfoPapaya,,,snowball ronda 1,infopapaya,,2157,,1,snowball ronda 1; citado por 3 semillas; 3 reenvíos,snowball,1
+accionconcienciarcanarias,Gran Canaria Despierta,,ES,snowball ronda 1,accionconcienciarcanarias,,2620,,1,snowball ronda 1; citado por 3 semillas; 3 reenvíos,snowball,1
+nibiruconection,Nibiru Conection,,,snowball ronda 1,nibiruconection,,3926,,1,snowball ronda 1; citado por 3 semillas; 3 reenvíos,snowball,1
+carmen_luque,🇪🇦❤🇪🇦Carmen Luque 🇪🇸♥️🇪🇸 JUSTICIA Y LIBERTAD,,ES,snowball ronda 1,carmen_luque,,1342,,1,snowball ronda 1; citado por 3 semillas; 3 reenvíos,snowball,1
+porlajusticia,🇪🇸 VERDAD Y JUSTICIA,,ES,snowball ronda 1,porlajusticia,,4784,,1,snowball ronda 1; citado por 3 semillas; 3 reenvíos,snowball,1
+peligroguerra,𝑷𝑬𝑳𝑰𝑮𝑹𝑶 𝑮𝑼𝑬𝑹𝑹𝑨 / WAR DANGER,,,snowball ronda 1,peligroguerra,,12525,,1,snowball ronda 1; citado por 2 semillas; 4992 reenvíos,snowball,1
+nosobservan,NOS OBSERVAN (they watch us) 🌍,,,snowball ronda 1,nosobservan,,7042,,1,snowball ronda 1; citado por 2 semillas; 683 reenvíos,snowball,1
+neofeminismo,✡ Realidad VS Neofeminismo & LGTBI ✡,,,snowball ronda 1,neofeminismo,,1693,,1,snowball ronda 1; citado por 2 semillas; 342 reenvíos,snowball,1
+diarioobservador,Chico Sánchez,,,snowball ronda 1,diarioobservador,,1522,,1,snowball ronda 1; citado por 2 semillas; 237 reenvíos,snowball,1
+sntx_cosmic,Sntx Cosmic Q 🐲🍿,,,snowball ronda 1,sntx_cosmic,,15739,,1,snowball ronda 1; citado por 2 semillas; 227 reenvíos,snowball,1
+zonadeconflicto,ZONA DE CONFLICTO ⚔️,,,snowball ronda 1,zonadeconflicto,,2395,,1,snowball ronda 1; citado por 2 semillas; 190 reenvíos,snowball,1
+compatriotasunidosoficial,Compatriotas Unidos Oficial 🇪🇸,,ES,snowball ronda 1,compatriotasunidosoficial,,2584,,1,snowball ronda 1; citado por 2 semillas; 166 reenvíos,snowball,1
+starkprivacy,Stark Privacy,,,snowball ronda 1,starkprivacy,,19795,,1,snowball ronda 1; citado por 2 semillas; 86 reenvíos,snowball,1
+viogen,VIOGEN 2026,,,snowball ronda 1,viogen,,5868,,1,snowball ronda 1; citado por 2 semillas; 79 reenvíos,snowball,1
+eraginews,eraginews,,,snowball ronda 1,eraginews,,20084,,1,snowball ronda 1; citado por 2 semillas; 67 reenvíos,snowball,1
+medicosporlaverdadar,Médicos por la Verdad Oficial ARG 🇦🇷❤️,,AR,snowball ronda 1,medicosporlaverdadar,,20330,,1,snowball ronda 1; citado por 2 semillas; 58 reenvíos,snowball,1
+bloqueados_por_alvise_salf,Bloqueados por Alvise SALF🇪🇸,,ES,snowball ronda 1,bloqueados_por_alvise_salf,,1168,,1,snowball ronda 1; citado por 2 semillas; 57 reenvíos,snowball,1
+michael_boor,Michael Voor,,,snowball ronda 1,michael_boor,,1759,,1,snowball ronda 1; citado por 2 semillas; 56 reenvíos,snowball,1
+conciencia_consciente,Conciencia Consciente 🌅,,,snowball ronda 1,conciencia_consciente,,1910,,1,snowball ronda 1; citado por 2 semillas; 56 reenvíos,snowball,1
+espana_eterna,Alerta España,,ES,snowball ronda 1,espana_eterna,,1295,,1,snowball ronda 1; citado por 2 semillas; 45 reenvíos,snowball,1
+generacionia,"Generación IA | ChatGPT, Inteligencia artificial, AI, Midjourney, tecnología, innovación, tech",,,snowball ronda 1,generacionia,,12958,,1,snowball ronda 1; citado por 2 semillas; 40 reenvíos,snowball,1
+mpowertranslations,M-POWER Translations,,,snowball ronda 1,mpowertranslations,,2941,,1,snowball ronda 1; citado por 2 semillas; 38 reenvíos,snowball,1
+kklpll,𝖇𝖚𝖘𝖈𝖆𝖗 𝖑𝖆 𝖛𝖊𝖗𝖉𝖆𝖉,,,snowball ronda 1,kklpll,,6139,,1,snowball ronda 1; citado por 2 semillas; 38 reenvíos,snowball,1
+unidos_x_la_verdad,UNIDOS POR LA VERDAD,,,snowball ronda 1,unidos_x_la_verdad,,5097,,1,snowball ronda 1; citado por 2 semillas; 38 reenvíos,snowball,1
+hazteoirorg,HazteOir.org,,,snowball ronda 1,hazteoirorg,,8483,,1,snowball ronda 1; citado por 2 semillas; 29 reenvíos,snowball,1
+tfeverdad,Tenerife por la verdad (Canal),,,snowball ronda 1,tfeverdad,,1247,,1,snowball ronda 1; citado por 2 semillas; 28 reenvíos,snowball,1
+voluntasoficial,Voluntas (Cerrado),,,snowball ronda 1,voluntasoficial,,12388,,1,snowball ronda 1; citado por 2 semillas; 28 reenvíos,snowball,1
+escesarvidal,César Vidal | Canal Oficial,,,snowball ronda 1,escesarvidal,,23707,,1,snowball ronda 1; citado por 2 semillas; 26 reenvíos,snowball,1
+revuelta_es,Revuelta,,,snowball ronda 1,revuelta_es,,3588,,1,snowball ronda 1; citado por 2 semillas; 21 reenvíos,snowball,1
+claudiatome,Yo soy Claudia Tomé. AQUÍ ESTAMOS DESPIERTOS. Esta guerra la ganamos sí o sí.,,,snowball ronda 1,claudiatome,,7885,,1,snowball ronda 1; citado por 2 semillas; 20 reenvíos,snowball,1
+stopoms_who,📡 STOP❌OMS▪️STOP❌WHO,,,snowball ronda 1,stopoms_who,,2214,,1,snowball ronda 1; citado por 2 semillas; 19 reenvíos,snowball,1
+carlitoshumor,Álvaro Ramos Actor,,,snowball ronda 1,carlitoshumor,,1730,,1,snowball ronda 1; citado por 2 semillas; 18 reenvíos,snowball,1
+politicamenteincorrecto,🐸 MEMES INC. (by TSA NOTICIAS),,,snowball ronda 1,politicamenteincorrecto,,4096,,1,snowball ronda 1; citado por 2 semillas; 16 reenvíos,snowball,1
+humorgranreserva,HUMOR... GRAN RESERVA / HUMOR CON NOMBRE Y APELLIDO Y MEMES... MUCHOS MEMES,,,snowball ronda 1,humorgranreserva,,1647,,1,snowball ronda 1; citado por 2 semillas; 14 reenvíos,snowball,1
+palestinahoy,PALESTINA HOY 🇵🇸,,,snowball ronda 1,palestinahoy,,64981,,1,snowball ronda 1; citado por 2 semillas; 14 reenvíos,snowball,1
+gendeorigen,Gen de Origen 🦚 Semiótica y Sabiduría Ancestral GO,,,snowball ronda 1,gendeorigen,,4050,,1,snowball ronda 1; citado por 2 semillas; 13 reenvíos,snowball,1
+coviddebatecientifico,Bizitza-Informazioa,,,snowball ronda 1,coviddebatecientifico,,3274,,1,snowball ronda 1; citado por 2 semillas; 12 reenvíos,snowball,1
+qanonhispano,Qanon hispano,,,snowball ronda 1,qanonhispano,,5852,,1,snowball ronda 1; citado por 2 semillas; 12 reenvíos,snowball,1
+juliorazonaabogado,Julio Razona Abogado Canal de informacion,,,snowball ronda 1,juliorazonaabogado,,16726,,1,snowball ronda 1; citado por 2 semillas; 12 reenvíos,snowball,1
+evidencia,EVIDENCIA. Liliana Zelada Rück,,,snowball ronda 1,evidencia,,6156,,1,snowball ronda 1; citado por 2 semillas; 12 reenvíos,snowball,1
+panoramica_libertad,Panorámica _ NoAlNoM_SíALaLibertad,,,snowball ronda 1,panoramica_libertad,,2452,,1,snowball ronda 1; citado por 2 semillas; 10 reenvíos,snowball,1
+voluntariosladanavalencia,VOLUNTARIOS LA DANA VALENCIA,,ES,snowball ronda 1,voluntariosladanavalencia,,15019,,1,snowball ronda 1; citado por 2 semillas; 10 reenvíos,snowball,1
+drwilfredostokes,Dr. Wilfredo Stokes Baltazar Guatemala 🇬🇹,,GT,snowball ronda 1,drwilfredostokes,,13415,,1,snowball ronda 1; citado por 2 semillas; 9 reenvíos,snowball,1
+buenrollo13,Canal Angelisimo,,,snowball ronda 1,buenrollo13,,3057,,1,snowball ronda 1; citado por 2 semillas; 8 reenvíos,snowball,1
+antiicovidianos,Antii Covidianos,,,snowball ronda 1,antiicovidianos,,3700,,1,snowball ronda 1; citado por 2 semillas; 8 reenvíos,snowball,1
+medicosporlaverdadenperu,Medicos por la Verdad en Peru,,PE,snowball ronda 1,medicosporlaverdadenperu,,9889,,1,snowball ronda 1; citado por 2 semillas; 8 reenvíos,snowball,1
+cristinasegui,Cristina Seguí Fan account,,,snowball ronda 1,cristinasegui,,4237,,1,snowball ronda 1; citado por 2 semillas; 8 reenvíos,snowball,1
+labanderadiario,LaBandera,,ES,snowball ronda 1,labanderadiario,,4097,,1,snowball ronda 1; citado por 2 semillas; 8 reenvíos,snowball,1
+mariajose_valiente,María José Valiente,,,snowball ronda 1,mariajose_valiente,,1082,,1,snowball ronda 1; citado por 2 semillas; 8 reenvíos,snowball,1
+canal_lasemiyadelaverdad,Canal - La SemiYA de la VERDAD,,,snowball ronda 1,canal_lasemiyadelaverdad,,8927,,1,snowball ronda 1; citado por 2 semillas; 8 reenvíos,snowball,1
+eliteeuco,🜨 🅴🅻🅸🆃🅴 🜨,,,snowball ronda 1,eliteeuco,,2971,,1,snowball ronda 1; citado por 2 semillas; 7 reenvíos,snowball,1
+bacalaoalpilpil,Hammurabi 🐓,,,snowball ronda 1,bacalaoalpilpil,,3781,,1,snowball ronda 1; citado por 2 semillas; 7 reenvíos,snowball,1
+brevasjuan,Espartanos 300,,,snowball ronda 1,brevasjuan,,3897,,1,snowball ronda 1; citado por 2 semillas; 7 reenvíos,snowball,1
+infovacunas,@InfoVacunas,,,snowball ronda 1,infovacunas,,58600,,1,snowball ronda 1; citado por 2 semillas; 6 reenvíos,snowball,1
+foroargemtooficial,FORO ARGEMTO - ᴄᴀɴᴀʟ,,AR,snowball ronda 1,foroargemtooficial,,2816,,1,snowball ronda 1; citado por 2 semillas; 6 reenvíos,snowball,1
+z119d,SERGIO SHUNGIT/RADIACIONES,,,snowball ronda 1,z119d,,1507,,1,snowball ronda 1; citado por 2 semillas; 6 reenvíos,snowball,1
+biblioteca_siege,Biblioteca siege,,,snowball ronda 1,biblioteca_siege,,3655,,1,snowball ronda 1; citado por 2 semillas; 6 reenvíos,snowball,1
+desokupaoficial,DESOKUPA OFICIAL,,,snowball ronda 1,desokupaoficial,,46927,,1,snowball ronda 1; citado por 2 semillas; 6 reenvíos,snowball,1
+elcontrafuerte,EL CONTRAFUERTE,,,snowball ronda 1,elcontrafuerte,,11136,,1,snowball ronda 1; citado por 2 semillas; 6 reenvíos,snowball,1
+sirvetetumismo,A granel,,,snowball ronda 1,sirvetetumismo,,2127,,1,snowball ronda 1; citado por 2 semillas; 6 reenvíos,snowball,1
+eltiempoentrenoticias,Entre Noticias,,,snowball ronda 1,eltiempoentrenoticias,,7728,,1,snowball ronda 1; citado por 2 semillas; 5 reenvíos,snowball,1
+ayunpoblenou,CanalAyun,,,snowball ronda 1,ayunpoblenou,,1020,,1,snowball ronda 1; citado por 2 semillas; 5 reenvíos,snowball,1
+geoingenierieinfo,🌫🛩 GEOINGENIERÍA Canal🔒💧💶,,,snowball ronda 1,geoingenierieinfo,,10612,,1,snowball ronda 1; citado por 2 semillas; 5 reenvíos,snowball,1
+healthbest,HealthBest Juan Zaragoza,,,snowball ronda 1,healthbest,,36589,,1,snowball ronda 1; citado por 2 semillas; 4 reenvíos,snowball,1
+tierraplana,Tierra Plana,,,snowball ronda 1,tierraplana,,8794,,1,snowball ronda 1; citado por 2 semillas; 4 reenvíos,snowball,1
+amaresbio,amaresbio,,,snowball ronda 1,amaresbio,,1497,,1,snowball ronda 1; citado por 2 semillas; 4 reenvíos,snowball,1
+losmeconios,Los Meconios   ✔,,,snowball ronda 1,losmeconios,,7123,,1,snowball ronda 1; citado por 2 semillas; 4 reenvíos,snowball,1
+aquilavozdeeuropa,Aqui La Voz de Europa,,,snowball ronda 1,aquilavozdeeuropa,,7087,,1,snowball ronda 1; citado por 2 semillas; 4 reenvíos,snowball,1
+javiervillamor,Javier Villamor | Canal de información,,,snowball ronda 1,javiervillamor,,8215,,1,snowball ronda 1; citado por 2 semillas; 4 reenvíos,snowball,1
+epochtimeses,Epoch Times Español | Noticias,,,snowball ronda 1,epochtimeses,,14048,,1,snowball ronda 1; citado por 2 semillas; 4 reenvíos,snowball,1
+libertadpcolectiva,Libertad Colectiva,,,snowball ronda 1,libertadpcolectiva,,10695,,1,snowball ronda 1; citado por 2 semillas; 4 reenvíos,snowball,1
+despertadordelamatrix,DESPERTADOR DE LA MATRIX🔥,,,snowball ronda 1,despertadordelamatrix,,76204,,1,snowball ronda 1; citado por 2 semillas; 3 reenvíos,snowball,1
+paxetbonu,¡FIRMES EN LA FE!,,,snowball ronda 1,paxetbonu,,5943,,1,snowball ronda 1; citado por 2 semillas; 3 reenvíos,snowball,1
+beatalegonoficial,Bea Talegon,,,snowball ronda 1,beatalegonoficial,,14141,,1,snowball ronda 1; citado por 2 semillas; 3 reenvíos,snowball,1
+robertovaquerotelegram,Roberto Vaquero   ✔,,,snowball ronda 1,robertovaquerotelegram,,20849,,1,snowball ronda 1; citado por 2 semillas; 3 reenvíos,snowball,1
+laverdadnosharalibre10,Te cuento la verdad,,,snowball ronda 1,laverdadnosharalibre10,,17907,,1,snowball ronda 1; citado por 2 semillas; 3 reenvíos,snowball,1
+miguelruizcalvo,Miguel Ruiz Calvo,,,snowball ronda 1,miguelruizcalvo,,59260,,1,snowball ronda 1; citado por 2 semillas; 3 reenvíos,snowball,1
+stopmanipulacionclimatica,Stop Manipulación Climática,,,snowball ronda 1,stopmanipulacionclimatica,,1982,,1,snowball ronda 1; citado por 2 semillas; 3 reenvíos,snowball,1
+servimatyoutube,Servimat,,,snowball ronda 1,servimatyoutube,,10033,,1,snowball ronda 1; citado por 2 semillas; 3 reenvíos,snowball,1
+protegerse5g,PROTEGERSE DEL 5G 📡,,,snowball ronda 1,protegerse5g,,18847,,1,snowball ronda 1; citado por 2 semillas; 3 reenvíos,snowball,1
+pornuestrosninos,🌟 Por nuestros niños Canal 🌟,,,snowball ronda 1,pornuestrosninos,,3480,,1,snowball ronda 1; citado por 2 semillas; 3 reenvíos,snowball,1
+surfing_the_kali_yuga,Surfing the Kali Yuga,,,snowball ronda 1,surfing_the_kali_yuga,,2978,,1,snowball ronda 1; citado por 2 semillas; 3 reenvíos,snowball,1
+confirmadotransparencia,"Confirmado Transparencia: no es magia, son tus impuestos",,,snowball ronda 1,confirmadotransparencia,,10945,,1,snowball ronda 1; citado por 2 semillas; 3 reenvíos,snowball,1
+a_99rt,Luz en el Tunel,,,snowball ronda 1,a_99rt,,3640,,1,snowball ronda 1; citado por 2 semillas; 2 reenvíos,snowball,1
+defensa_evropea,DEFENSA-EVROPEA,,,snowball ronda 1,defensa_evropea,,1927,,1,snowball ronda 1; citado por 2 semillas; 2 reenvíos,snowball,1
+elcadenazo,El Cadenazo,,,snowball ronda 1,elcadenazo,,1592,,1,snowball ronda 1; citado por 2 semillas; 2 reenvíos,snowball,1
+juventudcontraelmundomoderno,Juventud Contra el Mundo Moderno,,,snowball ronda 1,juventudcontraelmundomoderno,,1315,,1,snowball ronda 1; citado por 2 semillas; 2 reenvíos,snowball,1
+fase2juicios,FASE 2 JUICIOS ADN DE ESPAÑA,,ES,snowball ronda 1,fase2juicios,,1216,,1,snowball ronda 1; citado por 2 semillas; 2 reenvíos,snowball,1
+cienciayespirituoficial,CIENCIA Y ESPIRITU de MIGUEL CELADES REX,,,snowball ronda 1,cienciayespirituoficial,,3447,,1,snowball ronda 1; citado por 2 semillas; 2 reenvíos,snowball,1
+herqlesamerica,HerQles América,,,snowball ronda 1,herqlesamerica,,4465,,1,snowball ronda 1; citado por 2 semillas; 2 reenvíos,snowball,1
+ricardoferrisleoncalles,Ricardo Ferris🇪🇸,,ES,snowball ronda 1,ricardoferrisleoncalles,,2121,,1,snowball ronda 1; citado por 2 semillas; 2 reenvíos,snowball,1
+vakulinchuk,Vakulinchuk,,,snowball ronda 1,vakulinchuk,,14460,,1,snowball ronda 1; citado por 2 semillas; 2 reenvíos,snowball,1
+guaridadellobo,La Guarida Del Lobo,,,snowball ronda 1,guaridadellobo,,4454,,1,snowball ronda 1; citado por 2 semillas; 2 reenvíos,snowball,1
+unidadnacionalespanola,𝑼𝒏𝒊𝒅𝒂𝒅 𝑵𝒂𝒄𝒊𝒐𝒏𝒂𝒍 𝑬𝒔𝒑𝒂ñ𝒐𝒍𝒂 𝑼𝑵𝑬,,ES,snowball ronda 1,unidadnacionalespanola,,7446,,1,snowball ronda 1; citado por 1 semillas; 546 reenvíos,snowball,1
+lospurasangre,LOS PURA SANGRE,,,snowball ronda 1,lospurasangre,,8303,,1,snowball ronda 1; citado por 1 semillas; 485 reenvíos,snowball,1
+desobedienciaresistencia,𝑫𝒆𝒔𝒐𝒃𝒆𝒅𝒊𝒆𝒏𝒄𝒊𝒂 𝑹𝒆𝒔𝒊𝒔𝒕𝒆𝒏𝒄𝒊𝒂 ⚔️,,,snowball ronda 1,desobedienciaresistencia,,1308,,1,snowball ronda 1; citado por 1 semillas; 192 reenvíos,snowball,1
+huparxis,Huparxis,,,snowball ronda 1,huparxis,,1369,,1,snowball ronda 1; citado por 1 semillas; 86 reenvíos,snowball,1
+realidad_o_ficcion,Realidad o ficción,,,snowball ronda 1,realidad_o_ficcion,,7236,,1,snowball ronda 1; citado por 1 semillas; 77 reenvíos,snowball,1
+los_pies_en_la_tierra,Los pies en la tierra,,,snowball ronda 1,los_pies_en_la_tierra,,3854,,1,snowball ronda 1; citado por 1 semillas; 56 reenvíos,snowball,1
+noindependentista,No todos los catalanes somos independentistas!!!🇪🇸🇪🇸,,ES,snowball ronda 1,noindependentista,,3341,,1,snowball ronda 1; citado por 1 semillas; 48 reenvíos,snowball,1
+nicolasmorasok,Nicolás Morás (Oficial),,,snowball ronda 1,nicolasmorasok,,2765,,1,snowball ronda 1; citado por 1 semillas; 43 reenvíos,snowball,1
+ejercitoremanente,EJÉRCITO REMANENTE 🏹 NOTICIAS,,,snowball ronda 1,ejercitoremanente,,19742,,1,snowball ronda 1; citado por 1 semillas; 31 reenvíos,snowball,1
+unicodios,Dios sobre todo,,,snowball ronda 1,unicodios,,1196,,1,snowball ronda 1; citado por 1 semillas; 29 reenvíos,snowball,1
+semillas_evolucion_aportes,Semillas en Evolución (Aportes)✨,,,snowball ronda 1,semillas_evolucion_aportes,,14372,,1,snowball ronda 1; citado por 1 semillas; 27 reenvíos,snowball,1
+santiagoabascalpresidente,Santiago Abascal 🇪🇸   ✔,,ES,snowball ronda 1,santiagoabascalpresidente,,39747,,1,snowball ronda 1; citado por 1 semillas; 22 reenvíos,snowball,1
+voxtelegram_es,VOX España 🇪🇸   ✔,,ES,snowball ronda 1,voxtelegram_es,,12001,,1,snowball ronda 1; citado por 1 semillas; 22 reenvíos,snowball,1
