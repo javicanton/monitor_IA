@@ -2,8 +2,9 @@
 """Convierte la semilla en la lista que importa monitorIA y en el INSERT de reco_canales.
 
 Salida (por defecto, junto a este script):
-  reco_monitored.csv       username,title,discontinued,status (sin cabecera)
-  reco_canales_insert.sql  INSERT en <esquema>.reco_canales
+  reco_monitored.csv          todos los canales con handle e incluir distinto de 0
+  reco_monitored_ronda1.csv   solo origen=snowball y ronda_snowball=1 (fase B)
+  reco_canales_insert.sql     INSERT en <esquema>.reco_canales
 
 Solo entran filas con handle y con incluir distinto de 0.
 La columna origen es opcional (semilla por defecto, o snowball).
@@ -68,11 +69,20 @@ def escribir(src: Path, out_dir: Path, schema: str) -> int:
     utiles = list(filas_utiles(src))
     out_dir.mkdir(parents=True, exist_ok=True)
     csv_path = out_dir / "reco_monitored.csv"
+    ronda_path = out_dir / "reco_monitored_ronda1.csv"
     sql_path = out_dir / "reco_canales_insert.sql"
-    with csv_path.open("w", newline="", encoding="utf-8") as fh:
+    n_ronda = 0
+    with csv_path.open("w", newline="", encoding="utf-8") as fh, ronda_path.open(
+        "w", newline="", encoding="utf-8"
+    ) as rh:
         writer = csv.writer(fh)
+        ronda_writer = csv.writer(rh)
         for fila in utiles:
-            writer.writerow([fila["handle"], fila["nombre"], "false", "active"])
+            row = [fila["handle"], fila["nombre"], "false", "active"]
+            writer.writerow(row)
+            if fila["origen"] == "snowball" and fila["ronda"] == 1:
+                ronda_writer.writerow(row)
+                n_ronda += 1
     if not utiles:
         sql_path.write_text(
             f"-- {schema}.reco_canales: ninguna fila con handle. No hay INSERT.\n",
@@ -108,6 +118,7 @@ def escribir(src: Path, out_dir: Path, schema: str) -> int:
             encoding="utf-8",
         )
     print(f"{len(utiles)} canales con handle -> {csv_path} y {sql_path}")
+    print(f"{n_ronda} canales de la ronda 1 -> {ronda_path}")
     return len(utiles)
 
 

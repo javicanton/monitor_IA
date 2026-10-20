@@ -78,7 +78,12 @@ PY="$ROOT/.venv/bin/python"
 }
 
 estado "backfill"
-./aws/run_reco_backfill.sh
+if [ "$FASE" = "B" ]; then
+  # La semilla ya está en reco.messages. La ronda 1 solo baja los canales nuevos.
+  ./aws/run_reco_backfill.sh "$ROOT/aws/reco_monitored_ronda1.csv"
+else
+  ./aws/run_reco_backfill.sh
+fi
 estado "filtro"
 "$PY" aws/reco_filtro_db.py --lexico metodologia/02_lexico.yaml --version "${LEXICO_VERSION:-v0.1}"
 estado "exportar"
