@@ -71,6 +71,11 @@ pub_antes="$(reco_contar_public)" || { estado "abortado_conteo"; exit 9; }
 
 PY="$ROOT/.venv/bin/python"
 [ -x "$PY" ] || { echo "Falta .venv (ver docs/SCRAPER.md)"; estado "abortado_venv"; exit 7; }
+"$PY" -c "import yaml" || {
+  echo "Falta PyYAML en .venv. Instala con: $PY -m pip install 'PyYAML>=6.0'"
+  estado "abortado_yaml"
+  exit 7
+}
 
 estado "backfill"
 ./aws/run_reco_backfill.sh
