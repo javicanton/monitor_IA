@@ -2,7 +2,11 @@
 # Backfill RECO con el scraper de monitorIA, sin modificar su código.
 # La lista sale de aws/reco_monitored.csv (--channels-file tiene prioridad).
 # Si monitored_channels del esquema está vacía, aborta: no cae al CSV de S3 de monitorIA.
-# Uso, en la EC2: ./aws/run_reco_backfill.sh
+# Uso, en la EC2: ./aws/run_reco_backfill.sh [lista.csv]
+# Si una pasada muere a mitad, la siguiente con el código nuevo puede saltar
+# los canales ya cerrados (mensaje y grafo guardados):
+#   RECO_RETOMAR_DESDE=2026-10-20T15:00:00Z ./aws/run_reco_backfill.sh lista.csv
+# El instante es el arranque de la pasada que ya escribe el grafo por canal.
 set -euo pipefail
 ROOT="${ROOT:-$HOME/monitor_IA}"
 cd "$ROOT"
@@ -32,6 +36,43 @@ case "$n_db" in
     exit 3
     ;;
 esac
+
+# Salta canales cuyo last_scraped_at es posterior al arranque indicado.
+# No usar esto para retomar la pasada que murió antes de escribir el grafo:
+# esos canales tienen mensajes, pero sus reenvíos no se guardaron.
+if [ -n "${RECO_RETOMAR_DESDE:-}" ]; then
+  case "$RECO_RETOMAR_DESDE" in
+    [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z) ;;
+    *) echo "ABORTO: RECO_RETOMAR_DESDE debe ser YYYY-MM-DDTHH:MM:SSZ"; exit 3 ;;
+  esac
+  HECHOS="$(mktemp)"
+  PENDIENTES="$(mktemp)"
+  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -t -A \
+    -c "SELECT lower(username) FROM monitored_channels WHERE last_scraped_at >= timestamptz '${RECO_RETOMAR_DESDE}'" \
+    > "$HECHOS"
+  n_pend="$("$PY" - "$HECHOS" "$CANALES" "$PENDIENTES" <<'PY'
+import csv, sys
+hechos = {ln.strip().lower() for ln in open(sys.argv[1], encoding="utf-8") if ln.strip()}
+n = 0
+with open(sys.argv[2], encoding="utf-8", newline="") as src, open(sys.argv[3], "w", encoding="utf-8", newline="") as dst:
+    writer = csv.writer(dst)
+    for row in csv.reader(src):
+        if not row or not row[0].strip() or row[0].strip().lower() in hechos:
+            continue
+        writer.writerow(row)
+        n += 1
+print(n)
+PY
+)"
+  echo "==> Retomar desde ${RECO_RETOMAR_DESDE}: ${n_pend} canales pendientes"
+  if [ "${n_pend}" = "0" ]; then
+    echo "Nada pendiente de bajar."
+    pub_despues="$(reco_contar_public)" || exit 9
+    reco_exigir_public_igual "$pub_antes" "$pub_despues" || exit 10
+    exit 0
+  fi
+  CANALES="$PENDIENTES"
+fi
 
 INI="${RECO_VENTANA_INICIO:-2024-09-01}"
 DAYS=$(( ( $(date -u +%s) - $(date -u -d "$INI" +%s) ) / 86400 + 2 ))
