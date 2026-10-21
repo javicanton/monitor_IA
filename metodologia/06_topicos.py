@@ -20,29 +20,66 @@ from pathlib import Path
 
 import pandas as pd
 
-URL_RE = re.compile(r"https?://\S+|www\.\S+", re.I)
+URL_RE = re.compile(r"https?://\S+|www\.\S+|t\.me/\S+|telegram\.me/\S+", re.I)
+MARCA_RE = re.compile(r"[_*`]+")
 MIN_CHARS = 40
+# Palabras vacías y fórmulas de captación del canal. No entra el léxico temático.
 STOP = frozenset(
     """a al algo alguna algunas alguno algunos ante aquel aquella aquellas aquellos
-    como con contra de del desde donde durante e el ella ellas ellos en entre era
-    es esa esas ese eso esos esta estas este esto estos esta estan ha han hasta
-    hay la las le les lo los mas me mi mis mucho muy ni no nos o para pero porque
-    por que se sin sobre su sus te tu un una unas unos y ya si ser son fue fueron
-    esta estan cuando tambien aqui hay mas les les""".split()
+    aqui alli ano anos ahora aunque asi bien cada canal canales chat com como con
+    comparte contra cuando de del desde despues dia dias dice dicen dijo donde
+    durante e el ella ellas ellos en enlace entre era es esa esas ese eso esos
+    esta estas este esto estos estan fue fueron ha han hasta hay http https la
+    las le les link lo los mal mas me mi mis mismo misma mucho muy ni no nos o
+    otro otra otros otras para pero poco porque por que puede pueden se ser si
+    siguenos sin sobre solo son su sus suscribete te telegram toda todas todo
+    todos tu twitter un una unas unos unete va van vez veces video videos www
+    y ya hace hacer""".split()
 )
 
 
 def texto_nlp(texto: str) -> str:
     limpio = URL_RE.sub(" ", texto or "")
+    limpio = MARCA_RE.sub(" ", limpio)
     return re.sub(r"\s+", " ", limpio).strip()
+
+
+def quitar_handle(texto: str, canal: str) -> str:
+    handle = str(canal or "").strip().lstrip("@")
+    if len(handle) < 5:
+        return texto
+    return re.sub(rf"(?i)(?<!\w){re.escape(handle)}(?!\w)", " ", texto)
 
 
 def preparar(corpus: pd.DataFrame) -> pd.DataFrame:
     df = corpus.copy()
-    df["message_nlp"] = df["message"].map(lambda t: texto_nlp("" if pd.isna(t) else str(t)))
+    canales = df["channel"] if "channel" in df.columns else [""] * len(df)
+    textos = []
+    for mensaje, canal in zip(df["message"], canales):
+        bruto = "" if pd.isna(mensaje) else str(mensaje)
+        canal_txt = "" if pd.isna(canal) else str(canal)
+        limpio = quitar_handle(texto_nlp(bruto), canal_txt)
+        textos.append(re.sub(r"\s+", " ", limpio).strip())
+    df["message_nlp"] = textos
     df = df[df["message_nlp"].str.len() >= MIN_CHARS]
     cols = [c for c in ("message_pk", "channel", "date_sent", "regla", "message_nlp") if c in df.columns]
     return df[cols].reset_index(drop=True)
+
+
+def terminos_legibles(terminos_ordenados: list[str], n: int = 8) -> str:
+    """Deja el bigrama y retira la palabra suelta que ya va dentro."""
+    partes_de_bigrama = set()
+    for termino in terminos_ordenados:
+        if " " in termino:
+            partes_de_bigrama.update(termino.split())
+    elegidos = []
+    for termino in terminos_ordenados:
+        if " " not in termino and termino in partes_de_bigrama:
+            continue
+        elegidos.append(termino)
+        if len(elegidos) == n:
+            break
+    return " ".join(elegidos)
 
 
 def _sin_tildes(texto: str) -> str:
@@ -71,12 +108,12 @@ def topicos_nmf(textos: pd.Series, n: int, min_df: int = 5) -> tuple[pd.DataFram
     terminos = vector.get_feature_names_out()
     filas = []
     for i, componente in enumerate(modelo.components_):
-        orden = componente.argsort()[::-1][:12]
+        orden = componente.argsort()[::-1][:24]
         filas.append(
             {
                 "topico": i,
                 "mensajes": int((etiquetas == i).sum()),
-                "terminos": " ".join(terminos[j] for j in orden),
+                "terminos": terminos_legibles([terminos[j] for j in orden]),
             }
         )
     return pd.DataFrame(filas), etiquetas.tolist()

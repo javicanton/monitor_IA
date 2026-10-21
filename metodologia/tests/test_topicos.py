@@ -38,6 +38,28 @@ def test_quita_la_url_y_descarta_lo_que_queda_corto():
     assert "https://" not in listo.iloc[0]["message_nlp"]
 
 
+def test_quita_markdown_handle_y_no_repite_el_bigrama():
+    assert "__" not in TOP.texto_nlp("Lee __esto__ en t.me/alerta antes del pacto verde")
+    assert "t.me" not in TOP.texto_nlp("Lee __esto__ en t.me/alerta antes del pacto verde")
+    df = pd.DataFrame(
+        {
+            "message_pk": [1],
+            "channel": ["alertaglobal"],
+            "date_sent": ["2024-10-01"],
+            "regla": ["R2"],
+            "message": [
+                "alertaglobal publica un texto largo sobre la agenda climatica y el pacto verde europeo"
+            ],
+        }
+    )
+    assert "alertaglobal" not in TOP.preparar(df).iloc[0]["message_nlp"]
+    assert TOP.terminos_legibles(
+        ["agenda", "agenda 2030", "2030", "espana", "pp", "objetivos"]
+    ) == "agenda 2030 espana pp objetivos"
+    assert "agenda" not in TOP.STOP and "clima" not in TOP.STOP and "onu" not in TOP.STOP
+    assert "todo" in TOP.STOP and "unete" in TOP.STOP
+
+
 def test_nmf_separa_dos_temas_repetidos():
     clima = ["el pacto verde y la agenda climatica ocupan el discurso "] * 8
     campo = ["la guerra al campo y los agricultores rechazan el pacto "] * 8
