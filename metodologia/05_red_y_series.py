@@ -30,7 +30,9 @@ def norm_handle(valor: str) -> str:
 
 
 def _esta_excluido(valor) -> bool:
-    return str(valor or "").strip().lower() in {"0", "0.0"}
+    if pd.isna(valor):
+        return False
+    return str(valor).strip().lower() in {"0", "0.0"}
 
 
 def canales_corpus(semilla: pd.DataFrame) -> pd.DataFrame:

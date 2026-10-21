@@ -58,9 +58,17 @@ def test_la_serie_excluye_2026_y_parte_por_mes():
 def test_la_arista_hacia_fuera_no_entra_y_el_excluido_no_es_nodo():
     nodos = RED.canales_corpus(_semilla())
     assert set(nodos["username"]) == {"alfa", "beta", "gamma"}
-    con_cero = _semilla()
-    con_cero.loc[con_cero["handle_telegram"] == "fuera", "incluir"] = "0.0"
-    assert "fuera" not in set(RED.canales_corpus(con_cero)["username"])
+    con_cero = pd.DataFrame(
+        {
+            "handle_telegram": ["alfa", "fuera"],
+            "nombre_documentado": ["a", "f"],
+            "tipo_provisional": ["", ""],
+            "pais_provisional": ["", ""],
+            "incluir": [1.0, 0.0],
+            "origen": ["semilla", "semilla"],
+        }
+    )
+    assert set(RED.canales_corpus(con_cero)["username"]) == {"alfa"}
     aristas = pd.DataFrame(
         {
             "origen": ["alfa", "beta", "alfa"],
