@@ -36,3 +36,13 @@ def test_quita_la_url_y_descarta_lo_que_queda_corto():
     assert len(listo) == 1
     assert listo.iloc[0]["channel"] == "beta"
     assert "https://" not in listo.iloc[0]["message_nlp"]
+
+
+def test_nmf_separa_dos_temas_repetidos():
+    clima = ["el pacto verde y la agenda climatica ocupan el discurso "] * 8
+    campo = ["la guerra al campo y los agricultores rechazan el pacto "] * 8
+    textos = pd.Series(clima + campo)
+    info, etiquetas = TOP.topicos_nmf(textos, n=2, min_df=2)
+    assert len(info) == 2
+    assert len(set(etiquetas)) == 2
+    assert set(etiquetas[:8]) != set(etiquetas[8:])
