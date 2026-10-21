@@ -67,7 +67,8 @@ def muestra(args) -> None:
     base = s.copy()
     base.insert(0, "id_val", range(1, len(s) + 1))
     base.to_csv(out / "muestra_maestra.csv", index=False)
-    ciego = base.drop(columns=[c for c in COLUMNAS_FILTRO if c in base.columns])
+    ocultas = {c.lower() for c in COLUMNAS_FILTRO}
+    ciego = base.drop(columns=[c for c in base.columns if c.lower() in ocultas])
     ciego["relevante"] = ""
     ciego.to_csv(out / "codificador_1.csv", index=False)
     ciego.to_csv(out / "codificador_2.csv", index=False)
