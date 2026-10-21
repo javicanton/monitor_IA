@@ -67,6 +67,17 @@ def test_sin_positivos_la_precision_queda_indefinida():
     assert res["exhaustividad"] is None
 
 
+def test_la_hoja_de_excel_con_punto_y_coma_se_lee(tmp_path):
+    hoja = tmp_path / "codificador_1.csv"
+    hoja.write_text(
+        "id_val;message;relevante\n1;hola, mundo;1\n2;adiós;0\n",
+        encoding="utf-8",
+    )
+    df = VAL.leer_hoja(hoja)
+    assert list(df["relevante"]) == [1, 0]
+    assert df.loc[0, "message"] == "hola, mundo"
+
+
 def test_muestra_ciega_y_reproducible(tmp_path):
     bruto = tmp_path / "bruto.csv"
     with bruto.open("w", newline="", encoding="utf-8") as fh:
