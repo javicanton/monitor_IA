@@ -29,10 +29,14 @@ def norm_handle(valor: str) -> str:
     return h.split("/")[0].split("?")[0].strip()
 
 
+def _esta_excluido(valor) -> bool:
+    return str(valor or "").strip().lower() in {"0", "0.0"}
+
+
 def canales_corpus(semilla: pd.DataFrame) -> pd.DataFrame:
     filas = []
     for _, r in semilla.iterrows():
-        if str(r.get("incluir") or "").strip() == "0":
+        if _esta_excluido(r.get("incluir")):
             continue
         handle = norm_handle(str(r.get("handle_telegram") or ""))
         if not handle or handle == "nan":
