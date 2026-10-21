@@ -55,6 +55,11 @@ def _fmt(valor):
     return "n/d" if valor is None else round(valor, 3)
 
 
+def leer_hoja(path: Path) -> pd.DataFrame:
+    """Lee una hoja aunque Excel la haya guardado con punto y coma."""
+    return pd.read_csv(path, sep=None, engine="python", encoding="utf-8-sig")
+
+
 def muestra(args) -> None:
     df = pd.read_csv(args.inp)
     if df.empty:
@@ -67,7 +72,8 @@ def muestra(args) -> None:
     base = s.copy()
     base.insert(0, "id_val", range(1, len(s) + 1))
     base.to_csv(out / "muestra_maestra.csv", index=False)
-    ciego = base.drop(columns=[c for c in COLUMNAS_FILTRO if c in base.columns])
+    ocultas = {c.lower() for c in COLUMNAS_FILTRO}
+    ciego = base.drop(columns=[c for c in base.columns if c.lower() in ocultas])
     ciego["relevante"] = ""
     ciego.to_csv(out / "codificador_1.csv", index=False)
     ciego.to_csv(out / "codificador_2.csv", index=False)
@@ -76,9 +82,9 @@ def muestra(args) -> None:
 
 def evaluar(args) -> None:
     d = Path(args.dir)
-    m = pd.read_csv(d / "muestra_maestra.csv")
-    c1 = pd.read_csv(d / "codificador_1.csv")
-    c2 = pd.read_csv(d / "codificador_2.csv")
+    m = leer_hoja(d / "muestra_maestra.csv")
+    c1 = leer_hoja(d / "codificador_1.csv")
+    c2 = leer_hoja(d / "codificador_2.csv")
     if not (len(m) == len(c1) == len(c2)):
         raise SystemExit("las tres hojas no tienen el mismo número de filas")
     try:

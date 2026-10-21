@@ -67,13 +67,24 @@ def test_sin_positivos_la_precision_queda_indefinida():
     assert res["exhaustividad"] is None
 
 
+def test_la_hoja_de_excel_con_punto_y_coma_se_lee(tmp_path):
+    hoja = tmp_path / "codificador_1.csv"
+    hoja.write_text(
+        "id_val;message;relevante\n1;hola, mundo;1\n2;adiós;0\n",
+        encoding="utf-8",
+    )
+    df = VAL.leer_hoja(hoja)
+    assert list(df["relevante"]) == [1, 0]
+    assert df.loc[0, "message"] == "hola, mundo"
+
+
 def test_muestra_ciega_y_reproducible(tmp_path):
     bruto = tmp_path / "bruto.csv"
     with bruto.open("w", newline="", encoding="utf-8") as fh:
-        w = csv.DictWriter(fh, fieldnames=["message", "regla", "incluido"])
+        w = csv.DictWriter(fh, fieldnames=["message", "regla", "incluido", "hits_a"])
         w.writeheader()
         for i in range(6):
-            w.writerow({"message": f"texto {i}", "regla": "R2" if i < 3 else "NONE", "incluido": int(i < 3)})
+            w.writerow({"message": f"texto {i}", "regla": "R2" if i < 3 else "NONE", "incluido": int(i < 3), "hits_a": "ods"})
     out = tmp_path / "val"
     args_m = type("A", (), {"inp": str(bruto), "n": 4, "seed": 2026, "out_dir": str(out)})()
     VAL.muestra(args_m)
@@ -82,6 +93,7 @@ def test_muestra_ciega_y_reproducible(tmp_path):
     c2 = (out / "codificador_2.csv").read_text(encoding="utf-8")
     assert len(maestro) == 4
     assert "regla" in maestro[0] and "regla" not in c1[0]
+    assert "hits_a" in maestro[0] and "hits_a" not in c1[0]
     assert c1[0]["relevante"] == ""
     assert (out / "codificador_1.csv").read_text(encoding="utf-8") == c2
     with pytest.raises(SystemExit):
