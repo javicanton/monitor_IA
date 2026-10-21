@@ -10,7 +10,11 @@ En la EC2:
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from codigo_topicos import APARTADOS, BLOQUES, ETIQUETAS
 
 import matplotlib
 
@@ -25,41 +29,6 @@ MESES = [f"{anio}-{mes:02d}" for anio, mes in (
 REGLAS = ("R1", "R2", "R3", "R4")
 MAX_ARISTAS = 250
 MAX_ETIQUETAS = 12
-
-# Segunda pasada NMF (random_state 2026). El resto no entra en las barras.
-BLOQUES = (
-    ("Agenda 2030 en España y gobierno", (1, 12)),
-    ("Guerras dentro del corpus", (14, 16)),
-    ("Foros y orden mundial", (4, 7, 0, 10)),
-    ("Clima y Pacto Verde", (5, 18)),
-    ("Actores y programas", (6, 8)),
-    ("Geoingeniería", (17,)),
-    ("Control cotidiano", (19, 15, 2)),
-)
-APARTADOS = {
-    13: "Resto sin tema",
-    11: "Índice de canal",
-    3: "Lema de canal",
-    9: "Pie de canal",
-}
-ETIQUETAS = {
-    1: "Agenda 2030, PP, agricultores",
-    12: "Sánchez, PSOE, Davos",
-    14: "Gaza, Israel, Irán, ONU",
-    16: "Ucrania, Rusia, Trump",
-    4: "Nuevo orden mundial",
-    7: "Davos y Schwab",
-    0: "Naciones Unidas y Rockefeller",
-    10: "Unión Europea",
-    5: "Cambio climático e IPCC",
-    18: "Pacto Verde, von der Leyen, Vox",
-    6: "Soros, USAID, Musk",
-    8: "Vidal, Ramírez, gran reseteo",
-    17: "Geoingeniería, HAARP, estelas",
-    19: "Ciudades de 15 minutos y ZBE",
-    15: "«No tendrás nada y serás feliz»",
-    2: "Dinero físico y crédito social",
-}
 COLORES = ("#4477AA", "#EE6677", "#228833", "#CCBB44", "#66CCEE", "#AA3377", "#882255")
 COLOR_REGLA = {"R1": "#4477AA", "R2": "#228833", "R3": "#CCBB44", "R4": "#EE6677"}
 
