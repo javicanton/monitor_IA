@@ -15,5 +15,6 @@ psycopg2-binary>=2.9.9
 PyYAML>=6.0 
 networkx>=3.2
 scikit-learn>=1.4
+matplotlib>=3.8
 # pytopicgram arrastra torch. En la EC2 no reinstalarlo: los tópicos van con --nmf.
 pytopicgram @ git+https://github.com/ugr-sail/pytopicgram.git
