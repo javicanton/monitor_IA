@@ -1,6 +1,7 @@
 ## Telegram Scraper
 # Import libraries
 import argparse
+import gc
 import subprocess
 import sys
 import importlib.util
@@ -748,7 +749,7 @@ async def main(args):
         
         all_data = []
         pg_totals = {"channels": 0, "inserted": 0, "updated": 0}
-        forward_pairs = []
+        edge_total = 0
         graph_helpers = None
         if use_postgres and pg_app is not None:
             from channel_graph import (
@@ -770,6 +771,8 @@ async def main(args):
         total_channels = len(channels)
         for channel_idx, channel in enumerate(channels, start=1):
             channel_rows = []
+            channel_forwards = []
+            messages_list = []
             try:
                 print(f"[{channel_idx}/{total_channels}] Procesando canal: {channel}", flush=True)
                 channel_details = await _call_with_flood_wait(
@@ -859,9 +862,11 @@ async def main(args):
                         source_username = await graph_helpers["resolve_forward"](message, client)
                         target_username = data.get('Username') or channel
                         if source_username and target_username:
-                            forward_pairs.append((source_username, target_username))
+                            channel_forwards.append((source_username, target_username))
 
-                    all_data.append(data)
+                    # En PostgreSQL el canal ya se ha volcado: no retener el corpus en RAM.
+                    if (not use_postgres) or args.export_csv:
+                        all_data.append(data)
                     channel_rows.append(data)
                     mensajes_nuevos += 1
 
@@ -878,6 +883,9 @@ async def main(args):
                         f"✓ Canal '{channel}': {len(channel_rows)} mensajes → "
                         f"+{stats.get('inserted', 0)} nuevos, {stats.get('updated', 0)} actualizados"
                     )
+                    if graph_helpers and channel_forwards:
+                        with pg_app.app_context():
+                            edge_total += graph_helpers["upsert_edges"](channel_forwards)
                     if graph_helpers:
                         title = getattr(channel_details, 'title', None) or channel
                         with pg_app.app_context():
@@ -929,6 +937,10 @@ async def main(args):
                             graph_helpers["mark_error"](channel, err_text)
                 continue
             else:
+                messages_list = []
+                channel_rows = []
+                channel_forwards = []
+                gc.collect()
                 delay = _channel_delay_seconds()
                 if delay > 0:
                     await asyncio.sleep(delay)
@@ -942,12 +954,10 @@ async def main(args):
             print("19. Script detenido por error de sesión Telethon (código 6).", flush=True)
             return exit_code
 
-        if use_postgres and forward_pairs and graph_helpers and pg_app is not None:
-            with pg_app.app_context():
-                edge_count = graph_helpers["upsert_edges"](forward_pairs)
-            print(f"✓ Grafo de canales: {edge_count} aristas de reenvío registradas/actualizadas")
+        if edge_total:
+            print(f"✓ Grafo de canales: {edge_total} aristas de reenvío registradas/actualizadas")
 
-        if use_postgres and all_data:
+        if use_postgres and (pg_totals["inserted"] or pg_totals["updated"]):
             print(
                 f"13. PostgreSQL: {pg_totals['inserted']} mensajes nuevos, "
                 f"{pg_totals['updated']} actualizados ({pg_totals['channels']} canales)"
